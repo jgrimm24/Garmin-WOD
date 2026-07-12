@@ -31,6 +31,8 @@ class GarminWODView extends WatchUi.View {
     var _hasGpsFix;
     var _gpsFixAlerted;
     var _isFetchingWorkout;
+    var _workoutSourceText;
+    var _workoutSourceBeforeSync;
 
     function initialize() {
         View.initialize();
@@ -53,6 +55,8 @@ class GarminWODView extends WatchUi.View {
         _hasGpsFix = false;
         _gpsFixAlerted = false;
         _isFetchingWorkout = false;
+        _workoutSourceText = "FALLBACK";
+        _workoutSourceBeforeSync = "FALLBACK";
     }
 
     // Load your resources here
@@ -91,6 +95,7 @@ class GarminWODView extends WatchUi.View {
             return;
         }
 
+        var sourceY = height * 4 / 100;
         var headerY = height * 10 / 100;
         var heartRateY = height * 20 / 100;
         var stationY = height * 32 / 100;
@@ -98,6 +103,9 @@ class GarminWODView extends WatchUi.View {
         var timerY = height * 58 / 100;
         var stationLabelY = height * 75 / 100;
         var controlsY = height * 84 / 100;
+
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(width / 2, sourceY, Graphics.FONT_XTINY, getWorkoutSourceText(), Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(width / 2, headerY, Graphics.FONT_XTINY, _workout.getHeader(roundNumber), Graphics.TEXT_JUSTIFY_CENTER);
@@ -198,8 +206,8 @@ class GarminWODView extends WatchUi.View {
     function loadCachedWorkout() as Void {
         var cachedWorkout = Storage.getValue("latestWorkout");
 
-        if (cachedWorkout != null) {
-            loadWorkoutData(cachedWorkout);
+        if (cachedWorkout != null && loadWorkoutData(cachedWorkout)) {
+            _workoutSourceText = "CACHE";
         }
     }
 
@@ -209,6 +217,8 @@ class GarminWODView extends WatchUi.View {
         }
 
         _isFetchingWorkout = true;
+        _workoutSourceBeforeSync = _workoutSourceText;
+        _workoutSourceText = "SYNC...";
 
         var options = {
             :method => Communications.HTTP_REQUEST_METHOD_GET,
@@ -231,9 +241,16 @@ class GarminWODView extends WatchUi.View {
 
         if (responseCode == 200 && data instanceof Dictionary && loadWorkoutData(data)) {
             Storage.setValue("latestWorkout", data);
+            _workoutSourceText = "WEB WOD";
+        } else if (_workoutSourceText.equals("SYNC...")) {
+            _workoutSourceText = _workoutSourceBeforeSync;
         }
 
         WatchUi.requestUpdate();
+    }
+
+    function getWorkoutSourceText() {
+        return _workoutSourceText;
     }
 
     function nextStation() as Void {
