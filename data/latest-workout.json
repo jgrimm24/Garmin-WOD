@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "id": "for-time-for-time-for-time-20-row-calories-30-wall-balls-20-14-lbs-20-toes-to-ba",
+  "title": "FOR TIME",
+  "type": "For Time",
+  "durationMinutes": null,
+  "rounds": null,
+  "notes": [],
+  "sourceText": "FOR TIME\n\nFor time:\n\n20 Row Calories\n30 Wall Balls, 20/14 lbs\n20 Toes-to-bar\n30 Box Jumps, 24/20 in\n20 Sumo DL High Pulls, 95/65 lbs\n30 Burpees\n20 Shoulder-to-Overhead, 95/65 lbs\n20 Row Calories",
+  "createdAt": "2026-07-12T16:48:11.573Z",
+  "updatedAt": "2026-07-12T16:50:10.831Z",
+  "stations": [
+    {
+      "id": "station-1",
+      "name": "Row",
+      "reps": null,
+      "calories": 20,
+      "meters": null,
+      "weightLb": null,
+      "workSeconds": null,
+      "notes": "20 Row Calories"
+    },
+    {
+      "id": "station-2",
+      "name": "Wall Balls",
+      "reps": 30,
+      "calories": null,
+      "meters": null,
+      "weightLb": 20,
+      "workSeconds": null,
+      "notes": "30 Wall Balls, 20/14 lbs"
+    },
+    {
+      "id": "station-3",
+      "name": "Toes-to-bar",
+      "reps": 20,
+      "calories": null,
+      "meters": null,
+      "weightLb": null,
+      "workSeconds": null,
+      "notes": "20 Toes-to-bar"
+    },
+    {
+      "id": "station-8",
+      "name": "Box Jumps",
+      "reps": 30,
+      "calories": null,
+      "meters": null,
+      "weightLb": null,
+      "workSeconds": null,
+      "notes": ""
+    },
+    {
+      "id": "station-4",
+      "name": "Sumo DL High Pulls",
+      "reps": 20,
+      "calories": null,
+      "meters": null,
+      "weightLb": 95,
+      "workSeconds": null,
+      "notes": "20 Sumo DL High Pulls, 95/65 lbs"
+    },
+    {
+      "id": "station-5",
+      "name": "Burpees",
+      "reps": 30,
+      "calories": null,
+      "meters": null,
+      "weightLb": null,
+      "workSeconds": null,
+      "notes": "30 Burpees"
+    },
+    {
+      "id": "station-6",
+      "name": "Shoulder-to-Overhead",
+      "reps": 20,
+      "calories": null,
+      "meters": null,
+      "weightLb": 95,
+      "workSeconds": null,
+      "notes": "20 Shoulder-to-Overhead, 95/65 lbs"
+    },
+    {
+      "id": "station-7",
+      "name": "Row",
+      "reps": null,
+      "calories": 20,
+      "meters": null,
+      "weightLb": null,
+      "workSeconds": null,
+      "notes": "20 Row Calories"
+    }
+  ]
+}

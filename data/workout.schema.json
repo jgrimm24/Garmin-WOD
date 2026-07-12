@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://garmin-wod.local/schemas/workout.schema.json",
+  "title": "Garmin WOD Workout",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "title",
+    "type",
+    "durationMinutes",
+    "rounds",
+    "notes",
+    "sourceText",
+    "createdAt",
+    "updatedAt",
+    "stations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "enum": ["Unknown", "EMOM", "AMRAP", "For Time", "Tabata"]
+    },
+    "durationMinutes": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "rounds": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sourceText": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "stations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/station"
+      }
+    }
+  },
+  "$defs": {
+    "nullableNumber": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "station": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "reps",
+        "calories",
+        "meters",
+        "weightLb",
+        "workSeconds",
+        "notes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reps": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "calories": {
+          "type": ["number", "string", "null"]
+        },
+        "meters": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "weightLb": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "workSeconds": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

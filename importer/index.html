@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Garmin WOD Importer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="import-panel">
+        <div class="title-row">
+          <div>
+            <p class="eyebrow">Garmin WOD</p>
+            <h1>Workout Importer</h1>
+          </div>
+          <button id="loadSampleButton" class="ghost-button" type="button">Sample</button>
+        </div>
+
+        <label for="imageInput">Upload photo or screenshot</label>
+        <div id="uploadDropzone" class="upload-dropzone">
+          <input id="imageInput" type="file" accept="image/*" />
+          <div>
+            <strong>Choose an image</strong>
+            <span>Whiteboard photos, screenshots, and saved WOD images</span>
+          </div>
+        </div>
+        <div id="imagePreview" class="image-preview empty-preview">No image selected</div>
+        <p id="imageStatus" class="image-status">Choose an image to extract workout text, or paste text below.</p>
+
+        <label for="wodInput">Paste today&apos;s workout</label>
+        <textarea id="wodInput" spellcheck="false" placeholder="40 minute EMOM x10&#10;1. Row 45 sec&#10;2. 10 Pull-ups&#10;3. 12 DB Bench @55&#10;4. 15 AbMat Sit-ups"></textarea>
+
+        <div class="action-row">
+          <button id="parseButton" type="button">Parse Workout</button>
+          <button id="clearButton" class="secondary-button" type="button">Clear</button>
+        </div>
+      </section>
+
+      <section class="preview-panel">
+        <div class="preview-header">
+          <div>
+            <p class="eyebrow">Structured Output</p>
+            <h2 id="previewTitle">No workout parsed</h2>
+          </div>
+          <div class="preview-actions">
+            <button id="addStationButton" class="ghost-button" type="button">Add Station</button>
+            <button id="saveLatestButton" class="ghost-button" type="button">Save Latest WOD</button>
+            <button id="copyWatchButton" class="ghost-button" type="button">Copy Watch Data</button>
+            <button id="copyButton" class="ghost-button" type="button">Copy JSON</button>
+          </div>
+        </div>
+
+        <div id="summaryGrid" class="summary-grid"></div>
+        <div id="notesList" class="notes-list"></div>
+        <div id="stationsList" class="stations-list empty-state">Paste a WOD, then parse it.</div>
+
+        <details class="json-panel">
+          <summary>JSON</summary>
+          <pre id="jsonOutput">{}</pre>
+        </details>
+      </section>
+    </main>
+
+    <script src="./app.js?v=contract-1"></script>
+  </body>
+</html>
