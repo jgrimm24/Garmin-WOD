@@ -99,6 +99,16 @@ label {
   border: 1px dashed var(--line);
   border-radius: 8px;
   background: #0f1314;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.upload-dropzone.drag-over {
+  border-color: var(--accent);
+  background: #171b16;
+  box-shadow: 0 0 0 2px rgba(255, 176, 0, 0.2);
 }
 
 .upload-dropzone input {

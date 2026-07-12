@@ -6,6 +6,7 @@ const copyButton = document.querySelector("#copyButton");
 const copyWatchButton = document.querySelector("#copyWatchButton");
 const addStationButton = document.querySelector("#addStationButton");
 const saveLatestButton = document.querySelector("#saveLatestButton");
+const uploadDropzone = document.querySelector("#uploadDropzone");
 const imageInput = document.querySelector("#imageInput");
 const imagePreview = document.querySelector("#imagePreview");
 const imageStatus = document.querySelector("#imageStatus");
@@ -498,6 +499,57 @@ imageInput.addEventListener("change", async () => {
   const file = imageInput.files && imageInput.files[0];
   if (!file) return;
 
+  await handleImageFile(file);
+});
+
+uploadDropzone.addEventListener("dragenter", (event) => {
+  event.preventDefault();
+  uploadDropzone.classList.add("drag-over");
+});
+
+uploadDropzone.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "copy";
+  uploadDropzone.classList.add("drag-over");
+});
+
+uploadDropzone.addEventListener("dragleave", (event) => {
+  if (!uploadDropzone.contains(event.relatedTarget)) {
+    uploadDropzone.classList.remove("drag-over");
+  }
+});
+
+uploadDropzone.addEventListener("drop", async (event) => {
+  event.preventDefault();
+  uploadDropzone.classList.remove("drag-over");
+
+  const file = getDroppedImageFile(event);
+
+  if (!file) {
+    imageStatus.textContent = "Drop an image file here, or choose one with the file picker.";
+    return;
+  }
+
+  imageInput.value = "";
+  await handleImageFile(file);
+});
+
+window.addEventListener("dragover", (event) => {
+  event.preventDefault();
+});
+
+window.addEventListener("drop", (event) => {
+  if (!uploadDropzone.contains(event.target)) {
+    event.preventDefault();
+  }
+});
+
+async function handleImageFile(file) {
+  if (!file.type || !file.type.startsWith("image/")) {
+    imageStatus.textContent = "Use an image file, like a screenshot, JPG, PNG, or HEIC.";
+    return;
+  }
+
   const imageUrl = URL.createObjectURL(file);
   imagePreview.className = "image-preview";
   imagePreview.innerHTML = `<img src="${imageUrl}" alt="Uploaded workout" />`;
@@ -517,7 +569,12 @@ imageInput.addEventListener("change", async () => {
   } catch (error) {
     imageStatus.textContent = error.message || "Extraction failed. Paste the workout text below for now.";
   }
-});
+}
+
+function getDroppedImageFile(event) {
+  const files = Array.from(event.dataTransfer.files || []);
+  return files.find((file) => file.type && file.type.startsWith("image/")) || null;
+}
 
 copyButton.addEventListener("click", async () => {
   await navigator.clipboard.writeText(JSON.stringify(toWorkoutContract(currentWorkout), null, 2));
