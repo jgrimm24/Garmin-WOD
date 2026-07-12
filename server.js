@@ -4,7 +4,7 @@ const path = require("path");
 
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT || 4175);
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || "0.0.0.0";
 const DATA_DIR = path.join(ROOT, "data");
 const LATEST_WORKOUT_PATH = path.join(DATA_DIR, "latest-workout.json");
 
@@ -52,7 +52,8 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Garmin WOD importer running at http://${HOST}:${PORT}/importer/`);
+  const displayHost = HOST === "0.0.0.0" ? "127.0.0.1" : HOST;
+  console.log(`Garmin WOD importer running at http://${displayHost}:${PORT}/importer/`);
 });
 
 async function handleExtract(request, response) {
