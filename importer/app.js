@@ -545,7 +545,7 @@ window.addEventListener("drop", (event) => {
 });
 
 async function handleImageFile(file) {
-  if (!file.type || !file.type.startsWith("image/")) {
+  if (!isImageFile(file)) {
     imageStatus.textContent = "Use an image file, like a screenshot, JPG, PNG, or HEIC.";
     return;
   }
@@ -572,8 +572,27 @@ async function handleImageFile(file) {
 }
 
 function getDroppedImageFile(event) {
+  const items = Array.from(event.dataTransfer.items || []);
+
+  for (const item of items) {
+    if (item.kind !== "file") continue;
+
+    const file = item.getAsFile();
+
+    if (file && isImageFile(file)) {
+      return file;
+    }
+  }
+
   const files = Array.from(event.dataTransfer.files || []);
-  return files.find((file) => file.type && file.type.startsWith("image/")) || null;
+  return files.find(isImageFile) || null;
+}
+
+function isImageFile(file) {
+  if (!file) return false;
+  if (file.type && file.type.startsWith("image/")) return true;
+
+  return /\.(?:apng|avif|gif|heic|heif|jpe?g|png|webp)$/i.test(file.name || "");
 }
 
 copyButton.addEventListener("click", async () => {
