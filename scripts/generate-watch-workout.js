@@ -141,6 +141,14 @@ function renderWorkoutClass(workout) {
         return workoutType.equals("EMOM");
     }
 
+    function isAmrap() {
+        return workoutType.equals("AMRAP");
+    }
+
+    function isTimedPriority() {
+        return isAmrap();
+    }
+
     function getHeader(roundNumber) {
         if (isForTime()) {
             if (rounds == null) {

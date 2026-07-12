@@ -11,8 +11,7 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
     }
 
     function onSelect() as Boolean {
-        // The tactix touch screen can arrive here as a generic select event.
-        // Keep workout state changes on physical keys only.
+        _view.toggleRunning();
         return true;
     }
 
