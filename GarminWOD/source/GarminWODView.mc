@@ -1,6 +1,9 @@
 import Toybox.Activity;
+import Toybox.Application.Storage;
 import Toybox.Attention;
+import Toybox.Communications;
 import Toybox.Graphics;
+import Toybox.Lang;
 import Toybox.Math;
 import Toybox.Position;
 import Toybox.System;
@@ -27,6 +30,7 @@ class GarminWODView extends WatchUi.View {
     var _lastLocation;
     var _hasGpsFix;
     var _gpsFixAlerted;
+    var _isFetchingWorkout;
 
     function initialize() {
         View.initialize();
@@ -48,6 +52,7 @@ class GarminWODView extends WatchUi.View {
         _lastLocation = null;
         _hasGpsFix = false;
         _gpsFixAlerted = false;
+        _isFetchingWorkout = false;
     }
 
     // Load your resources here
@@ -58,6 +63,8 @@ class GarminWODView extends WatchUi.View {
     // the state of this View and prepare it to be shown. This includes
     // loading resources into memory.
     function onShow() as Void {
+        loadCachedWorkout();
+        fetchLatestWorkout();
         _timer.start(method(:onTick), 1000, true);
         startLocationEvents();
     }
@@ -162,6 +169,70 @@ class GarminWODView extends WatchUi.View {
         _lastLocation = null;
         _hasGpsFix = false;
         _gpsFixAlerted = false;
+        WatchUi.requestUpdate();
+    }
+
+    function canReplaceWorkout() {
+        return !_isRunning && _elapsedBeforePause == 0 && !_isFinished;
+    }
+
+    function loadWorkoutData(data) {
+        if (!canReplaceWorkout()) {
+            return false;
+        }
+
+        if (!_workout.loadFromContract(data)) {
+            return false;
+        }
+
+        _totalSeconds = _workout.getTotalSeconds();
+        _manualStationIndex = 0;
+        _startMs = 0;
+        _elapsedBeforePause = 0;
+        _isFinished = false;
+        resetStationDistanceStart();
+
+        return true;
+    }
+
+    function loadCachedWorkout() as Void {
+        var cachedWorkout = Storage.getValue("latestWorkout");
+
+        if (cachedWorkout != null) {
+            loadWorkoutData(cachedWorkout);
+        }
+    }
+
+    function fetchLatestWorkout() as Void {
+        if (_isFetchingWorkout || !canReplaceWorkout()) {
+            return;
+        }
+
+        _isFetchingWorkout = true;
+
+        var options = {
+            :method => Communications.HTTP_REQUEST_METHOD_GET,
+            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON,
+            :headers => {
+                "Content-Type" => Communications.REQUEST_CONTENT_TYPE_URL_ENCODED
+            }
+        };
+
+        Communications.makeWebRequest(
+            "https://garmin-wod.onrender.com/api/latest-workout",
+            null,
+            options,
+            method(:onLatestWorkoutResponse)
+        );
+    }
+
+    function onLatestWorkoutResponse(responseCode as Number, data as Dictionary or String or Null) as Void {
+        _isFetchingWorkout = false;
+
+        if (responseCode == 200 && data instanceof Dictionary && loadWorkoutData(data)) {
+            Storage.setValue("latestWorkout", data);
+        }
+
         WatchUi.requestUpdate();
     }
 

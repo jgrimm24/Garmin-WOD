@@ -77,6 +77,64 @@ class GarminWODWorkout {
         ];
     }
 
+    function loadFromContract(data) {
+        if (data == null) {
+            return false;
+        }
+
+        var stations = data["stations"];
+
+        if (stations == null || stations.size() == 0) {
+            return false;
+        }
+
+        title = getContractString(data, "title", title);
+        workoutType = getContractString(data, "type", workoutType);
+        durationMinutes = getContractValue(data, "durationMinutes", durationMinutes);
+        rounds = getContractValue(data, "rounds", rounds);
+        stationNames = [];
+        stationReps = [];
+        stationSeconds = [];
+        stationCalories = [];
+        stationMeters = [];
+        stationWeights = [];
+
+        for (var i = 0; i < stations.size(); i++) {
+            var station = stations[i];
+
+            if (station != null) {
+                stationNames.add(getContractString(station, "name", "Station"));
+                stationReps.add(getContractValue(station, "reps", null));
+                stationSeconds.add(getContractValue(station, "workSeconds", null));
+                stationCalories.add(getContractValue(station, "calories", null));
+                stationMeters.add(getContractValue(station, "meters", null));
+                stationWeights.add(getContractValue(station, "weightLb", null));
+            }
+        }
+
+        return stationNames.size() > 0;
+    }
+
+    function getContractValue(data, key, fallback) {
+        var value = data[key];
+
+        if (value == null) {
+            return fallback;
+        }
+
+        return value;
+    }
+
+    function getContractString(data, key, fallback) {
+        var value = getContractValue(data, key, fallback);
+
+        if (value == null) {
+            return fallback;
+        }
+
+        return "" + value;
+    }
+
     function getStationCount() {
         return stationNames.size();
     }

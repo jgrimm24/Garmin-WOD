@@ -33,6 +33,7 @@
             palette to update permissions.
         -->
         <iq:permissions>
+            <iq:uses-permission id="Communications"/>
             <iq:uses-permission id="Positioning"/>
             <iq:uses-permission id="UserProfile"/>
         </iq:permissions>
