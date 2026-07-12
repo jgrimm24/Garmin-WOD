@@ -105,7 +105,8 @@ label {
     box-shadow 160ms ease;
 }
 
-.upload-dropzone.drag-over {
+.upload-dropzone.drag-over,
+.image-preview.drag-over {
   border-color: var(--accent);
   background: #171b16;
   box-shadow: 0 0 0 2px rgba(255, 176, 0, 0.2);

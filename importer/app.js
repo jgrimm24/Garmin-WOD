@@ -6,6 +6,7 @@ const copyButton = document.querySelector("#copyButton");
 const copyWatchButton = document.querySelector("#copyWatchButton");
 const addStationButton = document.querySelector("#addStationButton");
 const saveLatestButton = document.querySelector("#saveLatestButton");
+const importPanel = document.querySelector(".import-panel");
 const uploadDropzone = document.querySelector("#uploadDropzone");
 const imageInput = document.querySelector("#imageInput");
 const imagePreview = document.querySelector("#imagePreview");
@@ -75,7 +76,23 @@ function findWorkoutDuration(type, text) {
     return null;
   }
 
-  return findNumberBefore(text, /(?:min|minute|minutes)\b/i) || null;
+  const explicitMinutes = findNumberBefore(text, /(?:min|minute|minutes)\b/i);
+
+  if (explicitMinutes) {
+    return explicitMinutes;
+  }
+
+  if (type === "AMRAP") {
+    const match = text.match(/\bamrap\s*(\d+)\b/i) || text.match(/\b(\d+)\s*amrap\b/i);
+    return match ? Number(match[1]) : null;
+  }
+
+  if (type === "EMOM") {
+    const match = text.match(/\bemom\s*(\d+)\b/i) || text.match(/\b(\d+)\s*emom\b/i);
+    return match ? Number(match[1]) : null;
+  }
+
+  return null;
 }
 
 function findRounds(text) {
@@ -144,12 +161,16 @@ function parseStation(line, workoutType) {
   return {
     name,
     reps,
-    workSeconds: timedSeconds || (workoutType === "For Time" ? null : 60),
+    workSeconds: timedSeconds != null ? timedSeconds : getDefaultWorkSeconds(workoutType),
     distanceMeters: distanceMatch ? Number(distanceMatch[1]) : null,
     calories: caloriesMatch ? caloriesMatch[1].replace(/\s+/g, "") : null,
     weightLb: weightMatch ? Number(weightMatch[1]) : null,
     notes: cleaned,
   };
+}
+
+function getDefaultWorkSeconds(workoutType) {
+  return workoutType === "EMOM" ? 60 : null;
 }
 
 function normalizeMovementName(name) {
@@ -448,7 +469,7 @@ addStationButton.addEventListener("click", () => {
     name: "New Station",
     reps: null,
     calories: null,
-    workSeconds: currentWorkout.type === "For Time" ? null : 60,
+    workSeconds: getDefaultWorkSeconds(currentWorkout.type),
     distanceMeters: null,
     weightLb: null,
     notes: "",
@@ -502,47 +523,61 @@ imageInput.addEventListener("change", async () => {
   await handleImageFile(file);
 });
 
-uploadDropzone.addEventListener("dragenter", (event) => {
-  event.preventDefault();
-  uploadDropzone.classList.add("drag-over");
-});
-
-uploadDropzone.addEventListener("dragover", (event) => {
-  event.preventDefault();
-  event.dataTransfer.dropEffect = "copy";
-  uploadDropzone.classList.add("drag-over");
-});
-
-uploadDropzone.addEventListener("dragleave", (event) => {
-  if (!uploadDropzone.contains(event.relatedTarget)) {
-    uploadDropzone.classList.remove("drag-over");
-  }
-});
-
-uploadDropzone.addEventListener("drop", async (event) => {
-  event.preventDefault();
-  uploadDropzone.classList.remove("drag-over");
-
-  const file = getDroppedImageFile(event);
-
-  if (!file) {
-    imageStatus.textContent = "Drop an image file here, or choose one with the file picker.";
-    return;
-  }
-
-  imageInput.value = "";
-  await handleImageFile(file);
-});
+bindImageDropTarget(importPanel);
+bindImageDropTarget(uploadDropzone);
+bindImageDropTarget(imagePreview);
 
 window.addEventListener("dragover", (event) => {
   event.preventDefault();
 });
 
 window.addEventListener("drop", (event) => {
-  if (!uploadDropzone.contains(event.target)) {
+  if (!importPanel.contains(event.target)) {
     event.preventDefault();
   }
 });
+
+function bindImageDropTarget(target) {
+  target.addEventListener("dragenter", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setImageDropActive(true);
+  });
+
+  target.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+    setImageDropActive(true);
+  });
+
+  target.addEventListener("dragleave", (event) => {
+    if (!target.contains(event.relatedTarget)) {
+      setImageDropActive(false);
+    }
+  });
+
+  target.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setImageDropActive(false);
+
+    const file = getDroppedImageFile(event);
+
+    if (!file) {
+      imageStatus.textContent = "Drop an image file here, or choose one with the file picker.";
+      return;
+    }
+
+    imageInput.value = "";
+    await handleImageFile(file);
+  });
+}
+
+function setImageDropActive(isActive) {
+  uploadDropzone.classList.toggle("drag-over", isActive);
+  imagePreview.classList.toggle("drag-over", isActive);
+}
 
 async function handleImageFile(file) {
   if (!isImageFile(file)) {
