@@ -30,6 +30,11 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/health") {
+      handleHealth(response);
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/latest-workout") {
       await handleGetLatestWorkout(response);
       return;
@@ -54,6 +59,7 @@ const server = http.createServer(async (request, response) => {
 server.listen(PORT, HOST, () => {
   const displayHost = HOST === "0.0.0.0" ? "127.0.0.1" : HOST;
   console.log(`Garmin WOD importer running at http://${displayHost}:${PORT}/importer/`);
+  console.log(`OpenAI key configured: ${hasOpenAiKey() ? "yes" : "no"}`);
 });
 
 async function handleExtract(request, response) {
@@ -61,7 +67,7 @@ async function handleExtract(request, response) {
 
   if (!apiKey) {
     sendJson(response, 400, {
-      error: "Missing OPENAI_API_KEY. Add it to .env, then restart the importer server.",
+      error: "Missing OPENAI_API_KEY. Add it to Render Environment, then redeploy/restart the importer server.",
     });
     return;
   }
@@ -82,6 +88,17 @@ async function handleExtract(request, response) {
   }
 
   sendJson(response, 200, { text: result.text.trim() });
+}
+
+function handleHealth(response) {
+  sendJson(response, 200, {
+    ok: true,
+    openAiKeyConfigured: hasOpenAiKey(),
+  });
+}
+
+function hasOpenAiKey() {
+  return !!process.env.OPENAI_API_KEY;
 }
 
 async function handleGetLatestWorkout(response) {
