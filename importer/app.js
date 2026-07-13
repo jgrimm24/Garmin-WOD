@@ -38,9 +38,9 @@ function parseWorkout(text) {
     .filter(Boolean);
 
   const joined = lines.join(" ");
-  const type = detectType(joined);
-  const durationMinutes = findWorkoutDuration(type, joined);
   const rounds = findRounds(joined);
+  const type = inferWorkoutType(detectType(joined), rounds);
+  const durationMinutes = findWorkoutDuration(type, joined);
   const stationLines = findStationLines(lines);
   const stations = stationLines.map((line) => parseStation(line, type)).filter((station) => station.name);
   const notes = findWorkoutNotes(lines);
@@ -64,6 +64,12 @@ function detectType(text) {
   if (/\bfor time\b/i.test(text)) return "For Time";
   if (/\btabata\b/i.test(text)) return "Tabata";
   return "Unknown";
+}
+
+function inferWorkoutType(type, rounds) {
+  if (type !== "Unknown") return type;
+  if (rounds != null) return "For Time";
+  return type;
 }
 
 function findNumberBefore(text, pattern) {
@@ -111,8 +117,9 @@ function findRounds(text) {
 function findStationLines(lines) {
   return lines.filter((line) => {
     if (/\b(?:emom|amrap|for time|tabata)\b/i.test(line)) return false;
+    if (/^\d+\s*(?:rounds?|rds?)\b/i.test(line)) return false;
     if (isGenderWeightLine(line)) return false;
-    return /(^\d+[\).:-]\s*)|(\d+\s*(?:reps?|cal|cals|m|meter|meters|sec|seconds|min|minute|minutes|lb|#|@))|row|run|bike|pull|push|squat|bench|sit|clean|snatch|deadlift|burpee|wall ball|toes|rest/i.test(line);
+    return /(^\d+[\).:-]\s*)|(^\d+\s+\D)|(\d+\s*(?:reps?|cal|cals|m|meter|meters|sec|seconds|min|minute|minutes|lb|#|@))|row|run|bike|pull|push|squat|bench|sit|clean|snatch|deadlift|burpee|wall ball|toes|thruster|double\s+unders?|rest/i.test(line);
   });
 }
 
@@ -179,7 +186,10 @@ function normalizeMovementName(name) {
   if (/\bbench(?:\s+press(?:es)?)?\b/i.test(name)) return "Bench Press";
   if (/\bfront\s+squat\b/i.test(name)) return "Front Squat";
   if (/\btoes?\s+to\s+bar\b/i.test(name)) return "Toes to Bar";
+  if (/\bthrusters?\b/i.test(name)) return "Thrusters";
+  if (/\bdouble\s+unders?\b/i.test(name)) return "Double Unders";
   if (/\bbar\s+facing\s+burpees?\b/i.test(name)) return "Bar-Facing Burpees";
+  if (/\bburpees?\s+over\s+barbells?\b/i.test(name)) return "Burpees Over Barbell";
   if (/\bburpees?\b/i.test(name)) return "Burpees";
 
   return name;
