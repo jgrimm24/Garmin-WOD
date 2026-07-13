@@ -19,6 +19,7 @@ class GarminWODView extends WatchUi.View {
     var _workout;
     var _totalSeconds;
     var _manualStationIndex;
+    var _manualRoundNumber;
     var _isFinished;
     var _heartRateZones;
     var _heartRateSum;
@@ -41,6 +42,7 @@ class GarminWODView extends WatchUi.View {
         _startMs = 0;
         _elapsedBeforePause = 0;
         _manualStationIndex = 0;
+        _manualRoundNumber = 1;
         _isFinished = false;
         _workout = new GarminWODWorkout();
         _totalSeconds = _workout.getTotalSeconds();
@@ -167,6 +169,7 @@ class GarminWODView extends WatchUi.View {
         _elapsedBeforePause = 0;
         _startMs = 0;
         _manualStationIndex = 0;
+        _manualRoundNumber = 1;
         _isFinished = false;
         _heartRateSum = 0;
         _heartRateSamples = 0;
@@ -195,6 +198,7 @@ class GarminWODView extends WatchUi.View {
 
         _totalSeconds = _workout.getTotalSeconds();
         _manualStationIndex = 0;
+        _manualRoundNumber = 1;
         _startMs = 0;
         _elapsedBeforePause = 0;
         _isFinished = false;
@@ -261,6 +265,10 @@ class GarminWODView extends WatchUi.View {
         if (_manualStationIndex < _workout.getStationCount() - 1) {
             _manualStationIndex++;
             resetStationDistanceStart();
+        } else if (hasMoreManualRounds()) {
+            _manualRoundNumber++;
+            _manualStationIndex = 0;
+            resetStationDistanceStart();
         } else {
             finishWorkout();
         }
@@ -276,9 +284,17 @@ class GarminWODView extends WatchUi.View {
         if (_manualStationIndex > 0) {
             _manualStationIndex--;
             resetStationDistanceStart();
+        } else if (_manualRoundNumber > 1) {
+            _manualRoundNumber--;
+            _manualStationIndex = _workout.getStationCount() - 1;
+            resetStationDistanceStart();
         }
 
         WatchUi.requestUpdate();
+    }
+
+    function hasMoreManualRounds() {
+        return _workout.rounds != null && _manualRoundNumber < _workout.rounds;
     }
 
     function handleBackButton() as Void {
@@ -364,6 +380,10 @@ class GarminWODView extends WatchUi.View {
             return (elapsed / (60 * _workout.getStationCount())) + 1;
         }
 
+        if (_workout.isForTime() || _workout.isAmrap()) {
+            return _manualRoundNumber;
+        }
+
         return 1;
     }
 
@@ -405,6 +425,10 @@ class GarminWODView extends WatchUi.View {
         if (_workout.isForTime() || _workout.isAmrap()) {
             if (_isFinished) {
                 return "Done";
+            }
+
+            if (_workout.rounds != null) {
+                return "R" + _manualRoundNumber + "/" + _workout.rounds + "  S" + (stationIndex + 1) + "/" + _workout.getStationCount();
             }
 
             return "Station " + (stationIndex + 1) + "/" + _workout.getStationCount();
@@ -451,6 +475,10 @@ class GarminWODView extends WatchUi.View {
         }
 
         if (stationIndex >= _workout.getStationCount() - 1) {
+            if (hasMoreManualRounds()) {
+                return "Next: " + _workout.getStationText(0);
+            }
+
             return "Last station";
         }
 
@@ -491,7 +519,7 @@ class GarminWODView extends WatchUi.View {
                 return "BACK reset";
             }
 
-            if (_manualStationIndex >= _workout.getStationCount() - 1) {
+            if (_manualStationIndex >= _workout.getStationCount() - 1 && !hasMoreManualRounds()) {
                 return "BACK finish";
             }
 
@@ -511,7 +539,7 @@ class GarminWODView extends WatchUi.View {
         }
 
         if (_isRunning) {
-            if (_manualStationIndex >= _workout.getStationCount() - 1) {
+            if (_manualStationIndex >= _workout.getStationCount() - 1 && !hasMoreManualRounds()) {
                 return "DOWN pause BACK finish";
             }
 
