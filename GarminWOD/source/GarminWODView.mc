@@ -284,11 +284,21 @@ class GarminWODView extends WatchUi.View {
     function handleBackButton() as Void {
         if (_workout.isForTime() || _workout.isAmrap()) {
             if (!_isRunning) {
+                if (_elapsedBeforePause == 0) {
+                    toggleRunning();
+                    return;
+                }
+
                 resetWorkout();
                 return;
             }
 
             nextStation();
+            return;
+        }
+
+        if (!_isRunning && _elapsedBeforePause == 0) {
+            toggleRunning();
             return;
         }
 
@@ -449,26 +459,26 @@ class GarminWODView extends WatchUi.View {
 
     function getStatusText() {
         if (_isFinished) {
-            return "START reset";
+            return "DOWN reset";
         }
 
         if (_isRunning) {
             if (_workout.isForTime() || _workout.isAmrap()) {
                 if (_manualStationIndex >= _workout.getStationCount() - 1) {
-                    return "START pause";
+                    return "DOWN pause";
                 }
 
-                return "START pause";
+                return "DOWN pause";
             }
 
-            return "START pauses";
+            return "DOWN pauses";
         }
 
         if (_elapsedBeforePause > 0) {
-            return "START resumes";
+            return "DOWN resumes";
         }
 
-        return "START starts";
+        return "BACK starts";
     }
 
     function getSecondaryStatusText() {
@@ -493,7 +503,7 @@ class GarminWODView extends WatchUi.View {
 
     function getControlHintText() {
         if (_isFinished) {
-            return "START reset";
+            return "DOWN reset UP exit";
         }
 
         if (!_workout.isForTime() && !_workout.isAmrap()) {
@@ -502,21 +512,21 @@ class GarminWODView extends WatchUi.View {
 
         if (_isRunning) {
             if (_manualStationIndex >= _workout.getStationCount() - 1) {
-                return "START pause BACK finish";
+                return "DOWN pause BACK finish";
             }
 
-            return "START pause BACK next";
+            return "DOWN pause BACK next";
         }
 
         if (_elapsedBeforePause > 0) {
-            return "START resume BACK reset";
+            return "DOWN resume BACK reset";
         }
 
         if (shouldWaitForGpsBeforeStart()) {
-            return "WAIT GPS UP exit";
+            return "WAIT GPS BACK start";
         }
 
-        return "START start UP exit";
+        return "BACK start UP exit";
     }
 
     function shouldWaitForGpsBeforeStart() {

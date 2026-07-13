@@ -11,7 +11,8 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
     }
 
     function onSelect() as Boolean {
-        _view.toggleRunning();
+        // Touchscreen taps can arrive as generic select events on tactix.
+        // Ignore this path so accidental face touches cannot start or pause.
         return true;
     }
 
@@ -51,7 +52,7 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
     }
 
     function onNextPage() as Boolean {
-        // Keep left-side up/down buttons from changing stations.
+        _view.toggleRunning();
         return true;
     }
 
