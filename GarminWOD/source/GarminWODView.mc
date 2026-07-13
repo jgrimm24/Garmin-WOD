@@ -208,7 +208,7 @@ class GarminWODView extends WatchUi.View {
     }
 
     function loadCachedWorkout() as Void {
-        var cachedWorkout = Storage.getValue("latestWorkout");
+        var cachedWorkout = Storage.getValue("latestWorkoutV2");
 
         if (cachedWorkout != null && loadWorkoutData(cachedWorkout)) {
             _workoutSourceText = "CACHE";
@@ -244,7 +244,7 @@ class GarminWODView extends WatchUi.View {
         _isFetchingWorkout = false;
 
         if (responseCode == 200 && data instanceof Dictionary && loadWorkoutData(data)) {
-            Storage.setValue("latestWorkout", data);
+            Storage.setValue("latestWorkoutV2", data);
             _workoutSourceText = "WEB WOD";
         } else if (_workoutSourceText.equals("SYNC...")) {
             _workoutSourceText = _workoutSourceBeforeSync;
@@ -258,7 +258,7 @@ class GarminWODView extends WatchUi.View {
     }
 
     function nextStation() as Void {
-        if (!_workout.isForTime() && !_workout.isAmrap()) {
+        if (!_workout.isManualStationWorkout()) {
             return;
         }
 
@@ -277,7 +277,7 @@ class GarminWODView extends WatchUi.View {
     }
 
     function previousStation() as Void {
-        if (!_workout.isForTime() && !_workout.isAmrap()) {
+        if (!_workout.isManualStationWorkout()) {
             return;
         }
 
@@ -298,7 +298,7 @@ class GarminWODView extends WatchUi.View {
     }
 
     function handleBackButton() as Void {
-        if (_workout.isForTime() || _workout.isAmrap()) {
+        if (_workout.isManualStationWorkout()) {
             if (!_isRunning) {
                 if (_elapsedBeforePause == 0) {
                     toggleRunning();
@@ -380,7 +380,7 @@ class GarminWODView extends WatchUi.View {
             return (elapsed / (60 * _workout.getStationCount())) + 1;
         }
 
-        if (_workout.isForTime() || _workout.isAmrap()) {
+        if (_workout.isManualStationWorkout()) {
             return _manualRoundNumber;
         }
 
@@ -396,7 +396,7 @@ class GarminWODView extends WatchUi.View {
     }
 
     function getStationRemaining(stationIndex, secondInStation) {
-        if (_workout.isForTime()) {
+        if (_workout.isManualStationWorkout() && !_workout.isAmrap()) {
             if (_isFinished) {
                 return "Finished";
             }
@@ -422,7 +422,7 @@ class GarminWODView extends WatchUi.View {
     }
 
     function getStationLabel(stationIndex, secondInStation) {
-        if (_workout.isForTime() || _workout.isAmrap()) {
+        if (_workout.isManualStationWorkout()) {
             if (_isFinished) {
                 return "Done";
             }
@@ -448,7 +448,7 @@ class GarminWODView extends WatchUi.View {
     }
 
     function getContextText(stationIndex, elapsed, remaining) {
-        if (_workout.isForTime() || _workout.isAmrap()) {
+        if (_workout.isManualStationWorkout()) {
             if (shouldWaitForGpsBeforeStart()) {
                 return "GPS acquiring";
             }
@@ -491,7 +491,7 @@ class GarminWODView extends WatchUi.View {
         }
 
         if (_isRunning) {
-            if (_workout.isForTime() || _workout.isAmrap()) {
+            if (_workout.isManualStationWorkout()) {
                 if (_manualStationIndex >= _workout.getStationCount() - 1) {
                     return "DOWN pause";
                 }
@@ -514,7 +514,7 @@ class GarminWODView extends WatchUi.View {
             return "";
         }
 
-        if (_workout.isForTime() || _workout.isAmrap()) {
+        if (_workout.isManualStationWorkout()) {
             if (!_isRunning && _elapsedBeforePause > 0) {
                 return "BACK reset";
             }
@@ -534,7 +534,7 @@ class GarminWODView extends WatchUi.View {
             return "DOWN reset UP exit";
         }
 
-        if (!_workout.isForTime() && !_workout.isAmrap()) {
+        if (!_workout.isManualStationWorkout()) {
             return getStatusText();
         }
 

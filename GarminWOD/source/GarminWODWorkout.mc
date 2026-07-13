@@ -148,19 +148,23 @@ class GarminWODWorkout {
     }
 
     function isForTime() {
-        return workoutType.equals("For Time");
+        return workoutType.equals("For Time") || workoutType.equals("FOR TIME");
     }
 
     function isEmom() {
-        return workoutType.equals("EMOM");
+        return workoutType.equals("EMOM") || workoutType.equals("Emom");
     }
 
     function isAmrap() {
-        return workoutType.equals("AMRAP");
+        return workoutType.equals("AMRAP") || workoutType.equals("Amrap");
     }
 
     function isTimedPriority() {
         return isAmrap();
+    }
+
+    function isManualStationWorkout() {
+        return !isEmom();
     }
 
     function getHeader(roundNumber) {
@@ -169,6 +173,14 @@ class GarminWODWorkout {
                 return "FOR TIME";
             }
 
+            return "" + rounds + " RFT";
+        }
+
+        if (isAmrap()) {
+            return "AMRAP " + durationMinutes;
+        }
+
+        if (isManualStationWorkout() && rounds != null) {
             return "" + rounds + " RFT";
         }
 
