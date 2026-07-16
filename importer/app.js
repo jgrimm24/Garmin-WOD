@@ -84,14 +84,14 @@ function findWorkoutDuration(type, text) {
 
   if (type === "AMRAP") {
     const match =
-      text.match(/\b(\d+)\s*(?:min|minute|minutes)?\s*(?:-|:)?\s*amrap\b/i) ||
+      text.match(/\b(\d+)\s*(?:-|–|—)?\s*(?:min|minute|minutes)?\s*(?:-|:)?\s*amrap\b/i) ||
       text.match(/\bamrap\s*(?:for|of|:|-)?\s*(\d+)\s*(?:min|minute|minutes)?\b/i);
     return match ? Number(match[1]) : null;
   }
 
   if (type === "EMOM") {
     const match =
-      text.match(/\b(\d+)\s*(?:min|minute|minutes)?\s*(?:-|:)?\s*emom\b/i) ||
+      text.match(/\b(\d+)\s*(?:-|–|—)?\s*(?:min|minute|minutes)?\s*(?:-|:)?\s*emom\b/i) ||
       text.match(/\bemom\s*(?:for|of|:|-)?\s*(\d+)\s*(?:min|minute|minutes)?\b/i);
     return match ? Number(match[1]) : null;
   }
@@ -120,10 +120,11 @@ function findRounds(text) {
 
 function findStationLines(lines) {
   return lines.filter((line) => {
-    if (/\b(?:emom|amrap|for time|tabata)\b/i.test(line)) return false;
-    if (/^\d+\s*(?:rounds?|rds?)\b/i.test(line)) return false;
-    if (isGenderWeightLine(line)) return false;
-    return /(^\d+[\).:-]\s*)|(^\d+\s+\D)|(\d+\s*(?:reps?|cal|cals|m|meter|meters|sec|seconds|min|minute|minutes|lb|#|@))|row|run|bike|pull|push|squat|bench|sit|clean|snatch|deadlift|burpee|wall ball|toes|thruster|double\s+unders?|rest/i.test(line);
+    const normalizedLine = stripListPrefix(line);
+    if (/\b(?:emom|amrap|for time|tabata)\b/i.test(normalizedLine)) return false;
+    if (/^\d+\s*(?:rounds?|rds?)\b/i.test(normalizedLine)) return false;
+    if (isGenderWeightLine(normalizedLine)) return false;
+    return /(^\d+[\).:-]\s*)|(^\d+\s+\D)|(\d+\s*(?:reps?|cal|cals|m|meter|meters|sec|seconds|min|minute|minutes|lb|#|@))|row|run|bike|pull|push|squat|bench|sit|clean|snatch|deadlift|burpee|wall ball|toes|thruster|double\s+unders?|box\s+jumps?|rest/i.test(normalizedLine);
   });
 }
 
@@ -135,9 +136,12 @@ function isGenderWeightLine(line) {
   return /^[♀♂MFmf]\s*\d+\s*(?:lb|lbs|#)\b/.test(line.trim());
 }
 
+function stripListPrefix(line) {
+  return line.replace(/^[•\-–—*]\s*/, "").trim();
+}
+
 function parseStation(line, workoutType) {
-  const cleaned = line
-    .replace(/^[•\-–—*]\s*/, "")
+  const cleaned = stripListPrefix(line)
     .replace(/^\d+[\).:-]\s+(?=\D)/, "")
     .trim();
   const secondsMatch = cleaned.match(/(\d+)\s*(?:sec|secs|second|seconds)\b/i);
@@ -193,6 +197,7 @@ function normalizeMovementName(name) {
   if (/\brow\b/i.test(name)) return "Row";
   if (/\bbench(?:\s+press(?:es)?)?\b/i.test(name)) return "Bench Press";
   if (/\bfront\s+squat\b/i.test(name)) return "Front Squat";
+  if (/\bbox\s+jumps?\b/i.test(name)) return "Box Jumps";
   if (/\btoes?\s+to\s+bar\b/i.test(name)) return "Toes to Bar";
   if (/\bthrusters?\b/i.test(name)) return "Thrusters";
   if (/\bdouble\s+unders?\b/i.test(name)) return "Double Unders";
