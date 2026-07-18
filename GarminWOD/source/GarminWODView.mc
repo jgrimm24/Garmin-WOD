@@ -904,24 +904,10 @@ class GarminWODView extends WatchUi.View {
         var currentCalories = getCurrentCalories();
 
         if (currentCalories != null) {
-            return "Calories " + currentCalories;
+            return "Active Cal " + currentCalories;
         }
 
-        var totalCalories = 0;
-
-        for (var i = 0; i < _workout.getStationCount(); i++) {
-            var stationCalories = _workout.getStationCalories(i);
-
-            if (stationCalories != null) {
-                totalCalories += stationCalories.toNumber();
-            }
-        }
-
-        if (totalCalories == 0) {
-            return "Calories --";
-        }
-
-        return "WOD Cal " + totalCalories;
+        return "Active Cal --";
     }
 
     function getAverageHeartRateText() {
