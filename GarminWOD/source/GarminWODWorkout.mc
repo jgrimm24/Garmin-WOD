@@ -224,4 +224,8 @@ class GarminWODWorkout {
     function getStationMeters(index) {
         return stationMeters[index];
     }
+
+    function getStationCalories(index) {
+        return stationCalories[index];
+    }
 }

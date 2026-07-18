@@ -718,6 +718,16 @@ class GarminWODView extends WatchUi.View {
         return null;
     }
 
+    function getCurrentCalories() {
+        var info = Activity.getActivityInfo();
+
+        if (info has :calories && info.calories != null) {
+            return info.calories;
+        }
+
+        return null;
+    }
+
     function getCurrentHeartRate() {
         var info = Activity.getActivityInfo();
 
@@ -820,14 +830,15 @@ class GarminWODView extends WatchUi.View {
     }
 
     function drawWorkoutSummary(dc, width, height) as Void {
-        var titleY = height * 12 / 100;
-        var timeY = height * 25 / 100;
-        var labelY = height * 39 / 100;
-        var structureY = height * 52 / 100;
-        var averageY = height * 65 / 100;
-        var maxY = height * 76 / 100;
-        var resetY = height * 86 / 100;
-        var exitY = height * 94 / 100;
+        var titleY = height * 9 / 100;
+        var timeY = height * 21 / 100;
+        var labelY = height * 33 / 100;
+        var distanceY = height * 45 / 100;
+        var caloriesY = height * 56 / 100;
+        var averageY = height * 67 / 100;
+        var maxY = height * 78 / 100;
+        var resetY = height * 88 / 100;
+        var exitY = height * 96 / 100;
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(width / 2, titleY, Graphics.FONT_XTINY, "Workout Complete", Graphics.TEXT_JUSTIFY_CENTER);
@@ -839,7 +850,8 @@ class GarminWODView extends WatchUi.View {
         dc.drawText(width / 2, labelY, Graphics.FONT_XTINY, "Total Time", Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width / 2, structureY, Graphics.FONT_XTINY, getSummaryWorkoutLine(), Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(width / 2, distanceY, Graphics.FONT_XTINY, getSummaryDistanceText(), Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(width / 2, caloriesY, Graphics.FONT_XTINY, getSummaryCaloriesText(), Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(width / 2, averageY, Graphics.FONT_XTINY, getAverageHeartRateText(), Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(width / 2, maxY, Graphics.FONT_XTINY, getMaxHeartRateText(), Graphics.TEXT_JUSTIFY_CENTER);
 
@@ -862,6 +874,54 @@ class GarminWODView extends WatchUi.View {
         }
 
         return _workout.workoutType;
+    }
+
+    function getSummaryDistanceText() {
+        var distanceMeters = getCurrentDistanceMeters();
+
+        if (distanceMeters == null) {
+            return "Distance --";
+        }
+
+        return "Distance " + formatDistance(distanceMeters);
+    }
+
+    function formatDistance(distanceMeters) {
+        var meters = distanceMeters.toNumber();
+
+        if (meters < 1609) {
+            return meters + " m";
+        }
+
+        var tenths = ((meters * 10) / 1609).toNumber();
+        var whole = tenths / 10;
+        var decimal = tenths % 10;
+
+        return whole + "." + decimal + " mi";
+    }
+
+    function getSummaryCaloriesText() {
+        var currentCalories = getCurrentCalories();
+
+        if (currentCalories != null) {
+            return "Calories " + currentCalories;
+        }
+
+        var totalCalories = 0;
+
+        for (var i = 0; i < _workout.getStationCount(); i++) {
+            var stationCalories = _workout.getStationCalories(i);
+
+            if (stationCalories != null) {
+                totalCalories += stationCalories.toNumber();
+            }
+        }
+
+        if (totalCalories == 0) {
+            return "Calories --";
+        }
+
+        return "WOD Cal " + totalCalories;
     }
 
     function getAverageHeartRateText() {
