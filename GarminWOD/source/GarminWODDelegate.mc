@@ -30,7 +30,8 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
         }
 
         if (key == WatchUi.KEY_UP || key == WatchUi.KEY_UP_LEFT) {
-            System.exit();
+            _view.exitApp();
+            return true;
         }
 
         return true;
@@ -57,11 +58,13 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
     }
 
     function onPreviousPage() as Boolean {
-        System.exit();
+        _view.exitApp();
+        return true;
     }
 
     function onMenu() as Boolean {
-        System.exit();
+        _view.exitApp();
+        return true;
     }
 
 }

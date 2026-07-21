@@ -34,6 +34,11 @@ class GarminWODView extends WatchUi.View {
     var _isFetchingWorkout;
     var _workoutSourceText;
     var _workoutSourceBeforeSync;
+    var _activityRecorder;
+    var _summarySaveStatus;
+    var _firstValidHeartRateLogged;
+    var _missingHeartRateLogged;
+    var _heartRateMissingSeconds;
 
     function initialize() {
         View.initialize();
@@ -59,6 +64,11 @@ class GarminWODView extends WatchUi.View {
         _isFetchingWorkout = false;
         _workoutSourceText = "FALLBACK";
         _workoutSourceBeforeSync = "FALLBACK";
+        _activityRecorder = new GarminWODActivityRecorder();
+        _summarySaveStatus = "Not saved";
+        _firstValidHeartRateLogged = false;
+        _missingHeartRateLogged = false;
+        _heartRateMissingSeconds = 0;
     }
 
     // Load your resources here
@@ -141,16 +151,36 @@ class GarminWODView extends WatchUi.View {
 
     function toggleRunning() as Void {
         if (_isFinished) {
-            resetWorkout();
+            if (_activityRecorder.hasSaveFailed()) {
+                retrySaveRecordingSession();
+            } else {
+                resetWorkout();
+            }
             return;
         }
 
         if (_isRunning) {
-            _elapsedBeforePause = getElapsedSeconds();
+            var elapsed = getElapsedSeconds();
+
+            if (!_activityRecorder.pauseRecordingSession()) {
+                WatchUi.requestUpdate();
+                return;
+            }
+
+            _elapsedBeforePause = elapsed;
             _isRunning = false;
         } else {
             if (shouldWaitForGpsBeforeStart()) {
                 startLocationEvents();
+                WatchUi.requestUpdate();
+                return;
+            }
+
+            var recordingStarted = _elapsedBeforePause > 0 ?
+                _activityRecorder.resumeRecordingSession() :
+                _activityRecorder.startRecordingSession();
+
+            if (!recordingStarted) {
                 WatchUi.requestUpdate();
                 return;
             }
@@ -165,6 +195,10 @@ class GarminWODView extends WatchUi.View {
     }
 
     function resetWorkout() as Void {
+        if (_activityRecorder.hasOpenSession() && !_activityRecorder.hasSaved()) {
+            _activityRecorder.discardRecordingSession();
+        }
+
         _isRunning = false;
         _elapsedBeforePause = 0;
         _startMs = 0;
@@ -180,6 +214,10 @@ class GarminWODView extends WatchUi.View {
         _lastLocation = null;
         _hasGpsFix = false;
         _gpsFixAlerted = false;
+        _summarySaveStatus = "Not saved";
+        _firstValidHeartRateLogged = false;
+        _missingHeartRateLogged = false;
+        _heartRateMissingSeconds = 0;
         WatchUi.requestUpdate();
     }
 
@@ -202,6 +240,10 @@ class GarminWODView extends WatchUi.View {
         _startMs = 0;
         _elapsedBeforePause = 0;
         _isFinished = false;
+        _summarySaveStatus = "Not saved";
+        _firstValidHeartRateLogged = false;
+        _missingHeartRateLogged = false;
+        _heartRateMissingSeconds = 0;
         resetStationDistanceStart();
 
         return true;
@@ -314,6 +356,11 @@ class GarminWODView extends WatchUi.View {
     }
 
     function handleBackButton() as Void {
+        if (_isFinished && _activityRecorder.hasSaveFailed()) {
+            resetWorkout();
+            return;
+        }
+
         if (_workout.isManualStationWorkout()) {
             if (!_isRunning) {
                 if (_elapsedBeforePause == 0) {
@@ -341,8 +388,33 @@ class GarminWODView extends WatchUi.View {
         updateHeartRateStats();
         _elapsedBeforePause = getElapsedSeconds();
         _isRunning = false;
+        var saved = _activityRecorder.stopAndSaveRecordingSession();
+        _summarySaveStatus = saved ? "Saved to Garmin" : "Save failed";
         _isFinished = true;
         WatchUi.requestUpdate();
+    }
+
+    function retrySaveRecordingSession() as Void {
+        if (!_activityRecorder.hasOpenSession()) {
+            _summarySaveStatus = "Save failed";
+            WatchUi.requestUpdate();
+            return;
+        }
+
+        var saved = _activityRecorder.stopAndSaveRecordingSession();
+        _summarySaveStatus = saved ? "Saved to Garmin" : "Save failed";
+        WatchUi.requestUpdate();
+    }
+
+    function cleanupBeforeExit() as Void {
+        if (_activityRecorder.hasOpenSession() && !_activityRecorder.hasSaved()) {
+            _activityRecorder.discardRecordingSession();
+        }
+    }
+
+    function exitApp() as Void {
+        cleanupBeforeExit();
+        System.exit();
     }
 
     function onTick() as Void {
@@ -507,7 +579,11 @@ class GarminWODView extends WatchUi.View {
 
     function getStatusText() {
         if (_isFinished) {
-            return "DOWN reset";
+            if (_activityRecorder.hasSaveFailed()) {
+                return "START retry";
+            }
+
+            return "START reset";
         }
 
         if (_isRunning) {
@@ -551,7 +627,11 @@ class GarminWODView extends WatchUi.View {
 
     function getControlHintText() {
         if (_isFinished) {
-            return "DOWN reset UP exit";
+            if (_activityRecorder.hasSaveFailed()) {
+                return "START retry  BACK discard";
+            }
+
+            return "START reset  UP exit";
         }
 
         if (!_workout.isManualStationWorkout()) {
@@ -732,7 +812,11 @@ class GarminWODView extends WatchUi.View {
         var info = Activity.getActivityInfo();
 
         if (info has :currentHeartRate && info.currentHeartRate != null) {
-            return info.currentHeartRate;
+            var heartRate = info.currentHeartRate;
+
+            if (heartRate >= 30 && heartRate <= 250) {
+                return heartRate;
+            }
         }
 
         return null;
@@ -815,10 +899,28 @@ class GarminWODView extends WatchUi.View {
     }
 
     function updateHeartRateStats() as Void {
+        if (!_activityRecorder.isRecordingSessionActive()) {
+            return;
+        }
+
         var heartRate = getCurrentHeartRate();
 
         if (heartRate == null) {
+            _heartRateMissingSeconds++;
+
+            if (_heartRateMissingSeconds > 10 && !_missingHeartRateLogged) {
+                _missingHeartRateLogged = true;
+                System.println("GarminWOD: HR unavailable for more than 10 seconds");
+            }
+
             return;
+        }
+
+        _heartRateMissingSeconds = 0;
+
+        if (!_firstValidHeartRateLogged) {
+            _firstValidHeartRateLogged = true;
+            System.println("GarminWOD: first valid HR " + heartRate);
         }
 
         _heartRateSum += heartRate;
@@ -830,18 +932,22 @@ class GarminWODView extends WatchUi.View {
     }
 
     function drawWorkoutSummary(dc, width, height) as Void {
-        var titleY = height * 9 / 100;
-        var timeY = height * 21 / 100;
-        var labelY = height * 33 / 100;
-        var distanceY = height * 45 / 100;
-        var caloriesY = height * 56 / 100;
-        var averageY = height * 67 / 100;
-        var maxY = height * 78 / 100;
-        var resetY = height * 88 / 100;
+        var titleY = height * 7 / 100;
+        var statusY = height * 17 / 100;
+        var timeY = height * 28 / 100;
+        var labelY = height * 38 / 100;
+        var distanceY = height * 49 / 100;
+        var caloriesY = height * 59 / 100;
+        var averageY = height * 69 / 100;
+        var maxY = height * 79 / 100;
+        var resetY = height * 89 / 100;
         var exitY = height * 96 / 100;
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(width / 2, titleY, Graphics.FONT_XTINY, "Workout Complete", Graphics.TEXT_JUSTIFY_CENTER);
+
+        dc.setColor(_activityRecorder.hasSaveFailed() ? Graphics.COLOR_RED : Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(width / 2, statusY, Graphics.FONT_XTINY, _summarySaveStatus, Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
         dc.drawText(width / 2, timeY, Graphics.FONT_MEDIUM, formatTime(_elapsedBeforePause), Graphics.TEXT_JUSTIFY_CENTER);
@@ -856,8 +962,13 @@ class GarminWODView extends WatchUi.View {
         dc.drawText(width / 2, maxY, Graphics.FONT_XTINY, getMaxHeartRateText(), Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width / 2, resetY, Graphics.FONT_XTINY, "START reset", Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(width / 2, exitY, Graphics.FONT_XTINY, "UP exit", Graphics.TEXT_JUSTIFY_CENTER);
+        if (_activityRecorder.hasSaveFailed()) {
+            dc.drawText(width / 2, resetY, Graphics.FONT_XTINY, "START retry", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(width / 2, exitY, Graphics.FONT_XTINY, "BACK discard", Graphics.TEXT_JUSTIFY_CENTER);
+        } else {
+            dc.drawText(width / 2, resetY, Graphics.FONT_XTINY, "START reset", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(width / 2, exitY, Graphics.FONT_XTINY, "UP exit", Graphics.TEXT_JUSTIFY_CENTER);
+        }
     }
 
     function getSummaryWorkoutLine() {
