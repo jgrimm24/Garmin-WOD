@@ -298,6 +298,8 @@ function normalizeStationContract(station, index) {
     calories: caloriesOrNull(station.calories),
     meters: numberOrNull(station.meters || station.distanceMeters),
     weightLb: numberOrNull(station.weightLb),
+    maleWeightLb: numberOrNull(station.maleWeightLb === undefined ? station.weightLb : station.maleWeightLb),
+    femaleWeightLb: numberOrNull(station.femaleWeightLb),
     workSeconds: numberOrNull(station.workSeconds),
     notes: String(station.notes || ""),
   };

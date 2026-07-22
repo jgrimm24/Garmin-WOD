@@ -503,6 +503,8 @@ class GarminWODView extends WatchUi.View {
                         ":" + getDictionaryValue(station, "calories") +
                         ":" + getDictionaryValue(station, "meters") +
                         ":" + getDictionaryValue(station, "weightLb") +
+                        ":" + getDictionaryValue(station, "maleWeightLb") +
+                        ":" + getDictionaryValue(station, "femaleWeightLb") +
                         ":" + getDictionaryValue(station, "workSeconds");
                 }
             }
