@@ -33,6 +33,9 @@ class GarminWODView extends WatchUi.View {
     var _hasGpsFix;
     var _gpsFixAlerted;
     var _isFetchingWorkout;
+    var _hasLoadedInitialWorkout;
+    var _isTimerActive;
+    var _isLocationEventsActive;
     var _workoutSourceText;
     var _workoutSourceBeforeSync;
     var _activityRecorder;
@@ -67,6 +70,9 @@ class GarminWODView extends WatchUi.View {
         _hasGpsFix = false;
         _gpsFixAlerted = false;
         _isFetchingWorkout = false;
+        _hasLoadedInitialWorkout = false;
+        _isTimerActive = false;
+        _isLocationEventsActive = false;
         _workoutSourceText = "FALLBACK";
         _workoutSourceBeforeSync = "FALLBACK";
         _activityRecorder = new GarminWODActivityRecorder();
@@ -88,9 +94,18 @@ class GarminWODView extends WatchUi.View {
     // the state of this View and prepare it to be shown. This includes
     // loading resources into memory.
     function onShow() as Void {
-        loadCachedWorkout();
+        if (!_hasLoadedInitialWorkout) {
+            loadCachedWorkout();
+            _hasLoadedInitialWorkout = true;
+        }
+
         fetchLatestWorkout();
-        _timer.start(method(:onTick), 1000, true);
+
+        if (!_isTimerActive) {
+            _timer.start(method(:onTick), 1000, true);
+            _isTimerActive = true;
+        }
+
         startLocationEvents();
     }
 
@@ -159,8 +174,12 @@ class GarminWODView extends WatchUi.View {
     // state of this View here. This includes freeing resources from
     // memory.
     function onHide() as Void {
-        _timer.stop();
-        Position.enableLocationEvents(Position.LOCATION_DISABLE, null);
+        if (_isTimerActive) {
+            _timer.stop();
+            _isTimerActive = false;
+        }
+
+        stopLocationEvents();
     }
 
     function toggleRunning() as Void {
@@ -832,7 +851,21 @@ class GarminWODView extends WatchUi.View {
     }
 
     function startLocationEvents() as Void {
+        if (_isLocationEventsActive) {
+            return;
+        }
+
         Position.enableLocationEvents(Position.LOCATION_CONTINUOUS, method(:onPosition));
+        _isLocationEventsActive = true;
+    }
+
+    function stopLocationEvents() as Void {
+        if (!_isLocationEventsActive) {
+            return;
+        }
+
+        Position.enableLocationEvents(Position.LOCATION_DISABLE, null);
+        _isLocationEventsActive = false;
     }
 
     function onPosition(info as Position.Info) as Void {
