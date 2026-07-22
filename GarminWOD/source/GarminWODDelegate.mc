@@ -1,5 +1,4 @@
 import Toybox.Lang;
-import Toybox.System;
 import Toybox.WatchUi;
 
 class GarminWODDelegate extends WatchUi.BehaviorDelegate {
@@ -29,8 +28,13 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
             return true;
         }
 
-        if (key == WatchUi.KEY_UP || key == WatchUi.KEY_UP_LEFT) {
-            _view.exitApp();
+        if (key == WatchUi.KEY_UP || key == WatchUi.KEY_UP_LEFT || key == WatchUi.KEY_DOWN || key == WatchUi.KEY_DOWN_LEFT) {
+            _view.handlePageNavigation();
+            return true;
+        }
+
+        if (key == WatchUi.KEY_MENU || key == WatchUi.KEY_LIGHT) {
+            _view.handleMenuButton();
             return true;
         }
 
@@ -53,17 +57,17 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
     }
 
     function onNextPage() as Boolean {
-        _view.toggleRunning();
+        _view.handlePageNavigation();
         return true;
     }
 
     function onPreviousPage() as Boolean {
-        _view.exitApp();
+        _view.handlePageNavigation();
         return true;
     }
 
     function onMenu() as Boolean {
-        _view.exitApp();
+        _view.handleMenuButton();
         return true;
     }
 

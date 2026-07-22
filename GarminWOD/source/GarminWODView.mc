@@ -387,7 +387,7 @@ class GarminWODView extends WatchUi.View {
 
     function handleBackButton() as Void {
         if (_exitConfirmPending) {
-            cancelExitConfirmation();
+            confirmDiscardAndExit();
             return;
         }
 
@@ -397,13 +397,18 @@ class GarminWODView extends WatchUi.View {
             return;
         }
 
+        if (_isFinished) {
+            exitApp();
+            return;
+        }
+
+        if (!_isRunning && _elapsedBeforePause == 0) {
+            WatchUi.requestUpdate();
+            return;
+        }
+
         if (_workout.isManualStationWorkout()) {
             if (!_isRunning) {
-                if (_elapsedBeforePause == 0) {
-                    toggleRunning();
-                    return;
-                }
-
                 resetWorkout();
                 return;
             }
@@ -412,12 +417,17 @@ class GarminWODView extends WatchUi.View {
             return;
         }
 
-        if (!_isRunning && _elapsedBeforePause == 0) {
-            toggleRunning();
-            return;
-        }
-
         resetWorkout();
+    }
+
+    function handlePageNavigation() as Void {
+        // Reserved for future metric pages. For now, consume scroll buttons safely.
+        WatchUi.requestUpdate();
+    }
+
+    function handleMenuButton() as Void {
+        // Consume menu/light behavior so it cannot silently exit or discard a workout.
+        WatchUi.requestUpdate();
     }
 
     function finishWorkout() as Void {
@@ -713,26 +723,26 @@ class GarminWODView extends WatchUi.View {
                 return "START retry";
             }
 
-            return "START reset";
+            return "BACK exit";
         }
 
         if (_isRunning) {
             if (_workout.isManualStationWorkout()) {
                 if (_manualStationIndex >= _workout.getStationCount() - 1) {
-                    return "DOWN pause";
+                    return "START pause";
                 }
 
-                return "DOWN pause";
+                return "START pause";
             }
 
-            return "DOWN pauses";
+            return "START pause";
         }
 
         if (_elapsedBeforePause > 0) {
-            return "DOWN resumes";
+            return "START resume";
         }
 
-        return "BACK starts";
+        return "START start";
     }
 
     function getSecondaryStatusText() {
@@ -761,7 +771,7 @@ class GarminWODView extends WatchUi.View {
                 return "START retry  BACK discard";
             }
 
-            return "START reset  UP exit";
+            return "START reset  BACK exit";
         }
 
         if (!_workout.isManualStationWorkout()) {
@@ -770,21 +780,21 @@ class GarminWODView extends WatchUi.View {
 
         if (_isRunning) {
             if (_manualStationIndex >= _workout.getStationCount() - 1 && !shouldContinueManualRoundFlow()) {
-                return "DOWN pause BACK finish";
+                return "START pause  BACK finish";
             }
 
-            return "DOWN pause BACK next";
+            return "START pause  BACK next";
         }
 
         if (_elapsedBeforePause > 0) {
-            return "DOWN resume BACK reset";
+            return "START resume  BACK reset";
         }
 
         if (shouldWaitForGpsBeforeStart()) {
-            return "WAIT GPS BACK start";
+            return "WAIT GPS  START start";
         }
 
-        return "BACK start UP exit";
+        return "START start";
     }
 
     function shouldWaitForGpsBeforeStart() {
@@ -1101,7 +1111,7 @@ class GarminWODView extends WatchUi.View {
             dc.drawText(width / 2, exitY, Graphics.FONT_XTINY, "BACK discard", Graphics.TEXT_JUSTIFY_CENTER);
         } else {
             dc.drawText(width / 2, resetY, Graphics.FONT_XTINY, "START reset", Graphics.TEXT_JUSTIFY_CENTER);
-            dc.drawText(width / 2, exitY, Graphics.FONT_XTINY, "UP exit", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(width / 2, exitY, Graphics.FONT_XTINY, "BACK exit", Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
 
@@ -1124,7 +1134,7 @@ class GarminWODView extends WatchUi.View {
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawText(width / 2, detailY, Graphics.FONT_XTINY, "Choose before exit", Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(width / 2, cancelY, Graphics.FONT_XTINY, "START continue", Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(width / 2, discardY, Graphics.FONT_XTINY, "UP discard exit", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(width / 2, discardY, Graphics.FONT_XTINY, "BACK discard exit", Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     function getSummaryWorkoutLine() {
