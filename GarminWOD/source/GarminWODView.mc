@@ -8,6 +8,7 @@ import Toybox.Math;
 import Toybox.Position;
 import Toybox.Sensor;
 import Toybox.System;
+import Toybox.Time;
 import Toybox.Timer;
 import Toybox.UserProfile;
 import Toybox.WatchUi;
@@ -38,6 +39,8 @@ class GarminWODView extends WatchUi.View {
     var _isLocationEventsActive;
     var _workoutSourceText;
     var _workoutSourceBeforeSync;
+    var _currentWorkoutIdentity;
+    var _currentWorkoutVersion;
     var _activityRecorder;
     var _summarySaveStatus;
     var _firstValidHeartRateLogged;
@@ -75,6 +78,8 @@ class GarminWODView extends WatchUi.View {
         _isLocationEventsActive = false;
         _workoutSourceText = "FALLBACK";
         _workoutSourceBeforeSync = "FALLBACK";
+        _currentWorkoutIdentity = "fallback";
+        _currentWorkoutVersion = null;
         _activityRecorder = new GarminWODActivityRecorder();
         _summarySaveStatus = "Not saved";
         _firstValidHeartRateLogged = false;
@@ -279,6 +284,8 @@ class GarminWODView extends WatchUi.View {
             return false;
         }
 
+        _currentWorkoutIdentity = getWorkoutIdentity(data);
+        _currentWorkoutVersion = getWorkoutVersion(data);
         _totalSeconds = _workout.getTotalSeconds();
         _manualStationIndex = 0;
         _manualRoundNumber = 1;
@@ -300,9 +307,20 @@ class GarminWODView extends WatchUi.View {
 
     function loadCachedWorkout() as Void {
         var cachedWorkout = Storage.getValue("latestWorkoutV2");
+        var cachedSavedAt = Storage.getValue("latestWorkoutV2SavedAt");
+        var cachedIdentity = Storage.getValue("latestWorkoutV2Identity");
+
+        System.println("GarminWOD cache exists=" + (cachedWorkout != null) +
+            " savedAt=" + getLogValue(cachedSavedAt) +
+            " storedIdentity=" + getLogValue(cachedIdentity));
 
         if (cachedWorkout != null && loadWorkoutData(cachedWorkout)) {
-            _workoutSourceText = "CACHE";
+            _workoutSourceText = getCacheSourceText(cachedSavedAt);
+            System.println("GarminWOD cache loaded identity=" + _currentWorkoutIdentity +
+                " title=" + getWorkoutLogTitle(cachedWorkout) +
+                " header=" + _workout.getHeader(_manualRoundNumber));
+        } else if (cachedWorkout != null) {
+            System.println("GarminWOD cache load failed title=" + getWorkoutLogTitle(cachedWorkout));
         }
     }
 
@@ -333,15 +351,208 @@ class GarminWODView extends WatchUi.View {
 
     function onLatestWorkoutResponse(responseCode as Number, data as Dictionary or String or Null) as Void {
         _isFetchingWorkout = false;
+        var incomingIdentity = data instanceof Dictionary ? getWorkoutIdentity(data) : "none";
+        var incomingTitle = data instanceof Dictionary ? getWorkoutLogTitle(data) : "none";
+        var loadSucceeded = false;
+        var storedWorkout = false;
 
-        if (responseCode == 200 && data instanceof Dictionary && loadWorkoutData(data)) {
-            Storage.setValue("latestWorkoutV2", data);
-            _workoutSourceText = "WEB WOD";
-        } else if (_workoutSourceText.equals("SYNC...")) {
+        System.println("GarminWOD web response code=" + responseCode +
+            " identity=" + incomingIdentity +
+            " title=" + incomingTitle);
+
+        if (responseCode == 200 && data instanceof Dictionary) {
+            if (!canReplaceWorkout()) {
+                System.println("GarminWOD web ignored; workout no longer replaceable");
+                if (_workoutSourceText.equals("SYNC...")) {
+                    _workoutSourceText = _workoutSourceBeforeSync;
+                }
+            } else if (isIncomingWorkoutOlder(data)) {
+                _workoutSourceText = "WEB OLD";
+            } else {
+                loadSucceeded = loadWorkoutData(data);
+
+                if (loadSucceeded) {
+                    storedWorkout = saveLatestWorkoutToCache(data, incomingIdentity);
+                    _workoutSourceText = "WEB WOD";
+                }
+            }
+        }
+
+        System.println("GarminWOD web loadSucceeded=" + loadSucceeded +
+            " stored=" + storedWorkout +
+            " header=" + _workout.getHeader(_manualRoundNumber));
+
+        if (responseCode != 200 && _workoutSourceText.equals("SYNC...")) {
+            _workoutSourceText = "WEB FAIL";
+        } else if (!loadSucceeded && _workoutSourceText.equals("SYNC...")) {
             _workoutSourceText = _workoutSourceBeforeSync;
         }
 
         WatchUi.requestUpdate();
+    }
+
+    function saveLatestWorkoutToCache(data, incomingIdentity) {
+        try {
+            var savedAt = Time.now().value();
+            Storage.setValue("latestWorkoutV2", data);
+            Storage.setValue("latestWorkoutV2SavedAt", savedAt);
+            Storage.setValue("latestWorkoutV2Identity", incomingIdentity);
+
+            var readBack = Storage.getValue("latestWorkoutV2");
+            var readBackIdentity = readBack instanceof Dictionary ? getWorkoutIdentity(readBack) : "none";
+
+            if (!readBackIdentity.equals(incomingIdentity)) {
+                System.println("GarminWOD WARNING cache verify mismatch incoming=" +
+                    incomingIdentity + " readBack=" + readBackIdentity);
+            } else {
+                System.println("GarminWOD cache saved savedAt=" + savedAt +
+                    " identity=" + incomingIdentity);
+            }
+
+            return true;
+        } catch (e) {
+            System.println("GarminWOD cache save failed: " + getExceptionText(e));
+        }
+
+        return false;
+    }
+
+    function isIncomingWorkoutOlder(data) {
+        var incomingVersion = getWorkoutVersion(data);
+
+        if (incomingVersion != null && _currentWorkoutVersion != null && incomingVersion < _currentWorkoutVersion) {
+            System.println("GarminWOD web ignored older workout incomingVersion=" +
+                incomingVersion + " currentVersion=" + _currentWorkoutVersion +
+                " incomingIdentity=" + getWorkoutIdentity(data) +
+                " currentIdentity=" + _currentWorkoutIdentity);
+            return true;
+        }
+
+        return false;
+    }
+
+    function getWorkoutIdentity(data) {
+        var fingerprint = getWorkoutFingerprint(data);
+        var id = getDictionaryValue(data, "id");
+        if (id != null) {
+            return "id:" + id + "|fp:" + fingerprint;
+        }
+
+        var updatedAt = getDictionaryValue(data, "updatedAt");
+        if (updatedAt != null) {
+            return "updatedAt:" + updatedAt + "|fp:" + fingerprint;
+        }
+
+        var generatedAt = getDictionaryValue(data, "generatedAt");
+        if (generatedAt != null) {
+            return "generatedAt:" + generatedAt + "|fp:" + fingerprint;
+        }
+
+        var timestamp = getDictionaryValue(data, "timestamp");
+        if (timestamp != null) {
+            return "timestamp:" + timestamp + "|fp:" + fingerprint;
+        }
+
+        var title = getDictionaryValue(data, "title");
+        if (title != null) {
+            return "title:" + title + "|fp:" + fingerprint;
+        }
+
+        return "fp:" + fingerprint;
+    }
+
+    function getWorkoutVersion(data) {
+        var updatedAt = getDictionaryValue(data, "updatedAt");
+        if (updatedAt instanceof Number) {
+            return updatedAt;
+        }
+
+        var generatedAt = getDictionaryValue(data, "generatedAt");
+        if (generatedAt instanceof Number) {
+            return generatedAt;
+        }
+
+        var timestamp = getDictionaryValue(data, "timestamp");
+        if (timestamp instanceof Number) {
+            return timestamp;
+        }
+
+        var version = getDictionaryValue(data, "version");
+        if (version instanceof Number) {
+            return version;
+        }
+
+        return null;
+    }
+
+    function getWorkoutFingerprint(data) {
+        var stations = getDictionaryValue(data, "stations");
+        var fingerprint = "" + getDictionaryValue(data, "type") +
+            "|" + getDictionaryValue(data, "durationMinutes") +
+            "|" + getDictionaryValue(data, "rounds");
+
+        if (stations instanceof Array) {
+            fingerprint += "|count:" + stations.size();
+
+            for (var i = 0; i < stations.size(); i++) {
+                var station = stations[i];
+
+                if (station instanceof Dictionary) {
+                    fingerprint += "|" + getDictionaryValue(station, "name") +
+                        ":" + getDictionaryValue(station, "reps") +
+                        ":" + getDictionaryValue(station, "calories") +
+                        ":" + getDictionaryValue(station, "meters") +
+                        ":" + getDictionaryValue(station, "weightLb") +
+                        ":" + getDictionaryValue(station, "workSeconds");
+                }
+            }
+        }
+
+        return fingerprint;
+    }
+
+    function getWorkoutLogTitle(data) {
+        var title = getDictionaryValue(data, "title");
+
+        if (title != null) {
+            return "" + title;
+        }
+
+        return "untitled";
+    }
+
+    function getDictionaryValue(data, key) {
+        if (data == null) {
+            return null;
+        }
+
+        return data[key];
+    }
+
+    function getLogValue(value) {
+        if (value == null) {
+            return "null";
+        }
+
+        return "" + value;
+    }
+
+    function getCacheSourceText(savedAt) {
+        if (!(savedAt instanceof Number)) {
+            return "CACHE";
+        }
+
+        var ageSeconds = Time.now().value() - savedAt;
+
+        if (ageSeconds < 0) {
+            return "CACHE";
+        }
+
+        if (ageSeconds < 3600) {
+            return "CACHE " + (ageSeconds / 60) + "m";
+        }
+
+        return "CACHE " + (ageSeconds / 3600) + "h";
     }
 
     function getWorkoutSourceText() {
