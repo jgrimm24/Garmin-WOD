@@ -27,11 +27,15 @@ class GarminWODActivityRecorder {
             return fail("ActivityRecording unavailable");
         }
 
-        _recordingSession = ActivityRecording.createSession({
-            :name => "Garmin WOD",
-            :sport => Activity.SPORT_GENERIC,
-            :subSport => Activity.SUB_SPORT_GENERIC
-        });
+        try {
+            _recordingSession = ActivityRecording.createSession({
+                :name => "Garmin WOD",
+                :sport => Activity.SPORT_GENERIC,
+                :subSport => Activity.SUB_SPORT_GENERIC
+            });
+        } catch (e) {
+            return failWithException("Recording session create failed", e);
+        }
 
         _hasSaved = false;
         _saveFailed = false;
@@ -50,8 +54,12 @@ class GarminWODActivityRecorder {
             return true;
         }
 
-        if (!_recordingSession.start()) {
-            return fail("Recording start failed");
+        try {
+            if (!_recordingSession.start()) {
+                return fail("Recording start failed");
+            }
+        } catch (e) {
+            return failWithException("Recording start exception", e);
         }
 
         _lastStatus = "Recording started";
@@ -69,8 +77,12 @@ class GarminWODActivityRecorder {
             return true;
         }
 
-        if (!_recordingSession.stop()) {
-            return fail("Recording pause failed");
+        try {
+            if (!_recordingSession.stop()) {
+                return fail("Recording pause failed");
+            }
+        } catch (e) {
+            return failWithException("Recording pause exception", e);
         }
 
         _lastStatus = "Recording paused";
@@ -88,8 +100,12 @@ class GarminWODActivityRecorder {
             return true;
         }
 
-        if (!_recordingSession.start()) {
-            return fail("Recording resume failed");
+        try {
+            if (!_recordingSession.start()) {
+                return fail("Recording resume failed");
+            }
+        } catch (e) {
+            return failWithException("Recording resume exception", e);
         }
 
         _lastStatus = "Recording resumed";
@@ -104,17 +120,27 @@ class GarminWODActivityRecorder {
         }
 
         if (isRecordingSessionActive()) {
-            if (!_recordingSession.stop()) {
+            try {
+                if (!_recordingSession.stop()) {
+                    _saveFailed = true;
+                    return fail("Recording stop before save failed");
+                }
+            } catch (e) {
                 _saveFailed = true;
-                return fail("Recording stop before save failed");
+                return failWithException("Recording stop before save exception", e);
             }
 
             System.println("GarminWOD: recording stopped");
         }
 
-        if (!_recordingSession.save()) {
+        try {
+            if (!_recordingSession.save()) {
+                _saveFailed = true;
+                return fail("Recording save failed");
+            }
+        } catch (e) {
             _saveFailed = true;
-            return fail("Recording save failed");
+            return failWithException("Recording save exception", e);
         }
 
         _recordingSession = null;
@@ -132,11 +158,21 @@ class GarminWODActivityRecorder {
         }
 
         if (isRecordingSessionActive()) {
-            _recordingSession.stop();
+            try {
+                if (_recordingSession.stop()) {
+                    System.println("GarminWOD: recording stopped before discard");
+                }
+            } catch (e) {
+                return failWithException("Recording stop before discard exception", e);
+            }
         }
 
-        if (!_recordingSession.discard()) {
-            return fail("Recording discard failed");
+        try {
+            if (!_recordingSession.discard()) {
+                return fail("Recording discard failed");
+            }
+        } catch (e) {
+            return failWithException("Recording discard exception", e);
         }
 
         _recordingSession = null;
@@ -176,5 +212,27 @@ class GarminWODActivityRecorder {
         _lastStatus = message;
         System.println("GarminWOD: session error: " + message);
         return false;
+    }
+
+    function failWithException(message, exception) {
+        var detail = getExceptionText(exception);
+        _lastError = message + ": " + detail;
+        _lastStatus = message;
+        System.println("GarminWOD: session error: " + message + ": " + detail);
+        return false;
+    }
+
+    function getExceptionText(exception) {
+        if (exception == null) {
+            return "Unknown exception";
+        }
+
+        var message = exception.getErrorMessage();
+
+        if (message == null) {
+            message = exception.toString();
+        }
+
+        return message;
     }
 }
