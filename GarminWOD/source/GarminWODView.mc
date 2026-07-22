@@ -403,7 +403,7 @@ class GarminWODView extends WatchUi.View {
         }
 
         if (!_isRunning && _elapsedBeforePause == 0) {
-            WatchUi.requestUpdate();
+            exitApp();
             return;
         }
 
@@ -428,6 +428,26 @@ class GarminWODView extends WatchUi.View {
     function handleMenuButton() as Void {
         // Consume menu/light behavior so it cannot silently exit or discard a workout.
         WatchUi.requestUpdate();
+    }
+
+    function getInputStateText() {
+        if (_isFinished) {
+            if (_activityRecorder.hasSaveFailed()) {
+                return "finished-save-failed";
+            }
+
+            return "finished-saved";
+        }
+
+        if (_isRunning) {
+            return "running";
+        }
+
+        if (_elapsedBeforePause > 0) {
+            return "paused";
+        }
+
+        return "idle";
     }
 
     function finishWorkout() as Void {
