@@ -2,3 +2,7 @@ GarminWOD/bin/
 GarminWOD/developer_key.der/
 .DS_Store
 .env
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/

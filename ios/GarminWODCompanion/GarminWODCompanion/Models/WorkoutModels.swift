@@ -1,0 +1,155 @@
+import Foundation
+
+enum WorkoutType: String, Codable, CaseIterable {
+    case unknown = "Unknown"
+    case forTime = "For Time"
+    case amrap = "AMRAP"
+    case emom = "EMOM"
+    case tabata = "Tabata"
+    case interval = "Interval"
+}
+
+enum WorkoutStatus: String {
+    case idle = "Idle"
+    case running = "Running"
+    case paused = "Paused"
+    case finished = "Finished"
+}
+
+struct WorkoutContract: Codable, Identifiable {
+    var schemaVersion: Int
+    var id: String
+    var title: String
+    var type: WorkoutType
+    var durationMinutes: Int?
+    var rounds: Int?
+    var stations: [WorkoutStation]
+    var notes: [String]
+    var sourceText: String
+}
+
+struct WorkoutStation: Codable, Identifiable {
+    var id: String
+    var name: String
+    var reps: Int?
+    var workSeconds: Int?
+    var distanceMeters: Int?
+    var calories: Int?
+    var weightLb: Int?
+    var maleWeightLb: Int?
+    var femaleWeightLb: Int?
+    var notes: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case reps
+        case workSeconds
+        case distanceMeters
+        case meters
+        case calories
+        case weightLb
+        case maleWeightLb
+        case femaleWeightLb
+        case notes
+    }
+
+    init(
+        id: String,
+        name: String,
+        reps: Int? = nil,
+        workSeconds: Int? = nil,
+        distanceMeters: Int? = nil,
+        calories: Int? = nil,
+        weightLb: Int? = nil,
+        maleWeightLb: Int? = nil,
+        femaleWeightLb: Int? = nil,
+        notes: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.reps = reps
+        self.workSeconds = workSeconds
+        self.distanceMeters = distanceMeters
+        self.calories = calories
+        self.weightLb = weightLb
+        self.maleWeightLb = maleWeightLb
+        self.femaleWeightLb = femaleWeightLb
+        self.notes = notes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        reps = try container.decodeIfPresent(Int.self, forKey: .reps)
+        workSeconds = try container.decodeIfPresent(Int.self, forKey: .workSeconds)
+        distanceMeters = try container.decodeIfPresent(Int.self, forKey: .distanceMeters)
+            ?? container.decodeIfPresent(Int.self, forKey: .meters)
+        calories = try container.decodeIfPresent(Int.self, forKey: .calories)
+        weightLb = try container.decodeIfPresent(Int.self, forKey: .weightLb)
+        maleWeightLb = try container.decodeIfPresent(Int.self, forKey: .maleWeightLb)
+        femaleWeightLb = try container.decodeIfPresent(Int.self, forKey: .femaleWeightLb)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(reps, forKey: .reps)
+        try container.encodeIfPresent(workSeconds, forKey: .workSeconds)
+        try container.encodeIfPresent(distanceMeters, forKey: .distanceMeters)
+        try container.encodeIfPresent(calories, forKey: .calories)
+        try container.encodeIfPresent(weightLb, forKey: .weightLb)
+        try container.encodeIfPresent(maleWeightLb, forKey: .maleWeightLb)
+        try container.encodeIfPresent(femaleWeightLb, forKey: .femaleWeightLb)
+        try container.encodeIfPresent(notes, forKey: .notes)
+    }
+}
+
+extension WorkoutStation {
+    var prescriptionText: String {
+        var parts: [String] = []
+
+        if let distanceMeters {
+            parts.append("\(distanceMeters)m")
+        }
+
+        if let calories {
+            parts.append("\(calories) cal")
+        }
+
+        if let reps {
+            parts.append("\(reps) reps")
+        }
+
+        if let maleWeightLb, let femaleWeightLb {
+            parts.append("\(maleWeightLb)/\(femaleWeightLb) lb")
+        } else if let weightLb {
+            parts.append("\(weightLb) lb")
+        }
+
+        if let workSeconds {
+            parts.append("\(workSeconds)s")
+        }
+
+        return parts.isEmpty ? name : parts.joined(separator: " · ")
+    }
+
+    var displayName: String {
+        if let distanceMeters, !name.lowercased().contains("\(distanceMeters)") {
+            return "\(distanceMeters)m \(name)"
+        }
+
+        if let calories, !name.lowercased().contains("cal") {
+            return "\(calories) cal \(name)"
+        }
+
+        if let reps, !name.lowercased().hasPrefix("\(reps)") {
+            return "\(reps) \(name)"
+        }
+
+        return name
+    }
+}
