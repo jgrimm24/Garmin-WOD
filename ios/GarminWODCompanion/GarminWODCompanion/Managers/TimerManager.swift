@@ -6,6 +6,15 @@ final class TimerManager: ObservableObject {
 
     private var timer: Timer?
 
+    init() {
+        print("[LIFECYCLE] TimerManager init")
+    }
+
+    deinit {
+        print("[LIFECYCLE] TimerManager deinit")
+        invalidateTimer()
+    }
+
     var elapsedTimeText: String {
         format(seconds: elapsedSeconds)
     }
@@ -52,7 +61,9 @@ final class TimerManager: ObservableObject {
                 return
             }
 
-            self.elapsedSeconds += 1
+            self.performOnMain {
+                self.elapsedSeconds += 1
+            }
         }
     }
 
@@ -71,5 +82,13 @@ final class TimerManager: ObservableObject {
         }
 
         return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    private func performOnMain(_ action: @escaping () -> Void) {
+        if Thread.isMainThread {
+            action()
+        } else {
+            DispatchQueue.main.async(execute: action)
+        }
     }
 }

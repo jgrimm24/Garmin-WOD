@@ -74,4 +74,10 @@ expect(viewModel.workoutManager.currentRound == 1, "reset should restore round 1
 expect(viewModel.timerManager.elapsedSeconds == 0, "reset should clear elapsed seconds")
 expect(!viewModel.timerManager.isRunning, "reset should stop timer")
 
+print("[TEST] mock heart-rate update")
+viewModel.heartRateManager.setSimulatedHeartRate(155)
+expect(viewModel.heartRateManager.currentHeartRate == 155, "mock HR should update to requested value")
+expect(viewModel.heartRateManager.currentZone.id == 4, "mock HR 155 should be zone 4")
+expect(viewModel.heartRateManager.maximumHeartRate >= 155, "mock HR update should affect max HR")
+
 print("[TEST] PASS: DisplayViewModel state transitions")

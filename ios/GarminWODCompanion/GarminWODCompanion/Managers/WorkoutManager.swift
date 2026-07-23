@@ -8,6 +8,11 @@ final class WorkoutManager: ObservableObject {
 
     init(workout: WorkoutContract = WorkoutContractLoader.loadBundledSample()) {
         self.workout = workout
+        print("[LIFECYCLE] WorkoutManager init")
+    }
+
+    deinit {
+        print("[LIFECYCLE] WorkoutManager deinit")
     }
 
     var totalRounds: Int? {

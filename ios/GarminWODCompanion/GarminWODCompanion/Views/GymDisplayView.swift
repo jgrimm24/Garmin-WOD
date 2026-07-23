@@ -9,7 +9,7 @@ struct GymDisplayView: View {
             let metrics = DashboardMetrics(size: geometry.size, isLandscape: isLandscape)
 
             ZStack {
-                zoneBackground
+                ZoneBackground(manager: viewModel.heartRateManager)
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
                     .zIndex(0)
@@ -23,6 +23,7 @@ struct GymDisplayView: View {
 
                     ControlBar(
                         viewModel: viewModel,
+                        workoutManager: viewModel.workoutManager,
                         metrics: metrics,
                         isLandscape: isLandscape
                     )
@@ -39,19 +40,6 @@ struct GymDisplayView: View {
             }
         }
         .preferredColorScheme(.dark)
-    }
-
-    private var zoneBackground: LinearGradient {
-        let zoneColor = viewModel.heartRateManager.currentZone.color
-        return LinearGradient(
-            colors: [
-                Color.black,
-                zoneColor.opacity(0.42),
-                Color.black
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
     }
 
     private func portraitLayout(metrics: DashboardMetrics) -> some View {
@@ -111,6 +99,22 @@ struct GymDisplayView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct ZoneBackground: View {
+    @ObservedObject var manager: MockHeartRateManager
+
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color.black,
+                manager.currentZone.color.opacity(0.42),
+                Color.black
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
@@ -432,12 +436,13 @@ private struct MockControls: View {
 }
 
 private struct ControlBar: View {
-    @ObservedObject var viewModel: DisplayViewModel
+    let viewModel: DisplayViewModel
+    @ObservedObject var workoutManager: WorkoutManager
     let metrics: DashboardMetrics
     let isLandscape: Bool
 
     private var controls: [DashboardControl] {
-        switch viewModel.workoutManager.status {
+        switch workoutManager.status {
         case .idle:
             return [
                 DashboardControl(label: "Start", kind: .primary, action: .primary, isEnabled: true),

@@ -2,12 +2,7 @@ import Foundation
 import SwiftUI
 
 final class MockHeartRateManager: ObservableObject {
-    @Published var currentHeartRate: Int = 126 {
-        didSet {
-            currentHeartRate = min(max(currentHeartRate, 45), 210)
-            recordHeartRateSample(currentHeartRate)
-        }
-    }
+    @Published private(set) var currentHeartRate: Int = 126
     @Published private(set) var averageHeartRate: Int = 126
     @Published private(set) var maximumHeartRate: Int = 126
     @Published private(set) var zoneTimes: [Int: Int] = [:]
@@ -29,10 +24,16 @@ final class MockHeartRateManager: ObservableObject {
 
     init(zones: [HeartRateZone] = HeartRateZone.defaultZones) {
         self.zones = zones
+        print("[LIFECYCLE] MockHeartRateManager init")
         zones.forEach { zoneTimes[$0.id] = 0 }
         zoneTimes[HeartRateZone.belowZone.id] = 0
         recordHeartRateSample(currentHeartRate)
         startDemoMode()
+    }
+
+    deinit {
+        print("[LIFECYCLE] MockHeartRateManager deinit")
+        stopDemoMode()
     }
 
     var currentZone: HeartRateZone {
@@ -47,12 +48,20 @@ final class MockHeartRateManager: ObservableObject {
 
     func increaseHeartRate() {
         isDemoModeEnabled = false
-        currentHeartRate += 1
+        setSimulatedHeartRate(currentHeartRate + 1)
     }
 
     func decreaseHeartRate() {
         isDemoModeEnabled = false
-        currentHeartRate -= 1
+        setSimulatedHeartRate(currentHeartRate - 1)
+    }
+
+    func setSimulatedHeartRate(_ heartRate: Int) {
+        performOnMain {
+            let clampedHeartRate = min(max(heartRate, 45), 210)
+            self.currentHeartRate = clampedHeartRate
+            self.recordHeartRateSample(clampedHeartRate)
+        }
     }
 
     func resetMetrics() {
@@ -66,7 +75,9 @@ final class MockHeartRateManager: ObservableObject {
     }
 
     func tickZoneTimeIfWorkoutRunning() {
-        zoneTimes[currentZone.id, default: 0] += 1
+        performOnMain {
+            self.zoneTimes[self.currentZone.id, default: 0] += 1
+        }
     }
 
     private func startDemoMode() {
@@ -85,7 +96,7 @@ final class MockHeartRateManager: ObservableObject {
                 self.demoDirection = 1
             }
 
-            self.currentHeartRate += self.demoDirection * Int.random(in: 1...4)
+            self.setSimulatedHeartRate(self.currentHeartRate + self.demoDirection * Int.random(in: 1...4))
         }
     }
 
@@ -99,5 +110,13 @@ final class MockHeartRateManager: ObservableObject {
         sampleTotal += heartRate
         averageHeartRate = sampleTotal / max(sampleCount, 1)
         maximumHeartRate = max(maximumHeartRate, heartRate)
+    }
+
+    private func performOnMain(_ action: @escaping () -> Void) {
+        if Thread.isMainThread {
+            action()
+        } else {
+            DispatchQueue.main.async(execute: action)
+        }
     }
 }

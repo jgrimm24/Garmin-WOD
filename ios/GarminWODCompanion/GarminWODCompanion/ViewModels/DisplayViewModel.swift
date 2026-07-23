@@ -1,4 +1,3 @@
-import Combine
 import Foundation
 
 final class DisplayViewModel: ObservableObject {
@@ -7,7 +6,6 @@ final class DisplayViewModel: ObservableObject {
     let heartRateManager: MockHeartRateManager
 
     private var zoneTimer: Timer?
-    private var cancellables: Set<AnyCancellable> = []
 
     init(
         workoutManager: WorkoutManager = WorkoutManager(),
@@ -17,8 +15,14 @@ final class DisplayViewModel: ObservableObject {
         self.workoutManager = workoutManager
         self.timerManager = timerManager
         self.heartRateManager = heartRateManager
-        relayManagerChanges()
+        print("[LIFECYCLE] DisplayViewModel init")
         scheduleZoneTimer()
+    }
+
+    deinit {
+        print("[LIFECYCLE] DisplayViewModel deinit")
+        zoneTimer?.invalidate()
+        zoneTimer = nil
     }
 
     var primaryActionTitle: String {
@@ -131,26 +135,6 @@ final class DisplayViewModel: ObservableObject {
 
     func logState(_ prefix: String) {
         print("[STATE] \(prefix): status=\(workoutManager.status.rawValue) stationIndex=\(workoutManager.currentStationIndex) round=\(workoutManager.currentRound) timerRunning=\(timerManager.isRunning) elapsed=\(timerManager.elapsedSeconds)")
-    }
-
-    private func relayManagerChanges() {
-        workoutManager.objectWillChange
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-
-        timerManager.objectWillChange
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-
-        heartRateManager.objectWillChange
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
     }
 
     private func scheduleZoneTimer() {

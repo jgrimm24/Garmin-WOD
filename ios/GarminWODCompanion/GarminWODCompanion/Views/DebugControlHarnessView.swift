@@ -5,14 +5,33 @@ struct DebugControlHarnessView: View {
     @StateObject private var viewModel = DisplayViewModel()
 
     var body: some View {
+        DebugControlHarnessContent(
+            viewModel: viewModel,
+            workoutManager: viewModel.workoutManager,
+            timerManager: viewModel.timerManager,
+            heartRateManager: viewModel.heartRateManager
+        )
+    }
+}
+
+private struct DebugControlHarnessContent: View {
+    let viewModel: DisplayViewModel
+    @ObservedObject var workoutManager: WorkoutManager
+    @ObservedObject var timerManager: TimerManager
+    @ObservedObject var heartRateManager: MockHeartRateManager
+
+    var body: some View {
         VStack(spacing: 16) {
             Text("Control Harness")
                 .font(.headline)
 
-            Text(viewModel.workoutManager.status.rawValue.uppercased())
+            Text(workoutManager.status.rawValue.uppercased())
                 .font(.title.bold())
 
-            Text("Station \(viewModel.workoutManager.currentStationIndex) Round \(viewModel.workoutManager.currentRound)")
+            Text("Station \(workoutManager.currentStationIndex) Round \(workoutManager.currentRound)")
+                .monospacedDigit()
+
+            Text("Elapsed \(timerManager.elapsedTimeText) HR \(heartRateManager.currentHeartRate)")
                 .monospacedDigit()
 
             HStack {
@@ -39,6 +58,11 @@ struct DebugControlHarnessView: View {
                 Button("Reset") {
                     print("[HARNESS] Reset tapped")
                     viewModel.resetWorkout()
+                }
+
+                Button("+ HR") {
+                    print("[HARNESS] + HR tapped")
+                    heartRateManager.increaseHeartRate()
                 }
             }
             .buttonStyle(.borderedProminent)
