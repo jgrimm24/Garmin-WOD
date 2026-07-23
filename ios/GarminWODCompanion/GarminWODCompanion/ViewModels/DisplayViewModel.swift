@@ -35,6 +35,7 @@ final class DisplayViewModel: ObservableObject {
     }
 
     func primaryAction() {
+        logState("primaryAction before")
         switch workoutManager.status {
         case .idle:
             startWorkout()
@@ -46,24 +47,31 @@ final class DisplayViewModel: ObservableObject {
             resetWorkout()
             startWorkout()
         }
+        logState("primaryAction after")
     }
 
     func startWorkout() {
         print("[VM] startWorkout called")
+        logState("startWorkout before")
         workoutManager.start()
         timerManager.start()
+        logState("startWorkout after")
     }
 
     func pauseWorkout() {
         print("[VM] pauseWorkout called")
+        logState("pauseWorkout before")
         workoutManager.pause()
         timerManager.pause()
+        logState("pauseWorkout after")
     }
 
     func resumeWorkout() {
         print("[VM] resumeWorkout called")
+        logState("resumeWorkout before")
         workoutManager.resume()
         timerManager.resume()
+        logState("resumeWorkout after")
     }
 
     func back() {
@@ -76,15 +84,19 @@ final class DisplayViewModel: ObservableObject {
 
     func previousStation() {
         print("[VM] previousStation called")
+        logState("previousStation before")
         workoutManager.goBack()
+        logState("previousStation after")
     }
 
     func nextStation() {
         print("[VM] nextStation called")
+        logState("nextStation before")
         workoutManager.advance()
         if workoutManager.status == .finished {
             timerManager.stop()
         }
+        logState("nextStation after")
     }
 
     func finish() {
@@ -93,8 +105,10 @@ final class DisplayViewModel: ObservableObject {
 
     func finishWorkout() {
         print("[VM] finishWorkout called")
+        logState("finishWorkout before")
         workoutManager.finish()
         timerManager.stop()
+        logState("finishWorkout after")
     }
 
     func reset() {
@@ -103,9 +117,20 @@ final class DisplayViewModel: ObservableObject {
 
     func resetWorkout() {
         print("[VM] resetWorkout called")
+        logState("resetWorkout before")
         workoutManager.reset()
         timerManager.reset()
         heartRateManager.resetMetrics()
+        logState("resetWorkout after")
+    }
+
+    func logLayout(width: Double, height: Double, isLandscape: Bool) {
+        print("[LAYOUT] width=\(Int(width)) height=\(Int(height)) selected=\(isLandscape ? "landscape" : "portrait")")
+        logState("layout")
+    }
+
+    func logState(_ prefix: String) {
+        print("[STATE] \(prefix): status=\(workoutManager.status.rawValue) stationIndex=\(workoutManager.currentStationIndex) round=\(workoutManager.currentRound) timerRunning=\(timerManager.isRunning) elapsed=\(timerManager.elapsedSeconds)")
     }
 
     private func relayManagerChanges() {

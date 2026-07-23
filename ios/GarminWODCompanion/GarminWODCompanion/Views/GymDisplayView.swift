@@ -8,31 +8,34 @@ struct GymDisplayView: View {
             let isLandscape = geometry.size.width > geometry.size.height
             let metrics = DashboardMetrics(size: geometry.size, isLandscape: isLandscape)
 
-            ZStack(alignment: .bottom) {
+            ZStack {
                 zoneBackground
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
                     .zIndex(0)
 
-                Group {
+                VStack(spacing: metrics.sectionSpacing) {
                     if isLandscape {
                         landscapeLayout(metrics: metrics)
                     } else {
                         portraitLayout(metrics: metrics)
                     }
+
+                    ControlBar(
+                        viewModel: viewModel,
+                        metrics: metrics,
+                        isLandscape: isLandscape
+                    )
                 }
                 .padding(metrics.outerPadding)
-                .padding(.bottom, metrics.controlAreaHeight)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .zIndex(1)
-
-                ControlBar(
-                    viewModel: viewModel,
-                    metrics: metrics,
-                    isLandscape: isLandscape
-                )
-                .padding(.horizontal, metrics.outerPadding)
-                .padding(.bottom, metrics.outerPadding)
-                .zIndex(20)
+            }
+            .onAppear {
+                viewModel.logLayout(width: geometry.size.width, height: geometry.size.height, isLandscape: isLandscape)
+            }
+            .onChange(of: geometry.size) { _, newSize in
+                viewModel.logLayout(width: newSize.width, height: newSize.height, isLandscape: newSize.width > newSize.height)
             }
         }
         .preferredColorScheme(.dark)
@@ -77,7 +80,6 @@ struct GymDisplayView: View {
                 .padding(.bottom, 2)
             }
             .scrollIndicators(.hidden)
-
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -107,7 +109,6 @@ struct GymDisplayView: View {
                 .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -175,14 +176,6 @@ private struct DashboardMetrics {
 
     var controlHeight: CGFloat {
         isLandscape ? clamp(size.height * 0.075, min: 44, max: 58) : 48
-    }
-
-    var controlAreaHeight: CGFloat {
-        if isLandscape {
-            return controlHeight + outerPadding + 8
-        }
-
-        return (controlHeight * 2) + outerPadding + 22
     }
 
     private func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
@@ -443,35 +436,35 @@ private struct ControlBar: View {
     let metrics: DashboardMetrics
     let isLandscape: Bool
 
-    private var controls: [(String, DashboardButtonKind, () -> Void)] {
+    private var controls: [DashboardControl] {
         switch viewModel.workoutManager.status {
         case .idle:
             return [
-                ("Start", .primary, primaryAction),
-                ("Back", .secondary, previousStation),
-                ("Next", .secondary, nextStation),
-                ("Finish", .warning, finishWorkout),
-                ("Reset", .secondary, resetWorkout)
+                DashboardControl(label: "Start", kind: .primary, action: .primary, isEnabled: true),
+                DashboardControl(label: "Back", kind: .secondary, action: .back, isEnabled: false),
+                DashboardControl(label: "Next", kind: .secondary, action: .next, isEnabled: false),
+                DashboardControl(label: "Finish", kind: .warning, action: .finish, isEnabled: false),
+                DashboardControl(label: "Reset", kind: .secondary, action: .reset, isEnabled: true)
             ]
         case .running:
             return [
-                ("Pause", .primary, primaryAction),
-                ("Back", .secondary, previousStation),
-                ("Next", .secondary, nextStation),
-                ("Finish", .warning, finishWorkout),
-                ("Reset", .secondary, resetWorkout)
+                DashboardControl(label: "Pause", kind: .primary, action: .primary, isEnabled: true),
+                DashboardControl(label: "Back", kind: .secondary, action: .back, isEnabled: true),
+                DashboardControl(label: "Next", kind: .secondary, action: .next, isEnabled: true),
+                DashboardControl(label: "Finish", kind: .warning, action: .finish, isEnabled: true),
+                DashboardControl(label: "Reset", kind: .secondary, action: .reset, isEnabled: true)
             ]
         case .paused:
             return [
-                ("Resume", .primary, primaryAction),
-                ("Back", .secondary, previousStation),
-                ("Next", .secondary, nextStation),
-                ("Finish", .warning, finishWorkout),
-                ("Reset", .secondary, resetWorkout)
+                DashboardControl(label: "Resume", kind: .primary, action: .primary, isEnabled: true),
+                DashboardControl(label: "Back", kind: .secondary, action: .back, isEnabled: true),
+                DashboardControl(label: "Next", kind: .secondary, action: .next, isEnabled: true),
+                DashboardControl(label: "Finish", kind: .warning, action: .finish, isEnabled: true),
+                DashboardControl(label: "Reset", kind: .secondary, action: .reset, isEnabled: true)
             ]
         case .finished:
             return [
-                ("Reset", .primary, resetWorkout)
+                DashboardControl(label: "Reset", kind: .primary, action: .reset, isEnabled: true)
             ]
         }
     }
@@ -479,10 +472,13 @@ private struct ControlBar: View {
     var body: some View {
         if isLandscape {
             HStack(spacing: 10) {
-                ForEach(Array(controls.enumerated()), id: \.offset) { _, control in
-                    Button(control.0, action: control.2)
-                        .buttonStyle(DashboardButtonStyle(kind: control.1, metrics: metrics))
+                ForEach(controls) { control in
+                    Button(control.label) {
+                        handle(control)
+                    }
+                        .buttonStyle(DashboardButtonStyle(kind: control.kind, metrics: metrics))
                         .contentShape(Rectangle())
+                        .disabled(!control.isEnabled)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -495,40 +491,57 @@ private struct ControlBar: View {
                 ],
                 spacing: 10
             ) {
-                ForEach(Array(controls.enumerated()), id: \.offset) { _, control in
-                    Button(control.0, action: control.2)
-                        .buttonStyle(DashboardButtonStyle(kind: control.1, metrics: metrics))
+                ForEach(controls) { control in
+                    Button(control.label) {
+                        handle(control)
+                    }
+                        .buttonStyle(DashboardButtonStyle(kind: control.kind, metrics: metrics))
                         .contentShape(Rectangle())
+                        .disabled(!control.isEnabled)
                 }
             }
             .frame(maxWidth: .infinity)
         }
     }
 
-    private func primaryAction() {
-        print("[UI] \(viewModel.primaryActionTitle) tapped")
-        viewModel.primaryAction()
-    }
+    private func handle(_ control: DashboardControl) {
+        print("[UI] \(control.label) tapped")
+        viewModel.logState("ui \(control.label) before")
 
-    private func previousStation() {
-        print("[UI] Back tapped")
-        viewModel.previousStation()
-    }
+        switch control.action {
+        case .primary:
+            viewModel.primaryAction()
+        case .back:
+            viewModel.previousStation()
+        case .next:
+            viewModel.nextStation()
+        case .finish:
+            viewModel.finishWorkout()
+        case .reset:
+            viewModel.resetWorkout()
+        }
 
-    private func nextStation() {
-        print("[UI] Next tapped")
-        viewModel.nextStation()
+        viewModel.logState("ui \(control.label) after")
     }
+}
 
-    private func finishWorkout() {
-        print("[UI] Finish tapped")
-        viewModel.finishWorkout()
-    }
+private struct DashboardControl: Identifiable {
+    let label: String
+    let kind: DashboardButtonKind
+    let action: DashboardControlAction
+    let isEnabled: Bool
 
-    private func resetWorkout() {
-        print("[UI] Reset tapped")
-        viewModel.resetWorkout()
+    var id: String {
+        "\(label)-\(action)"
     }
+}
+
+private enum DashboardControlAction: String {
+    case primary
+    case back
+    case next
+    case finish
+    case reset
 }
 
 private enum DashboardButtonKind {
@@ -556,6 +569,7 @@ private struct DashboardButtonStyle: ButtonStyle {
                     .stroke(.white.opacity(kind == .secondary ? 0.22 : 0), lineWidth: 1)
                     .allowsHitTesting(false)
             )
+            .opacity(configuration.isPressed ? 0.82 : 1)
     }
 
     private var background: Color {
