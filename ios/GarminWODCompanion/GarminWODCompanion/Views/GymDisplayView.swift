@@ -45,8 +45,7 @@ struct GymDisplayView: View {
     private func portraitLayout(metrics: DashboardMetrics) -> some View {
         VStack(spacing: metrics.sectionSpacing) {
             HeaderView(
-                workout: viewModel.workoutManager.workout,
-                status: viewModel.workoutManager.status,
+                workoutManager: viewModel.workoutManager,
                 metrics: metrics
             )
 
@@ -75,8 +74,7 @@ struct GymDisplayView: View {
     private func landscapeLayout(metrics: DashboardMetrics) -> some View {
         VStack(spacing: metrics.sectionSpacing) {
             HeaderView(
-                workout: viewModel.workoutManager.workout,
-                status: viewModel.workoutManager.status,
+                workoutManager: viewModel.workoutManager,
                 metrics: metrics
             )
 
@@ -188,21 +186,25 @@ private struct DashboardMetrics {
 }
 
 private struct HeaderView: View {
-    let workout: WorkoutContract
-    let status: WorkoutStatus
+    @ObservedObject var workoutManager: WorkoutManager
     let metrics: DashboardMetrics
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(workout.title)
+                Text(workoutManager.workout.title)
                     .font(.system(size: metrics.headerTitleSize, weight: .black, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)
 
-                Text(workout.type.rawValue.uppercased())
+                Text(workoutManager.workout.type.rawValue.uppercased())
                     .font(.system(size: metrics.headerMetaSize, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.82))
+                    .lineLimit(1)
+
+                Text("DEBUG status: \(workoutManager.status.rawValue)")
+                    .font(.system(size: max(metrics.headerMetaSize - 3, 10), weight: .bold, design: .rounded))
+                    .foregroundStyle(.cyan.opacity(0.82))
                     .lineLimit(1)
             }
 
@@ -214,7 +216,7 @@ private struct HeaderView: View {
                     .foregroundStyle(.yellow)
                     .lineLimit(1)
 
-                Text(status.rawValue.uppercased())
+                Text(workoutManager.status.rawValue.uppercased())
                     .font(.system(size: metrics.headerMetaSize, weight: .black, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)

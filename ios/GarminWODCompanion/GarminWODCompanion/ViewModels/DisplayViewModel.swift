@@ -121,11 +121,13 @@ final class DisplayViewModel: ObservableObject {
 
     func resetWorkout() {
         print("[VM] resetWorkout called")
+        print("[RESET] before status=\(workoutManager.status.rawValue)")
         logState("resetWorkout before")
         workoutManager.reset()
         timerManager.reset()
         heartRateManager.resetMetrics()
         logState("resetWorkout after")
+        print("[RESET] after status=\(workoutManager.status.rawValue)")
     }
 
     func logLayout(width: Double, height: Double, isLandscape: Bool) {

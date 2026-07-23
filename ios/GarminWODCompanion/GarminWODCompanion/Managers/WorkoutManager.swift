@@ -126,9 +126,11 @@ final class WorkoutManager: ObservableObject {
     }
 
     func reset() {
+        print("[RESET] WorkoutManager before status=\(status.rawValue)")
         currentStationIndex = 0
         currentRound = 1
         status = .idle
+        print("[RESET] WorkoutManager after status=\(status.rawValue)")
     }
 
     private var shouldContinueToNextRound: Bool {
