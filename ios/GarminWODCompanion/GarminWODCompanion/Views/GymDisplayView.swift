@@ -38,6 +38,7 @@ struct GymDisplayView: View {
                                 metrics: metrics,
                                 isLandscape: isLandscape
                             )
+                            .frame(height: isLandscape ? metrics.activeControlHeight : nil)
                         }
                     }
                 }
@@ -90,6 +91,7 @@ struct GymDisplayView: View {
                 workoutManager: viewModel.workoutManager,
                 metrics: metrics
             )
+            .frame(height: metrics.activeHeaderHeight)
 
             HStack(spacing: metrics.landscapePanelGap) {
                 HeartRatePanel(
@@ -111,8 +113,9 @@ struct GymDisplayView: View {
                 .layoutPriority(1)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(height: metrics.activeMainHeight)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: metrics.activeDashboardHeight)
     }
 }
 
@@ -140,8 +143,12 @@ private struct DashboardMetrics {
         size.width - (outerPadding * 2)
     }
 
+    var availableHeight: CGFloat {
+        size.height - (outerPadding * 2)
+    }
+
     var outerPadding: CGFloat {
-        isLandscape ? 10 : 14
+        isLandscape ? 8 : 10
     }
 
     var cardPadding: CGFloat {
@@ -153,11 +160,64 @@ private struct DashboardMetrics {
     }
 
     var landscapePanelGap: CGFloat {
-        isLandscape ? clamp(size.width * 0.018, min: 12, max: 18) : sectionSpacing
+        isLandscape ? clamp(size.width * 0.024, min: 16, max: 24) : sectionSpacing
     }
 
     var landscapeHeartPanelWidth: CGFloat {
-        availableWidth * 0.29
+        availableWidth * 0.255
+    }
+
+    var activeHeaderHeight: CGFloat {
+        clamp(availableHeight * 0.16, min: 54, max: 68)
+    }
+
+    var activeControlHeight: CGFloat {
+        clamp(availableHeight * 0.115, min: 44, max: 50)
+    }
+
+    var activeDashboardHeight: CGFloat {
+        max(availableHeight - activeControlHeight - sectionSpacing, 0)
+    }
+
+    var activeMainHeight: CGFloat {
+        max(activeDashboardHeight - activeHeaderHeight - sectionSpacing, 0)
+    }
+
+    var summaryButtonHeight: CGFloat {
+        clamp(availableHeight * 0.062, min: 42, max: 48)
+    }
+
+    var summaryHeaderHeight: CGFloat {
+        clamp(availableHeight * 0.08, min: 44, max: 58)
+    }
+
+    var summaryElapsedHeight: CGFloat {
+        clamp(availableHeight * 0.105, min: 60, max: 82)
+    }
+
+    var summaryMetricHeight: CGFloat {
+        clamp(availableHeight * 0.068, min: 48, max: 58)
+    }
+
+    var summaryProgressHeight: CGFloat {
+        clamp(availableHeight * 0.13, min: 88, max: 112)
+    }
+
+    var summaryZoneHeight: CGFloat {
+        max(
+            availableHeight
+                - summaryButtonHeight
+                - summaryHeaderHeight
+                - summaryElapsedHeight
+                - summaryMetricHeight
+                - summaryProgressHeight
+                - (summarySectionSpacing * 6),
+            0
+        )
+    }
+
+    var summarySectionSpacing: CGFloat {
+        isLandscape ? max(sectionSpacing - 1, 6) : 5
     }
 
     var sectionSpacing: CGFloat {
@@ -165,47 +225,47 @@ private struct DashboardMetrics {
     }
 
     var headerTitleSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.058, min: 20, max: 28) : clamp(size.width * 0.08, min: 26, max: 36)
+        isLandscape ? clamp(size.height * 0.048, min: 18, max: 24) : clamp(size.width * 0.08, min: 26, max: 36)
     }
 
     var headerMetaSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.035, min: 12, max: 15) : 15
+        isLandscape ? clamp(size.height * 0.031, min: 11, max: 13) : 15
     }
 
     var heartRateSize: CGFloat {
         if isLandscape {
-            return clamp(size.height * 0.18, min: 56, max: 82)
+            return clamp(size.height * 0.15, min: 48, max: 66)
         }
 
         return clamp(size.height * 0.12, min: 68, max: 104)
     }
 
     var zoneSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.042, min: 16, max: 22) : 22
+        isLandscape ? clamp(size.height * 0.036, min: 14, max: 18) : 22
     }
 
     var timerSize: CGFloat {
         if isLandscape {
-            return clamp(size.height * 0.12, min: 42, max: 62)
+            return clamp(size.height * 0.095, min: 34, max: 48)
         }
 
         return clamp(size.height * 0.075, min: 40, max: 64)
     }
 
     var currentMovementSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.052, min: 20, max: 30) : 27
+        isLandscape ? clamp(size.height * 0.045, min: 18, max: 24) : 27
     }
 
     var secondaryMovementSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.038, min: 16, max: 22) : 20
+        isLandscape ? clamp(size.height * 0.034, min: 14, max: 18) : 20
     }
 
     var controlFontSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.036, min: 13, max: 16) : 17
+        isLandscape ? clamp(size.height * 0.031, min: 12, max: 14) : 17
     }
 
     var controlHeight: CGFloat {
-        isLandscape ? clamp(size.height * 0.07, min: 40, max: 46) : 48
+        isLandscape ? activeControlHeight : 48
     }
 
     private func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
@@ -450,7 +510,7 @@ private struct MockControls: View {
                 print("[UI] - HR tapped")
                 manager.decreaseHeartRate()
             }
-            .buttonStyle(DashboardButtonStyle(kind: .secondary, metrics: metrics))
+            .buttonStyle(MockHeartRateButtonStyle(metrics: metrics))
 
             Toggle("Demo", isOn: $manager.isDemoModeEnabled)
                 .toggleStyle(.switch)
@@ -463,8 +523,29 @@ private struct MockControls: View {
                 print("[UI] + HR tapped")
                 manager.increaseHeartRate()
             }
-            .buttonStyle(DashboardButtonStyle(kind: .secondary, metrics: metrics))
+            .buttonStyle(MockHeartRateButtonStyle(metrics: metrics))
         }
+    }
+}
+
+private struct MockHeartRateButtonStyle: ButtonStyle {
+    let metrics: DashboardMetrics
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: metrics.isLandscape ? 10 : 14, weight: .black, design: .rounded))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .frame(maxWidth: .infinity, minHeight: metrics.isLandscape ? 30 : 42)
+            .padding(.horizontal, metrics.isLandscape ? 3 : 6)
+            .contentShape(Rectangle())
+            .background(.white.opacity(configuration.isPressed ? 0.18 : 0.1), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(.white.opacity(0.22), lineWidth: 1)
+                    .allowsHitTesting(false)
+            )
     }
 }
 
@@ -485,13 +566,15 @@ private struct WorkoutSummaryScreen: View {
     private var portraitSummary: some View {
         VStack(spacing: summarySpacing) {
             summaryHeader
+                .frame(height: metrics.summaryHeaderHeight)
 
             Text(summary.elapsedTimeText)
-                .font(.system(size: clamp(metrics.size.height * 0.088, min: 52, max: 84), weight: .black, design: .rounded))
+                .font(.system(size: clamp(metrics.summaryElapsedHeight * 0.78, min: 46, max: 66), weight: .black, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
                 .frame(maxWidth: .infinity)
+                .frame(height: metrics.summaryElapsedHeight)
 
             LazyVGrid(
                 columns: [
@@ -505,14 +588,18 @@ private struct WorkoutSummaryScreen: View {
                 SummaryMetricCard(title: "Max HR", value: "\(summary.maximumHeartRate)", metrics: metrics)
                 SummaryMetricCard(title: "Calories", value: summary.caloriesText, metrics: metrics)
             }
+            .frame(height: metrics.summaryMetricHeight)
 
             SummaryZoneBreakdown(summary: summary, metrics: metrics)
+                .frame(height: metrics.summaryZoneHeight)
+
             SummaryProgressCard(summary: summary, metrics: metrics)
+                .frame(height: metrics.summaryProgressHeight)
 
             Spacer(minLength: 0)
 
             newWorkoutButton
-                .padding(.bottom, 6)
+                .frame(height: metrics.summaryButtonHeight)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -578,7 +665,7 @@ private struct WorkoutSummaryScreen: View {
         }
         .buttonStyle(DashboardButtonStyle(kind: .primary, metrics: metrics))
         .contentShape(Rectangle())
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: metrics.isLandscape ? nil : metrics.summaryButtonHeight)
     }
 
     private var summaryBorder: some View {
@@ -588,7 +675,7 @@ private struct WorkoutSummaryScreen: View {
     }
 
     private var summarySpacing: CGFloat {
-        metrics.isLandscape ? max(metrics.sectionSpacing - 1, 6) : 6
+        metrics.summarySectionSpacing
     }
 
     private var summaryCardPadding: CGFloat {
