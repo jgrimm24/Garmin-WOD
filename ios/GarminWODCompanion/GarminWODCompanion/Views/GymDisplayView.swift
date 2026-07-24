@@ -159,15 +159,19 @@ private struct DashboardMetrics {
     }
 
     var landscapePanelGap: CGFloat {
-        isLandscape ? clamp(size.width * 0.024, min: 16, max: 24) : sectionSpacing
+        isLandscape ? clamp(size.width * 0.018, min: 10, max: 16) : sectionSpacing
+    }
+
+    var landscapePanelWidthBudget: CGFloat {
+        max(availableWidth - landscapePanelGap, 0)
     }
 
     var landscapeHeartPanelWidth: CGFloat {
-        availableWidth * 0.255
+        landscapePanelWidthBudget * 0.42
     }
 
     var landscapeWorkoutPanelWidth: CGFloat {
-        max(availableWidth - landscapeHeartPanelWidth - landscapePanelGap, 0)
+        max(landscapePanelWidthBudget - landscapeHeartPanelWidth, 0)
     }
 
     var mockHeartRateButtonWidth: CGFloat {
