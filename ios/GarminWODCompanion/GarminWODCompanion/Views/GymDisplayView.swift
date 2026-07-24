@@ -468,9 +468,9 @@ private struct WorkoutSummaryScreen: View {
     }
 
     private var portraitSummary: some View {
-        VStack(spacing: metrics.sectionSpacing) {
+        VStack(spacing: summarySpacing) {
             ScrollView {
-                VStack(spacing: metrics.sectionSpacing) {
+                VStack(spacing: summarySpacing) {
                     summaryHeader
 
                     Text(summary.elapsedTimeText)
@@ -501,43 +501,46 @@ private struct WorkoutSummaryScreen: View {
             .scrollIndicators(.hidden)
 
             newWorkoutButton
+                .padding(.bottom, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var landscapeSummary: some View {
-        VStack(spacing: metrics.sectionSpacing) {
+        VStack(spacing: summarySpacing) {
             summaryHeader
 
-            HStack(spacing: metrics.sectionSpacing) {
-                VStack(spacing: metrics.sectionSpacing) {
+            HStack(spacing: summarySpacing) {
+                VStack(spacing: summarySpacing) {
                     Text(summary.elapsedTimeText)
-                        .font(.system(size: clamp(metrics.size.height * 0.18, min: 66, max: 104), weight: .black, design: .rounded))
+                        .font(.system(size: clamp(metrics.size.height * 0.2, min: 70, max: 112), weight: .black, design: .rounded))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.45)
                         .frame(maxWidth: .infinity)
 
-                    HStack(spacing: 10) {
+                    HStack(spacing: summarySpacing) {
                         SummaryMetricCard(title: "Avg HR", value: "\(summary.averageHeartRate)", metrics: metrics)
                         SummaryMetricCard(title: "Max HR", value: "\(summary.maximumHeartRate)", metrics: metrics)
                         SummaryMetricCard(title: "Calories", value: summary.caloriesText, metrics: metrics)
                     }
                 }
-                .padding(metrics.cardPadding)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(summaryCardPadding)
+                .frame(width: metrics.availableWidth * 0.52)
+                .frame(maxHeight: .infinity)
                 .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
                 .overlay(summaryBorder)
 
-                VStack(spacing: metrics.sectionSpacing) {
+                VStack(spacing: summarySpacing) {
                     SummaryZoneBreakdown(summary: summary, metrics: metrics)
                     SummaryProgressCard(summary: summary, metrics: metrics)
                 }
-                .frame(width: metrics.availableWidth * 0.42, height: metrics.size.height * 0.54)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             newWorkoutButton
+                .frame(maxWidth: metrics.availableWidth * 0.82)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -545,12 +548,12 @@ private struct WorkoutSummaryScreen: View {
     private var summaryHeader: some View {
         VStack(spacing: 4) {
             Text("Workout Complete")
-                .font(.system(size: metrics.headerTitleSize, weight: .black, design: .rounded))
+                .font(.system(size: metrics.headerTitleSize * 0.86, weight: .black, design: .rounded))
                 .lineLimit(1)
                 .minimumScaleFactor(0.55)
 
             Text("\(summary.workoutName) • \(summary.workoutType.rawValue)")
-                .font(.system(size: metrics.headerMetaSize, weight: .heavy, design: .rounded))
+                .font(.system(size: metrics.headerMetaSize * 0.96, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white.opacity(0.76))
                 .lineLimit(1)
                 .minimumScaleFactor(0.55)
@@ -573,6 +576,14 @@ private struct WorkoutSummaryScreen: View {
             .allowsHitTesting(false)
     }
 
+    private var summarySpacing: CGFloat {
+        metrics.isLandscape ? max(metrics.sectionSpacing - 1, 6) : max(metrics.sectionSpacing - 2, 8)
+    }
+
+    private var summaryCardPadding: CGFloat {
+        metrics.isLandscape ? max(metrics.cardPadding - 2, 8) : metrics.cardPadding
+    }
+
     private func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
         Swift.min(Swift.max(value, minimum), maximum)
     }
@@ -591,13 +602,13 @@ private struct SummaryMetricCard: View {
                 .lineLimit(1)
 
             Text(value)
-                .font(.system(size: metrics.isLandscape ? 26 : 28, weight: .black, design: .rounded))
+                .font(.system(size: metrics.isLandscape ? 24 : 26, weight: .black, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, metrics.isLandscape ? 9 : 12)
+        .padding(.vertical, metrics.isLandscape ? 8 : 10)
         .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -607,7 +618,7 @@ private struct SummaryZoneBreakdown: View {
     let metrics: DashboardMetrics
 
     var body: some View {
-        VStack(alignment: .leading, spacing: metrics.isLandscape ? 7 : 8) {
+        VStack(alignment: .leading, spacing: metrics.isLandscape ? 8 : 10) {
             Text("HR Zone Time")
                 .font(.system(size: metrics.headerMetaSize, weight: .black, design: .rounded))
                 .foregroundStyle(.yellow)
@@ -626,7 +637,7 @@ private struct SummaryZoneBreakdown: View {
             }
         }
         .padding(metrics.cardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: metrics.isLandscape ? .infinity : nil, alignment: .leading)
         .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
@@ -649,7 +660,9 @@ private struct SummaryProgressCard: View {
 
             summaryLine(title: "Round", value: "\(summary.finalRound)")
             summaryLine(title: "Station", value: "\(summary.finalStationIndex + 1)")
-            summaryLine(title: "Movement", value: summary.finalMovementName)
+            if summary.finalMovementName != "None" {
+                summaryLine(title: "Movement", value: summary.finalMovementName)
+            }
         }
         .padding(metrics.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
