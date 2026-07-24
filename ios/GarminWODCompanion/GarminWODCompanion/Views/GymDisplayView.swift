@@ -82,9 +82,10 @@ struct GymDisplayView: View {
                 HeartRatePanel(
                     manager: viewModel.heartRateManager,
                     metrics: metrics,
-                    isCompact: false
+                    isCompact: true
                 )
-                .frame(width: metrics.availableWidth * 0.38)
+                .frame(width: metrics.availableWidth * 0.34)
+                .frame(maxHeight: .infinity)
 
                 WorkoutPanel(
                     workoutManager: viewModel.workoutManager,
@@ -92,7 +93,7 @@ struct GymDisplayView: View {
                     metrics: metrics,
                     isLandscape: true
                 )
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -125,59 +126,59 @@ private struct DashboardMetrics {
     }
 
     var outerPadding: CGFloat {
-        isLandscape ? 18 : 14
+        isLandscape ? 10 : 14
     }
 
     var cardPadding: CGFloat {
-        isLandscape ? 18 : 14
+        isLandscape ? 10 : 14
     }
 
     var sectionSpacing: CGFloat {
-        isLandscape ? 14 : 12
+        isLandscape ? 8 : 12
     }
 
     var headerTitleSize: CGFloat {
-        isLandscape ? clamp(size.width * 0.038, min: 24, max: 42) : clamp(size.width * 0.08, min: 26, max: 36)
+        isLandscape ? clamp(size.height * 0.058, min: 20, max: 28) : clamp(size.width * 0.08, min: 26, max: 36)
     }
 
     var headerMetaSize: CGFloat {
-        isLandscape ? clamp(size.width * 0.019, min: 14, max: 20) : 15
+        isLandscape ? clamp(size.height * 0.035, min: 12, max: 15) : 15
     }
 
     var heartRateSize: CGFloat {
         if isLandscape {
-            return clamp(size.height * 0.23, min: 76, max: 132)
+            return clamp(size.height * 0.18, min: 56, max: 82)
         }
 
         return clamp(size.height * 0.12, min: 68, max: 104)
     }
 
     var zoneSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.055, min: 22, max: 34) : 22
+        isLandscape ? clamp(size.height * 0.042, min: 16, max: 22) : 22
     }
 
     var timerSize: CGFloat {
         if isLandscape {
-            return clamp(size.height * 0.17, min: 56, max: 104)
+            return clamp(size.height * 0.12, min: 42, max: 62)
         }
 
         return clamp(size.height * 0.075, min: 40, max: 64)
     }
 
     var currentMovementSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.07, min: 28, max: 44) : 27
+        isLandscape ? clamp(size.height * 0.052, min: 20, max: 30) : 27
     }
 
     var secondaryMovementSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.045, min: 20, max: 28) : 20
+        isLandscape ? clamp(size.height * 0.038, min: 16, max: 22) : 20
     }
 
     var controlFontSize: CGFloat {
-        isLandscape ? clamp(size.width * 0.018, min: 15, max: 21) : 17
+        isLandscape ? clamp(size.height * 0.036, min: 13, max: 16) : 17
     }
 
     var controlHeight: CGFloat {
-        isLandscape ? clamp(size.height * 0.075, min: 44, max: 58) : 48
+        isLandscape ? clamp(size.height * 0.07, min: 40, max: 46) : 48
     }
 
     private func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
@@ -235,7 +236,7 @@ private struct HeartRatePanel: View {
     let isCompact: Bool
 
     var body: some View {
-        VStack(spacing: isCompact ? 10 : 12) {
+        VStack(spacing: metrics.isLandscape ? 6 : (isCompact ? 10 : 12)) {
             Text("\(manager.currentHeartRate)")
                 .font(.system(size: metrics.heartRateSize, weight: .black, design: .rounded))
                 .monospacedDigit()
@@ -259,7 +260,9 @@ private struct HeartRatePanel: View {
                 ZoneTimeSummary(manager: manager, metrics: metrics)
             } else {
                 ViewThatFits {
-                    ZoneTimeSummary(manager: manager, metrics: metrics)
+                    if !metrics.isLandscape {
+                        ZoneTimeSummary(manager: manager, metrics: metrics)
+                    }
                     EmptyView()
                 }
             }
@@ -267,7 +270,7 @@ private struct HeartRatePanel: View {
             MockControls(manager: manager, metrics: metrics)
         }
         .padding(metrics.cardPadding)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: metrics.isLandscape ? .infinity : nil)
         .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
@@ -284,7 +287,7 @@ private struct WorkoutPanel: View {
     let isLandscape: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: isLandscape ? 14 : 12) {
+        VStack(alignment: .leading, spacing: isLandscape ? 8 : 12) {
             HStack(alignment: .lastTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Elapsed")
@@ -302,7 +305,7 @@ private struct WorkoutPanel: View {
                 Spacer(minLength: 10)
 
                 Text(workoutManager.roundText)
-                    .font(.system(size: isLandscape ? 26 : 20, weight: .black, design: .rounded))
+                    .font(.system(size: isLandscape ? 18 : 20, weight: .black, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
                     .foregroundStyle(.white.opacity(0.88))
@@ -312,14 +315,14 @@ private struct WorkoutPanel: View {
                 label: "Current",
                 station: workoutManager.currentStation,
                 titleSize: metrics.currentMovementSize,
-                detailSize: isLandscape ? 24 : 19
+                detailSize: isLandscape ? 17 : 19
             )
 
             movementBlock(
                 label: "Next",
                 station: workoutManager.nextStation,
                 titleSize: metrics.secondaryMovementSize,
-                detailSize: isLandscape ? 20 : 17
+                detailSize: isLandscape ? 15 : 17
             )
 
             Spacer(minLength: 0)
@@ -337,20 +340,20 @@ private struct WorkoutPanel: View {
     private func movementBlock(label: String, station: WorkoutStation?, titleSize: CGFloat, detailSize: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(label.uppercased())
-                .font(.system(size: 15, weight: .black, design: .rounded))
+                .font(.system(size: metrics.isLandscape ? 12 : 15, weight: .black, design: .rounded))
                 .foregroundStyle(.yellow)
                 .lineLimit(1)
 
             Text(station?.displayName ?? "None")
                 .font(.system(size: titleSize, weight: .black, design: .rounded))
-                .lineLimit(2)
+                .lineLimit(metrics.isLandscape ? 1 : 2)
                 .minimumScaleFactor(0.55)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(station?.prescriptionText ?? "")
                 .font(.system(size: detailSize, weight: .bold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.72))
-                .lineLimit(2)
+                .lineLimit(metrics.isLandscape ? 1 : 2)
                 .minimumScaleFactor(0.55)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -366,18 +369,18 @@ private struct MetricTile: View {
     var body: some View {
         VStack(spacing: 3) {
             Text(title)
-                .font(.system(size: metrics.isLandscape ? 15 : 14, weight: .heavy, design: .rounded))
+                .font(.system(size: metrics.isLandscape ? 12 : 14, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white.opacity(0.68))
                 .lineLimit(1)
 
             Text(value)
-                .font(.system(size: metrics.isLandscape ? 31 : 26, weight: .black, design: .rounded))
+                .font(.system(size: metrics.isLandscape ? 22 : 26, weight: .black, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, metrics.isLandscape ? 12 : 9)
+        .padding(.vertical, metrics.isLandscape ? 7 : 9)
         .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -424,7 +427,7 @@ private struct MockControls: View {
 
             Toggle("Demo", isOn: $manager.isDemoModeEnabled)
                 .toggleStyle(.switch)
-                .font(.system(size: metrics.isLandscape ? 15 : 14, weight: .bold))
+                .font(.system(size: metrics.isLandscape ? 12 : 14, weight: .bold))
                 .lineLimit(1)
                 .fixedSize()
 
