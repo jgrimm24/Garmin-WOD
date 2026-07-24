@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GymDisplayView: View {
     @StateObject private var viewModel = DisplayViewModel()
+    @State private var isBluetoothSheetPresented = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -58,6 +59,14 @@ struct GymDisplayView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $isBluetoothSheetPresented) {
+            BluetoothHeartRateSheet(
+                viewModel: viewModel,
+                manager: viewModel.bluetoothHeartRateManager
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private func portraitLayout(metrics: DashboardMetrics) -> some View {
@@ -66,7 +75,11 @@ struct GymDisplayView: View {
                 workoutManager: viewModel.workoutManager,
                 viewModel: viewModel,
                 bluetoothManager: viewModel.bluetoothHeartRateManager,
-                metrics: metrics
+                metrics: metrics,
+                onHeartRateSettings: {
+                    print("[UI] HR settings tapped")
+                    isBluetoothSheetPresented = true
+                }
             )
 
             ScrollView {
@@ -102,7 +115,11 @@ struct GymDisplayView: View {
                 workoutManager: viewModel.workoutManager,
                 viewModel: viewModel,
                 bluetoothManager: viewModel.bluetoothHeartRateManager,
-                metrics: metrics
+                metrics: metrics,
+                onHeartRateSettings: {
+                    print("[UI] HR settings tapped")
+                    isBluetoothSheetPresented = true
+                }
             )
             .frame(height: metrics.activeHeaderHeight)
 
@@ -190,10 +207,6 @@ private struct DashboardMetrics {
 
     var mockHeartRateButtonWidth: CGFloat {
         isLandscape ? clamp(landscapeHeartPanelWidth * 0.22, min: 34, max: 44) : 72
-    }
-
-    var bluetoothActionButtonWidth: CGFloat {
-        isLandscape ? clamp(landscapeHeartPanelWidth * 0.34, min: 68, max: 96) : 116
     }
 
     var activeHeaderHeight: CGFloat {
@@ -307,6 +320,7 @@ private struct HeaderView: View {
     @ObservedObject var viewModel: DisplayViewModel
     @ObservedObject var bluetoothManager: BluetoothHeartRateManager
     let metrics: DashboardMetrics
+    let onHeartRateSettings: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -330,11 +344,20 @@ private struct HeaderView: View {
             Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 6) {
-                Text(viewModel.heartRateSourceLabel)
-                    .font(.system(size: metrics.headerMetaSize, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.yellow)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.55)
+                Button {
+                    onHeartRateSettings()
+                } label: {
+                    Text(viewModel.compactHeartRateSourceLabel)
+                        .font(.system(size: metrics.headerMetaSize, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.yellow)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.55)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(.yellow.opacity(0.12), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
 
                 Text(workoutManager.status.rawValue.uppercased())
                     .font(.system(size: metrics.headerMetaSize, weight: .black, design: .rounded))
@@ -358,14 +381,6 @@ private struct HeartRatePanel: View {
 
     var body: some View {
         VStack(spacing: metrics.isLandscape ? 5 : (isCompact ? 10 : 12)) {
-            Picker("HR Source", selection: $viewModel.selectedHeartRateSource) {
-                ForEach(HeartRateSource.allCases) { source in
-                    Text(source.title).tag(source)
-                }
-            }
-            .pickerStyle(.segmented)
-            .font(.system(size: metrics.isLandscape ? 10 : 13, weight: .bold, design: .rounded))
-
             Text(heartRateText)
                 .font(.system(size: metrics.heartRateSize, weight: .black, design: .rounded))
                 .monospacedDigit()
@@ -398,8 +413,6 @@ private struct HeartRatePanel: View {
 
             if viewModel.selectedHeartRateSource == .mock {
                 MockControls(manager: mockManager, metrics: metrics)
-            } else {
-                BluetoothControls(manager: bluetoothManager, metrics: metrics)
             }
         }
         .padding(metrics.heartPanelPadding)
@@ -575,71 +588,271 @@ private struct ZoneTimeSummary: View {
     }
 }
 
-private struct BluetoothControls: View {
+private struct BluetoothHeartRateSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var viewModel: DisplayViewModel
     @ObservedObject var manager: BluetoothHeartRateManager
-    let metrics: DashboardMetrics
 
     var body: some View {
-        VStack(alignment: .leading, spacing: metrics.isLandscape ? 4 : 8) {
-            HStack(spacing: metrics.isLandscape ? 6 : 8) {
-                Text(manager.sourceLabel)
-                    .font(.system(size: metrics.isLandscape ? 10 : 13, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.55)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    sourceSection
+                    statusSection
 
-                Spacer(minLength: 4)
+                    if manager.connectionState.isConnected {
+                        connectedDeviceSection
+                    } else {
+                        scanSection
+                        discoveredDevicesSection
+                    }
 
-                if manager.connectionState.isConnected {
-                    Button("Disconnect") {
-                        print("[UI] Disconnect HR tapped")
-                        manager.disconnect()
+                    if let errorMessage = manager.errorMessage {
+                        Text(errorMessage)
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundStyle(.red.opacity(0.95))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
                     }
-                    .buttonStyle(MockHeartRateButtonStyle(metrics: metrics))
-                    .frame(width: metrics.bluetoothActionButtonWidth)
-                } else {
-                    Button(manager.connectionState == .scanning ? "Scanning" : "Scan") {
-                        print("[UI] Scan HR tapped")
-                        manager.startScan()
-                    }
-                    .buttonStyle(MockHeartRateButtonStyle(metrics: metrics))
-                    .frame(width: metrics.bluetoothActionButtonWidth)
-                    .disabled(manager.connectionState == .scanning)
                 }
+                .padding(20)
             }
-
-            if let batteryPercentage = manager.batteryPercentage {
-                Text("Battery \(batteryPercentage)%")
-                    .font(.system(size: metrics.isLandscape ? 10 : 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.68))
-                    .lineLimit(1)
-            }
-
-            if !manager.discoveredDevices.isEmpty && !manager.connectionState.isConnected {
-                ViewThatFits {
-                    HStack(spacing: 5) {
-                        ForEach(manager.discoveredDevices.prefix(2)) { device in
-                            Button(device.name) {
-                                print("[UI] Connect HR tapped \(device.name)")
-                                manager.connect(to: device)
-                            }
-                            .buttonStyle(MockHeartRateButtonStyle(metrics: metrics))
-                        }
+            .background(Color.black.ignoresSafeArea())
+            .navigationTitle("Heart Rate")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        print("[UI] Close HR sheet tapped")
+                        dismiss()
                     }
-
-                    EmptyView()
                 }
-            }
-
-            if let errorMessage = manager.errorMessage {
-                Text(errorMessage)
-                    .font(.system(size: metrics.isLandscape ? 9 : 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.red.opacity(0.9))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .preferredColorScheme(.dark)
+    }
+
+    private var sourceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Source")
+                .font(.system(size: 14, weight: .black, design: .rounded))
+                .foregroundStyle(.yellow)
+                .textCase(.uppercase)
+
+            Picker("HR Source", selection: $viewModel.selectedHeartRateSource) {
+                ForEach(HeartRateSource.allCases) { source in
+                    Text(source.title).tag(source)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+        .sheetCard()
+    }
+
+    private var statusSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Status")
+                .font(.system(size: 14, weight: .black, design: .rounded))
+                .foregroundStyle(.yellow)
+                .textCase(.uppercase)
+
+            Text(viewModel.selectedHeartRateSource == .mock ? "Mock heart rate" : manager.sourceLabel)
+                .font(.system(size: 20, weight: .heavy, design: .rounded))
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
+
+            if let heartRate = viewModel.activeHeartRate {
+                Text("\(heartRate) BPM")
+                    .font(.system(size: 40, weight: .black, design: .rounded))
+                    .monospacedDigit()
+            } else if viewModel.selectedHeartRateSource == .bluetooth {
+                Text("Waiting for live BPM")
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.68))
+            }
+        }
+        .sheetCard()
+    }
+
+    private var connectedDeviceSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Connected Device")
+                .font(.system(size: 14, weight: .black, design: .rounded))
+                .foregroundStyle(.yellow)
+                .textCase(.uppercase)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(manager.connectedPeripheralName ?? "Heart Rate Monitor")
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.65)
+
+                HStack(spacing: 14) {
+                    metricText(title: "BPM", value: manager.currentHeartRate.map(String.init) ?? "--")
+
+                    if let batteryPercentage = manager.batteryPercentage {
+                        metricText(title: "Battery", value: "\(batteryPercentage)%")
+                    }
+                }
+            }
+
+            Button("Disconnect") {
+                print("[UI] Disconnect HR tapped")
+                manager.disconnect()
+            }
+            .buttonStyle(SheetActionButtonStyle(kind: .destructive))
+        }
+        .sheetCard()
+    }
+
+    private var scanSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Scan")
+                .font(.system(size: 14, weight: .black, design: .rounded))
+                .foregroundStyle(.yellow)
+                .textCase(.uppercase)
+
+            HStack(spacing: 12) {
+                Button(manager.connectionState == .scanning ? "Scanning" : "Scan") {
+                    print("[UI] Scan HR tapped")
+                    viewModel.selectedHeartRateSource = .bluetooth
+                    manager.startScan()
+                }
+                .buttonStyle(SheetActionButtonStyle(kind: .primary))
+                .disabled(manager.connectionState == .scanning)
+
+                Button("Rescan") {
+                    print("[UI] Rescan HR tapped")
+                    viewModel.selectedHeartRateSource = .bluetooth
+                    manager.rescan()
+                }
+                .buttonStyle(SheetActionButtonStyle(kind: .secondary))
+
+                if manager.connectionState == .scanning {
+                    Button("Stop") {
+                        print("[UI] Stop HR scan tapped")
+                        manager.stopScan()
+                    }
+                    .buttonStyle(SheetActionButtonStyle(kind: .secondary))
+                }
+            }
+        }
+        .sheetCard()
+    }
+
+    private var discoveredDevicesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Discovered Devices")
+                .font(.system(size: 14, weight: .black, design: .rounded))
+                .foregroundStyle(.yellow)
+                .textCase(.uppercase)
+
+            if manager.discoveredDevices.isEmpty {
+                Text(manager.connectionState == .scanning ? "Searching for heart-rate monitors..." : "No heart-rate monitors found yet.")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.68))
+            } else {
+                ForEach(manager.discoveredDevices) { device in
+                    Button {
+                        print("[UI] Connect HR tapped \(device.name)")
+                        viewModel.selectedHeartRateSource = .bluetooth
+                        manager.connect(to: device)
+                    } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(device.name)
+                                    .font(.system(size: 18, weight: .black, design: .rounded))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.65)
+
+                                Text("RSSI \(device.rssi)")
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.white.opacity(0.62))
+                            }
+
+                            Spacer()
+
+                            Text("Connect")
+                                .font(.system(size: 14, weight: .black, design: .rounded))
+                                .foregroundStyle(.yellow)
+                        }
+                        .padding(12)
+                        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                }
+            }
+        }
+        .sheetCard()
+    }
+
+    private func metricText(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white.opacity(0.62))
+            Text(value)
+                .font(.system(size: 22, weight: .black, design: .rounded))
+                .monospacedDigit()
+        }
+    }
+}
+
+private extension View {
+    func sheetCard() -> some View {
+        self
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(.white.opacity(0.14), lineWidth: 1)
+                    .allowsHitTesting(false)
+            )
+    }
+}
+
+private struct SheetActionButtonStyle: ButtonStyle {
+    enum Kind {
+        case primary
+        case secondary
+        case destructive
+    }
+
+    let kind: Kind
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .black, design: .rounded))
+            .foregroundStyle(foregroundColor)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .padding(.horizontal, 12)
+            .contentShape(Rectangle())
+            .background(backgroundColor.opacity(configuration.isPressed ? 0.75 : 1), in: RoundedRectangle(cornerRadius: 9))
+    }
+
+    private var foregroundColor: Color {
+        switch kind {
+        case .primary:
+            return .black
+        case .secondary, .destructive:
+            return .white
+        }
+    }
+
+    private var backgroundColor: Color {
+        switch kind {
+        case .primary:
+            return .yellow
+        case .secondary:
+            return .white.opacity(0.12)
+        case .destructive:
+            return .red.opacity(0.82)
+        }
     }
 }
 

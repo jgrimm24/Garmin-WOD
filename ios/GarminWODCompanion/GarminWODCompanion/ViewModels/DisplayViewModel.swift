@@ -194,6 +194,36 @@ final class DisplayViewModel: ObservableObject {
         }
     }
 
+    var compactHeartRateSourceLabel: String {
+        switch selectedHeartRateSource {
+        case .mock:
+            return "MOCK HR"
+        case .bluetooth:
+            switch bluetoothHeartRateManager.connectionState {
+            case .bluetoothUnavailable:
+                return "BLUETOOTH N/A"
+            case .bluetoothUnauthorized:
+                return "BLUETOOTH BLOCKED"
+            case .poweredOff:
+                return "BLUETOOTH OFF"
+            case .idle:
+                return "BLUETOOTH HR"
+            case .scanning:
+                return "SCANNING"
+            case .deviceFound:
+                return "DEVICE FOUND"
+            case .connecting:
+                return "CONNECTING"
+            case .connected:
+                return "\(compactConnectedDeviceName) CONNECTED"
+            case .disconnected:
+                return "HR DISCONNECTED"
+            case .failed:
+                return "HR FAILED"
+            }
+        }
+    }
+
     func logLayout(width: Double, height: Double, isLandscape: Bool) {
         print("[LAYOUT] width=\(Int(width)) height=\(Int(height)) selected=\(isLandscape ? "landscape" : "portrait")")
         logState("layout")
@@ -248,5 +278,24 @@ final class DisplayViewModel: ObservableObject {
 
         workoutSummary = summary
         print("[SUMMARY] captured elapsed=\(summary.elapsedSeconds) avgHR=\(summary.averageHeartRate) maxHR=\(summary.maximumHeartRate) movement=\(summary.finalMovementName)")
+    }
+
+    private var compactConnectedDeviceName: String {
+        guard let name = bluetoothHeartRateManager.connectedPeripheralName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty else {
+            return "HRM"
+        }
+
+        let lowercasedName = name.lowercased()
+        if lowercasedName.contains("tactix") {
+            return lowercasedName.contains("8") ? "TACTIX 8" : "TACTIX"
+        }
+
+        if lowercasedName.contains("hrm") {
+            return "HRM"
+        }
+
+        let words = name.split(separator: " ").prefix(2).joined(separator: " ")
+        return words.uppercased()
     }
 }
