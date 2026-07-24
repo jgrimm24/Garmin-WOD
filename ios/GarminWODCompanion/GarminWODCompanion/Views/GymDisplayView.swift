@@ -9,7 +9,11 @@ struct GymDisplayView: View {
             let metrics = DashboardMetrics(size: geometry.size, isLandscape: isLandscape)
 
             ZStack {
-                ZoneBackground(manager: viewModel.heartRateManager)
+                ZoneBackground(
+                    viewModel: viewModel,
+                    mockManager: viewModel.heartRateManager,
+                    bluetoothManager: viewModel.bluetoothHeartRateManager
+                )
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
                     .zIndex(0)
@@ -60,13 +64,17 @@ struct GymDisplayView: View {
         VStack(spacing: metrics.sectionSpacing) {
             HeaderView(
                 workoutManager: viewModel.workoutManager,
+                viewModel: viewModel,
+                bluetoothManager: viewModel.bluetoothHeartRateManager,
                 metrics: metrics
             )
 
             ScrollView {
                 VStack(spacing: metrics.sectionSpacing) {
                     HeartRatePanel(
-                        manager: viewModel.heartRateManager,
+                        viewModel: viewModel,
+                        mockManager: viewModel.heartRateManager,
+                        bluetoothManager: viewModel.bluetoothHeartRateManager,
                         metrics: metrics,
                         isCompact: true
                     )
@@ -92,13 +100,17 @@ struct GymDisplayView: View {
         return VStack(spacing: metrics.sectionSpacing) {
             HeaderView(
                 workoutManager: viewModel.workoutManager,
+                viewModel: viewModel,
+                bluetoothManager: viewModel.bluetoothHeartRateManager,
                 metrics: metrics
             )
             .frame(height: metrics.activeHeaderHeight)
 
             HStack(alignment: .top, spacing: metrics.landscapePanelGap) {
                 HeartRatePanel(
-                    manager: viewModel.heartRateManager,
+                    viewModel: viewModel,
+                    mockManager: viewModel.heartRateManager,
+                    bluetoothManager: viewModel.bluetoothHeartRateManager,
                     metrics: metrics,
                     isCompact: true
                 )
@@ -119,13 +131,15 @@ struct GymDisplayView: View {
 }
 
 private struct ZoneBackground: View {
-    @ObservedObject var manager: MockHeartRateManager
+    @ObservedObject var viewModel: DisplayViewModel
+    @ObservedObject var mockManager: MockHeartRateManager
+    @ObservedObject var bluetoothManager: BluetoothHeartRateManager
 
     var body: some View {
         LinearGradient(
             colors: [
                 Color.black,
-                manager.currentZone.color.opacity(0.42),
+                viewModel.activeCurrentZone.color.opacity(0.42),
                 Color.black
             ],
             startPoint: .topLeading,
@@ -176,6 +190,10 @@ private struct DashboardMetrics {
 
     var mockHeartRateButtonWidth: CGFloat {
         isLandscape ? clamp(landscapeHeartPanelWidth * 0.22, min: 34, max: 44) : 72
+    }
+
+    var bluetoothActionButtonWidth: CGFloat {
+        isLandscape ? clamp(landscapeHeartPanelWidth * 0.34, min: 68, max: 96) : 116
     }
 
     var activeHeaderHeight: CGFloat {
@@ -286,6 +304,8 @@ private struct DashboardMetrics {
 
 private struct HeaderView: View {
     @ObservedObject var workoutManager: WorkoutManager
+    @ObservedObject var viewModel: DisplayViewModel
+    @ObservedObject var bluetoothManager: BluetoothHeartRateManager
     let metrics: DashboardMetrics
 
     var body: some View {
@@ -310,10 +330,11 @@ private struct HeaderView: View {
             Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 6) {
-                Text("MOCK HR")
+                Text(viewModel.heartRateSourceLabel)
                     .font(.system(size: metrics.headerMetaSize, weight: .heavy, design: .rounded))
                     .foregroundStyle(.yellow)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.55)
 
                 Text(workoutManager.status.rawValue.uppercased())
                     .font(.system(size: metrics.headerMetaSize, weight: .black, design: .rounded))
@@ -329,13 +350,23 @@ private struct HeaderView: View {
 }
 
 private struct HeartRatePanel: View {
-    @ObservedObject var manager: MockHeartRateManager
+    @ObservedObject var viewModel: DisplayViewModel
+    @ObservedObject var mockManager: MockHeartRateManager
+    @ObservedObject var bluetoothManager: BluetoothHeartRateManager
     let metrics: DashboardMetrics
     let isCompact: Bool
 
     var body: some View {
         VStack(spacing: metrics.isLandscape ? 5 : (isCompact ? 10 : 12)) {
-            Text("\(manager.currentHeartRate)")
+            Picker("HR Source", selection: $viewModel.selectedHeartRateSource) {
+                ForEach(HeartRateSource.allCases) { source in
+                    Text(source.title).tag(source)
+                }
+            }
+            .pickerStyle(.segmented)
+            .font(.system(size: metrics.isLandscape ? 10 : 13, weight: .bold, design: .rounded))
+
+            Text(heartRateText)
                 .font(.system(size: metrics.heartRateSize, weight: .black, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
@@ -343,29 +374,33 @@ private struct HeartRatePanel: View {
                 .frame(maxWidth: .infinity)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(manager.currentZone.name.uppercased())
+            Text(currentZone.name.uppercased())
                 .font(.system(size: metrics.zoneSize, weight: .black, design: .rounded))
-                .foregroundStyle(manager.currentZone.color)
+                .foregroundStyle(currentZone.color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
             HStack(spacing: metrics.isLandscape ? 7 : 10) {
-                MetricTile(title: "Avg HR", value: "\(manager.averageHeartRate)", metrics: metrics)
-                MetricTile(title: "Max HR", value: "\(manager.maximumHeartRate)", metrics: metrics)
+                MetricTile(title: "Avg HR", value: "\(averageHeartRate)", metrics: metrics)
+                MetricTile(title: "Max HR", value: "\(maximumHeartRate)", metrics: metrics)
             }
 
             if !isCompact {
-                ZoneTimeSummary(manager: manager, metrics: metrics)
+                ZoneTimeSummary(items: zoneTimeSummary, metrics: metrics)
             } else {
                 ViewThatFits {
                     if !metrics.isLandscape {
-                        ZoneTimeSummary(manager: manager, metrics: metrics)
+                        ZoneTimeSummary(items: zoneTimeSummary, metrics: metrics)
                     }
                     EmptyView()
                 }
             }
 
-            MockControls(manager: manager, metrics: metrics)
+            if viewModel.selectedHeartRateSource == .mock {
+                MockControls(manager: mockManager, metrics: metrics)
+            } else {
+                BluetoothControls(manager: bluetoothManager, metrics: metrics)
+            }
         }
         .padding(metrics.heartPanelPadding)
         .frame(maxWidth: .infinity, maxHeight: metrics.isLandscape ? .infinity : nil)
@@ -375,6 +410,35 @@ private struct HeartRatePanel: View {
                 .stroke(.white.opacity(0.12), lineWidth: 1)
                 .allowsHitTesting(false)
         )
+    }
+
+    private var heartRateText: String {
+        guard let heartRate = viewModel.activeHeartRate else {
+            return "--"
+        }
+
+        return "\(heartRate)"
+    }
+
+    private var currentZone: HeartRateZone {
+        viewModel.activeCurrentZone
+    }
+
+    private var averageHeartRate: Int {
+        viewModel.activeAverageHeartRate
+    }
+
+    private var maximumHeartRate: Int {
+        viewModel.activeMaximumHeartRate
+    }
+
+    private var zoneTimeSummary: [(zone: HeartRateZone, seconds: Int)] {
+        switch viewModel.selectedHeartRateSource {
+        case .mock:
+            return mockManager.zoneTimeSummary
+        case .bluetooth:
+            return bluetoothManager.zoneTimeSummary
+        }
     }
 }
 
@@ -484,12 +548,12 @@ private struct MetricTile: View {
 }
 
 private struct ZoneTimeSummary: View {
-    @ObservedObject var manager: MockHeartRateManager
+    let items: [(zone: HeartRateZone, seconds: Int)]
     let metrics: DashboardMetrics
 
     var body: some View {
         VStack(spacing: metrics.isLandscape ? 7 : 5) {
-            ForEach(manager.zoneTimeSummary, id: \.zone.id) { item in
+            ForEach(items, id: \.zone.id) { item in
                 HStack(spacing: 8) {
                     Text(item.zone.name)
                         .lineLimit(1)
@@ -508,6 +572,74 @@ private struct ZoneTimeSummary: View {
 
     private func format(seconds: Int) -> String {
         String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+private struct BluetoothControls: View {
+    @ObservedObject var manager: BluetoothHeartRateManager
+    let metrics: DashboardMetrics
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: metrics.isLandscape ? 4 : 8) {
+            HStack(spacing: metrics.isLandscape ? 6 : 8) {
+                Text(manager.sourceLabel)
+                    .font(.system(size: metrics.isLandscape ? 10 : 13, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+
+                Spacer(minLength: 4)
+
+                if manager.connectionState.isConnected {
+                    Button("Disconnect") {
+                        print("[UI] Disconnect HR tapped")
+                        manager.disconnect()
+                    }
+                    .buttonStyle(MockHeartRateButtonStyle(metrics: metrics))
+                    .frame(width: metrics.bluetoothActionButtonWidth)
+                } else {
+                    Button(manager.connectionState == .scanning ? "Scanning" : "Scan") {
+                        print("[UI] Scan HR tapped")
+                        manager.startScan()
+                    }
+                    .buttonStyle(MockHeartRateButtonStyle(metrics: metrics))
+                    .frame(width: metrics.bluetoothActionButtonWidth)
+                    .disabled(manager.connectionState == .scanning)
+                }
+            }
+
+            if let batteryPercentage = manager.batteryPercentage {
+                Text("Battery \(batteryPercentage)%")
+                    .font(.system(size: metrics.isLandscape ? 10 : 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .lineLimit(1)
+            }
+
+            if !manager.discoveredDevices.isEmpty && !manager.connectionState.isConnected {
+                ViewThatFits {
+                    HStack(spacing: 5) {
+                        ForEach(manager.discoveredDevices.prefix(2)) { device in
+                            Button(device.name) {
+                                print("[UI] Connect HR tapped \(device.name)")
+                                manager.connect(to: device)
+                            }
+                            .buttonStyle(MockHeartRateButtonStyle(metrics: metrics))
+                        }
+                    }
+
+                    EmptyView()
+                }
+            }
+
+            if let errorMessage = manager.errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: metrics.isLandscape ? 9 : 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.red.opacity(0.9))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -4,19 +4,23 @@ final class DisplayViewModel: ObservableObject {
     let workoutManager: WorkoutManager
     let timerManager: TimerManager
     let heartRateManager: MockHeartRateManager
+    let bluetoothHeartRateManager: BluetoothHeartRateManager
 
     @Published private(set) var workoutSummary: WorkoutSummary?
+    @Published var selectedHeartRateSource: HeartRateSource = .mock
 
     private var zoneTimer: Timer?
 
     init(
         workoutManager: WorkoutManager = WorkoutManager(),
         timerManager: TimerManager = TimerManager(),
-        heartRateManager: MockHeartRateManager = MockHeartRateManager()
+        heartRateManager: MockHeartRateManager = MockHeartRateManager(),
+        bluetoothHeartRateManager: BluetoothHeartRateManager = BluetoothHeartRateManager()
     ) {
         self.workoutManager = workoutManager
         self.timerManager = timerManager
         self.heartRateManager = heartRateManager
+        self.bluetoothHeartRateManager = bluetoothHeartRateManager
         print("[LIFECYCLE] DisplayViewModel init")
         scheduleZoneTimer()
     }
@@ -130,9 +134,64 @@ final class DisplayViewModel: ObservableObject {
         workoutManager.reset()
         timerManager.reset()
         heartRateManager.resetMetrics()
+        bluetoothHeartRateManager.resetMetrics()
         workoutSummary = nil
         logState("resetWorkout after")
         print("[RESET] after status=\(workoutManager.status.rawValue)")
+    }
+
+    var activeHeartRate: Int? {
+        switch selectedHeartRateSource {
+        case .mock:
+            return heartRateManager.currentHeartRate
+        case .bluetooth:
+            return bluetoothHeartRateManager.currentHeartRate
+        }
+    }
+
+    var activeAverageHeartRate: Int {
+        switch selectedHeartRateSource {
+        case .mock:
+            return heartRateManager.averageHeartRate
+        case .bluetooth:
+            return bluetoothHeartRateManager.averageHeartRate
+        }
+    }
+
+    var activeMaximumHeartRate: Int {
+        switch selectedHeartRateSource {
+        case .mock:
+            return heartRateManager.maximumHeartRate
+        case .bluetooth:
+            return bluetoothHeartRateManager.maximumHeartRate
+        }
+    }
+
+    var activeCurrentZone: HeartRateZone {
+        switch selectedHeartRateSource {
+        case .mock:
+            return heartRateManager.currentZone
+        case .bluetooth:
+            return bluetoothHeartRateManager.currentZone
+        }
+    }
+
+    var activeZoneTimes: [Int: Int] {
+        switch selectedHeartRateSource {
+        case .mock:
+            return heartRateManager.zoneTimes
+        case .bluetooth:
+            return bluetoothHeartRateManager.zoneTimes
+        }
+    }
+
+    var heartRateSourceLabel: String {
+        switch selectedHeartRateSource {
+        case .mock:
+            return "MOCK HR"
+        case .bluetooth:
+            return bluetoothHeartRateManager.sourceLabel.uppercased()
+        }
     }
 
     func logLayout(width: Double, height: Double, isLandscape: Bool) {
@@ -154,7 +213,12 @@ final class DisplayViewModel: ObservableObject {
                 return
             }
 
-            self.heartRateManager.tickZoneTimeIfWorkoutRunning()
+            switch self.selectedHeartRateSource {
+            case .mock:
+                self.heartRateManager.tickZoneTimeIfWorkoutRunning()
+            case .bluetooth:
+                self.bluetoothHeartRateManager.tickZoneTimeIfWorkoutRunning()
+            }
         }
     }
 
@@ -168,13 +232,13 @@ final class DisplayViewModel: ObservableObject {
             workoutName: workoutManager.workout.title,
             workoutType: workoutManager.workout.type,
             elapsedSeconds: timerManager.elapsedSeconds,
-            averageHeartRate: heartRateManager.averageHeartRate,
-            maximumHeartRate: heartRateManager.maximumHeartRate,
-            zone1Seconds: heartRateManager.zoneTimes[1, default: 0],
-            zone2Seconds: heartRateManager.zoneTimes[2, default: 0],
-            zone3Seconds: heartRateManager.zoneTimes[3, default: 0],
-            zone4Seconds: heartRateManager.zoneTimes[4, default: 0],
-            zone5Seconds: heartRateManager.zoneTimes[5, default: 0],
+            averageHeartRate: activeAverageHeartRate,
+            maximumHeartRate: activeMaximumHeartRate,
+            zone1Seconds: activeZoneTimes[1, default: 0],
+            zone2Seconds: activeZoneTimes[2, default: 0],
+            zone3Seconds: activeZoneTimes[3, default: 0],
+            zone4Seconds: activeZoneTimes[4, default: 0],
+            zone5Seconds: activeZoneTimes[5, default: 0],
             caloriesBurned: nil,
             finalRound: workoutManager.currentRound,
             finalStationIndex: workoutManager.currentStationIndex,

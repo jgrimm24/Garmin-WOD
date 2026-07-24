@@ -17,6 +17,7 @@ swiftc \
   "$ROOT_DIR/ios/GarminWODCompanion/GarminWODCompanion/Managers/WorkoutManager.swift" \
   "$ROOT_DIR/ios/GarminWODCompanion/GarminWODCompanion/Managers/TimerManager.swift" \
   "$ROOT_DIR/ios/GarminWODCompanion/GarminWODCompanion/Managers/MockHeartRateManager.swift" \
+  "$ROOT_DIR/ios/GarminWODCompanion/GarminWODCompanion/Managers/BluetoothHeartRateManager.swift" \
   "$ROOT_DIR/ios/GarminWODCompanion/GarminWODCompanion/ViewModels/DisplayViewModel.swift" \
   "$MAIN_FILE"
 

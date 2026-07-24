@@ -5,7 +5,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>Garmin WOD</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Garmin WOD Companion will use Bluetooth in a future phase to connect to a heart-rate strap.</string>
+	<string>Garmin WOD uses Bluetooth to connect to a heart-rate monitor and display live workout heart-rate data.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIRequiresFullScreen</key>

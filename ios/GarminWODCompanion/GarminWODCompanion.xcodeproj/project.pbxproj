@@ -19,6 +19,7 @@
 		0A0000102D00000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0A0001102D00000000000001 /* Assets.xcassets */; };
 		0A0000112D00000000000001 /* roney-sample.json in Resources */ = {isa = PBXBuildFile; fileRef = 0A0001112D00000000000001 /* roney-sample.json */; };
 		0A0000122D00000000000001 /* DebugControlHarnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001132D00000000000001 /* DebugControlHarnessView.swift */; };
+		0A0000132D00000000000001 /* BluetoothHeartRateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001142D00000000000001 /* BluetoothHeartRateManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +37,7 @@
 		0A0001112D00000000000001 /* roney-sample.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "roney-sample.json"; sourceTree = "<group>"; };
 		0A0001122D00000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		0A0001132D00000000000001 /* DebugControlHarnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugControlHarnessView.swift; sourceTree = "<group>"; };
+		0A0001142D00000000000001 /* BluetoothHeartRateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothHeartRateManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -96,6 +98,7 @@
 				0A0001052D00000000000001 /* WorkoutManager.swift */,
 				0A0001062D00000000000001 /* TimerManager.swift */,
 				0A0001072D00000000000001 /* MockHeartRateManager.swift */,
+				0A0001142D00000000000001 /* BluetoothHeartRateManager.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -210,6 +213,7 @@
 				0A0000052D00000000000001 /* WorkoutManager.swift in Sources */,
 				0A0000062D00000000000001 /* TimerManager.swift in Sources */,
 				0A0000072D00000000000001 /* MockHeartRateManager.swift in Sources */,
+				0A0000132D00000000000001 /* BluetoothHeartRateManager.swift in Sources */,
 				0A0000082D00000000000001 /* DisplayViewModel.swift in Sources */,
 				0A0000092D00000000000001 /* GymDisplayView.swift in Sources */,
 				0A0000122D00000000000001 /* DebugControlHarnessView.swift in Sources */,

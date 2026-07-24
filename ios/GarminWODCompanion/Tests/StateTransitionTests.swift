@@ -134,4 +134,34 @@ expect(summaryViewModel.workoutManager.currentStationIndex == 0, "new workout re
 expect(summaryViewModel.workoutManager.currentRound == 1, "new workout reset should restore first round")
 expect(summaryViewModel.workoutSummary == nil, "new workout reset should clear summary")
 
+print("[TEST] Bluetooth heart-rate parser")
+expect(
+    BluetoothHeartRateManager.parseHeartRateMeasurement(Data([0x00, 0x7B])) == 123,
+    "8-bit HR packet should parse BPM"
+)
+expect(
+    BluetoothHeartRateManager.parseHeartRateMeasurement(Data([0x01, 0x2C, 0x01])) == 300,
+    "16-bit HR packet should parse little-endian BPM"
+)
+expect(
+    BluetoothHeartRateManager.parseHeartRateMeasurement(Data()) == nil,
+    "empty HR packet should fail safely"
+)
+expect(
+    BluetoothHeartRateManager.parseHeartRateMeasurement(Data([0x00])) == nil,
+    "flags-only HR packet should fail safely"
+)
+expect(
+    BluetoothHeartRateManager.parseHeartRateMeasurement(Data([0x01, 0x2C])) == nil,
+    "short 16-bit HR packet should fail safely"
+)
+expect(
+    BluetoothHeartRateManager.parseHeartRateMeasurement(Data([0x00, 0x88, 0x10, 0x20])) == 136,
+    "8-bit HR packet with optional trailing bytes should parse BPM"
+)
+expect(
+    BluetoothHeartRateManager.parseHeartRateMeasurement(Data([0x01, 0x96, 0x00, 0x10])) == 150,
+    "16-bit HR packet with optional trailing bytes should parse BPM"
+)
+
 print("[TEST] PASS: DisplayViewModel state transitions")
