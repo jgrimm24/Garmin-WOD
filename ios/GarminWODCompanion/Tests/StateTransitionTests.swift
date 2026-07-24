@@ -65,6 +65,7 @@ print("[TEST] finish")
 viewModel.finishWorkout()
 expect(viewModel.workoutManager.status == .finished, "finish should set finished")
 expect(!viewModel.timerManager.isRunning, "finish should stop timer")
+expect(viewModel.workoutSummary != nil, "finish should create a workout summary")
 
 print("[TEST] reset")
 viewModel.resetWorkout()
@@ -73,11 +74,64 @@ expect(viewModel.workoutManager.currentStationIndex == 0, "reset should restore 
 expect(viewModel.workoutManager.currentRound == 1, "reset should restore round 1")
 expect(viewModel.timerManager.elapsedSeconds == 0, "reset should clear elapsed seconds")
 expect(!viewModel.timerManager.isRunning, "reset should stop timer")
+expect(viewModel.workoutSummary == nil, "reset should clear workout summary")
 
 print("[TEST] mock heart-rate update")
 viewModel.heartRateManager.setSimulatedHeartRate(155)
 expect(viewModel.heartRateManager.currentHeartRate == 155, "mock HR should update to requested value")
 expect(viewModel.heartRateManager.currentZone.id == 4, "mock HR 155 should be zone 4")
 expect(viewModel.heartRateManager.maximumHeartRate >= 155, "mock HR update should affect max HR")
+
+print("[TEST] workout summary snapshot")
+let summaryHeartRateManager = MockHeartRateManager()
+summaryHeartRateManager.isDemoModeEnabled = false
+let summaryViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: summaryHeartRateManager
+)
+
+summaryViewModel.startWorkout()
+summaryViewModel.heartRateManager.setSimulatedHeartRate(155)
+summaryViewModel.heartRateManager.tickZoneTimeIfWorkoutRunning()
+summaryViewModel.heartRateManager.tickZoneTimeIfWorkoutRunning()
+summaryViewModel.nextStation()
+
+let finalElapsed = summaryViewModel.timerManager.elapsedSeconds
+let finalAverageHeartRate = summaryViewModel.heartRateManager.averageHeartRate
+let finalMaximumHeartRate = summaryViewModel.heartRateManager.maximumHeartRate
+let finalZone4Seconds = summaryViewModel.heartRateManager.zoneTimes[4, default: 0]
+
+summaryViewModel.finishWorkout()
+guard let capturedSummary = summaryViewModel.workoutSummary else {
+    print("[TEST] FAIL: finish should capture summary")
+    exit(1)
+}
+
+expect(capturedSummary.workoutName == workout.title, "summary should capture workout name")
+expect(capturedSummary.workoutType == workout.type, "summary should capture workout type")
+expect(capturedSummary.elapsedSeconds == finalElapsed, "summary elapsed should match final timer value")
+expect(capturedSummary.averageHeartRate == finalAverageHeartRate, "summary avg HR should match accumulated value")
+expect(capturedSummary.maximumHeartRate == finalMaximumHeartRate, "summary max HR should match accumulated value")
+expect(capturedSummary.zone4Seconds == finalZone4Seconds, "summary zone time should match final accumulated value")
+expect(capturedSummary.caloriesBurned == nil, "summary calories should be nil until a defensible burned-calorie source exists")
+expect(capturedSummary.finalRound == summaryViewModel.workoutManager.currentRound, "summary should capture final round")
+expect(capturedSummary.finalStationIndex == summaryViewModel.workoutManager.currentStationIndex, "summary should capture final station index")
+expect(capturedSummary.finalMovementName == "11 Thrusters", "summary should capture final movement")
+
+summaryViewModel.heartRateManager.setSimulatedHeartRate(190)
+summaryViewModel.heartRateManager.tickZoneTimeIfWorkoutRunning()
+expect(summaryViewModel.workoutSummary == capturedSummary, "summary should not mutate after later HR changes")
+
+summaryViewModel.logLayout(width: 844, height: 390, isLandscape: true)
+summaryViewModel.logLayout(width: 390, height: 844, isLandscape: false)
+expect(summaryViewModel.workoutSummary == capturedSummary, "summary should survive orientation/layout changes")
+
+summaryViewModel.resetWorkout()
+expect(summaryViewModel.workoutManager.status == .idle, "new workout reset should restore idle")
+expect(summaryViewModel.timerManager.elapsedSeconds == 0, "new workout reset should clear elapsed")
+expect(summaryViewModel.workoutManager.currentStationIndex == 0, "new workout reset should restore first station")
+expect(summaryViewModel.workoutManager.currentRound == 1, "new workout reset should restore first round")
+expect(summaryViewModel.workoutSummary == nil, "new workout reset should clear summary")
 
 print("[TEST] PASS: DisplayViewModel state transitions")

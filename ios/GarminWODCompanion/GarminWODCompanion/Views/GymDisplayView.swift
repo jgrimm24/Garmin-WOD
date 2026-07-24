@@ -14,19 +14,32 @@ struct GymDisplayView: View {
                     .allowsHitTesting(false)
                     .zIndex(0)
 
-                VStack(spacing: metrics.sectionSpacing) {
-                    if isLandscape {
-                        landscapeLayout(metrics: metrics)
+                Group {
+                    if viewModel.workoutManager.status == .finished, let summary = viewModel.workoutSummary {
+                        WorkoutSummaryScreen(
+                            summary: summary,
+                            metrics: metrics,
+                            isLandscape: isLandscape
+                        ) {
+                            print("[UI] New Workout tapped")
+                            viewModel.resetWorkout()
+                        }
                     } else {
-                        portraitLayout(metrics: metrics)
-                    }
+                        VStack(spacing: metrics.sectionSpacing) {
+                            if isLandscape {
+                                landscapeLayout(metrics: metrics)
+                            } else {
+                                portraitLayout(metrics: metrics)
+                            }
 
-                    ControlBar(
-                        viewModel: viewModel,
-                        workoutManager: viewModel.workoutManager,
-                        metrics: metrics,
-                        isLandscape: isLandscape
-                    )
+                            ControlBar(
+                                viewModel: viewModel,
+                                workoutManager: viewModel.workoutManager,
+                                metrics: metrics,
+                                isLandscape: isLandscape
+                            )
+                        }
+                    }
                 }
                 .padding(metrics.outerPadding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -437,6 +450,229 @@ private struct MockControls: View {
             }
             .buttonStyle(DashboardButtonStyle(kind: .secondary, metrics: metrics))
         }
+    }
+}
+
+private struct WorkoutSummaryScreen: View {
+    let summary: WorkoutSummary
+    let metrics: DashboardMetrics
+    let isLandscape: Bool
+    let onNewWorkout: () -> Void
+
+    var body: some View {
+        if isLandscape {
+            landscapeSummary
+        } else {
+            portraitSummary
+        }
+    }
+
+    private var portraitSummary: some View {
+        VStack(spacing: metrics.sectionSpacing) {
+            ScrollView {
+                VStack(spacing: metrics.sectionSpacing) {
+                    summaryHeader
+
+                    Text(summary.elapsedTimeText)
+                        .font(.system(size: clamp(metrics.size.height * 0.11, min: 64, max: 104), weight: .black, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .frame(maxWidth: .infinity)
+
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 10),
+                            GridItem(.flexible(), spacing: 10),
+                            GridItem(.flexible(), spacing: 10)
+                        ],
+                        spacing: 10
+                    ) {
+                        SummaryMetricCard(title: "Avg HR", value: "\(summary.averageHeartRate)", metrics: metrics)
+                        SummaryMetricCard(title: "Max HR", value: "\(summary.maximumHeartRate)", metrics: metrics)
+                        SummaryMetricCard(title: "Calories", value: summary.caloriesText, metrics: metrics)
+                    }
+
+                    SummaryZoneBreakdown(summary: summary, metrics: metrics)
+                    SummaryProgressCard(summary: summary, metrics: metrics)
+                }
+                .padding(.bottom, metrics.sectionSpacing)
+            }
+            .scrollIndicators(.hidden)
+
+            newWorkoutButton
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var landscapeSummary: some View {
+        VStack(spacing: metrics.sectionSpacing) {
+            summaryHeader
+
+            HStack(spacing: metrics.sectionSpacing) {
+                VStack(spacing: metrics.sectionSpacing) {
+                    Text(summary.elapsedTimeText)
+                        .font(.system(size: clamp(metrics.size.height * 0.18, min: 66, max: 104), weight: .black, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.45)
+                        .frame(maxWidth: .infinity)
+
+                    HStack(spacing: 10) {
+                        SummaryMetricCard(title: "Avg HR", value: "\(summary.averageHeartRate)", metrics: metrics)
+                        SummaryMetricCard(title: "Max HR", value: "\(summary.maximumHeartRate)", metrics: metrics)
+                        SummaryMetricCard(title: "Calories", value: summary.caloriesText, metrics: metrics)
+                    }
+                }
+                .padding(metrics.cardPadding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(summaryBorder)
+
+                VStack(spacing: metrics.sectionSpacing) {
+                    SummaryZoneBreakdown(summary: summary, metrics: metrics)
+                    SummaryProgressCard(summary: summary, metrics: metrics)
+                }
+                .frame(width: metrics.availableWidth * 0.42, height: metrics.size.height * 0.54)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            newWorkoutButton
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var summaryHeader: some View {
+        VStack(spacing: 4) {
+            Text("Workout Complete")
+                .font(.system(size: metrics.headerTitleSize, weight: .black, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+
+            Text("\(summary.workoutName) • \(summary.workoutType.rawValue)")
+                .font(.system(size: metrics.headerMetaSize, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white.opacity(0.76))
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var newWorkoutButton: some View {
+        Button("New Workout") {
+            onNewWorkout()
+        }
+        .buttonStyle(DashboardButtonStyle(kind: .primary, metrics: metrics))
+        .contentShape(Rectangle())
+        .frame(maxWidth: .infinity)
+    }
+
+    private var summaryBorder: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .stroke(.white.opacity(0.12), lineWidth: 1)
+            .allowsHitTesting(false)
+    }
+
+    private func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
+        Swift.min(Swift.max(value, minimum), maximum)
+    }
+}
+
+private struct SummaryMetricCard: View {
+    let title: String
+    let value: String
+    let metrics: DashboardMetrics
+
+    var body: some View {
+        VStack(spacing: 5) {
+            Text(title)
+                .font(.system(size: metrics.isLandscape ? 13 : 14, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white.opacity(0.68))
+                .lineLimit(1)
+
+            Text(value)
+                .font(.system(size: metrics.isLandscape ? 26 : 28, weight: .black, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, metrics.isLandscape ? 9 : 12)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct SummaryZoneBreakdown: View {
+    let summary: WorkoutSummary
+    let metrics: DashboardMetrics
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: metrics.isLandscape ? 7 : 8) {
+            Text("HR Zone Time")
+                .font(.system(size: metrics.headerMetaSize, weight: .black, design: .rounded))
+                .foregroundStyle(.yellow)
+                .lineLimit(1)
+
+            ForEach(summary.zoneTimes, id: \.label) { item in
+                HStack(spacing: 10) {
+                    Text(item.label)
+                    Spacer(minLength: 8)
+                    Text(WorkoutSummary.format(seconds: item.seconds))
+                        .monospacedDigit()
+                }
+                .font(.system(size: metrics.isLandscape ? 15 : 16, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.84))
+                .lineLimit(1)
+            }
+        }
+        .padding(metrics.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+                .allowsHitTesting(false)
+        )
+    }
+}
+
+private struct SummaryProgressCard: View {
+    let summary: WorkoutSummary
+    let metrics: DashboardMetrics
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: metrics.isLandscape ? 7 : 8) {
+            Text("Final Progress")
+                .font(.system(size: metrics.headerMetaSize, weight: .black, design: .rounded))
+                .foregroundStyle(.yellow)
+                .lineLimit(1)
+
+            summaryLine(title: "Round", value: "\(summary.finalRound)")
+            summaryLine(title: "Station", value: "\(summary.finalStationIndex + 1)")
+            summaryLine(title: "Movement", value: summary.finalMovementName)
+        }
+        .padding(metrics.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+                .allowsHitTesting(false)
+        )
+    }
+
+    private func summaryLine(title: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(title)
+                .foregroundStyle(.white.opacity(0.62))
+            Spacer(minLength: 8)
+            Text(value)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(metrics.isLandscape ? 1 : 2)
+                .minimumScaleFactor(0.55)
+        }
+        .font(.system(size: metrics.isLandscape ? 15 : 16, weight: .bold, design: .rounded))
     }
 }
 

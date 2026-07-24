@@ -28,6 +28,58 @@ struct WorkoutContract: Codable, Identifiable {
     var sourceText: String
 }
 
+struct WorkoutSummary: Equatable {
+    let workoutName: String
+    let workoutType: WorkoutType
+    let elapsedSeconds: Int
+    let averageHeartRate: Int
+    let maximumHeartRate: Int
+    let zone1Seconds: Int
+    let zone2Seconds: Int
+    let zone3Seconds: Int
+    let zone4Seconds: Int
+    let zone5Seconds: Int
+    let caloriesBurned: Int?
+    let finalRound: Int
+    let finalStationIndex: Int
+    let finalMovementName: String
+    let finishedAt: Date
+
+    var elapsedTimeText: String {
+        Self.format(seconds: elapsedSeconds)
+    }
+
+    var zoneTimes: [(label: String, seconds: Int)] {
+        [
+            ("Zone 1", zone1Seconds),
+            ("Zone 2", zone2Seconds),
+            ("Zone 3", zone3Seconds),
+            ("Zone 4", zone4Seconds),
+            ("Zone 5", zone5Seconds)
+        ]
+    }
+
+    var caloriesText: String {
+        guard let caloriesBurned else {
+            return "N/A"
+        }
+
+        return "\(caloriesBurned)"
+    }
+
+    static func format(seconds: Int) -> String {
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let seconds = seconds % 60
+
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
 struct WorkoutStation: Codable, Identifiable {
     var id: String
     var name: String

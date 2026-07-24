@@ -5,6 +5,8 @@ final class DisplayViewModel: ObservableObject {
     let timerManager: TimerManager
     let heartRateManager: MockHeartRateManager
 
+    @Published private(set) var workoutSummary: WorkoutSummary?
+
     private var zoneTimer: Timer?
 
     init(
@@ -98,6 +100,7 @@ final class DisplayViewModel: ObservableObject {
         logState("nextStation before")
         workoutManager.advance()
         if workoutManager.status == .finished {
+            captureWorkoutSummaryIfNeeded()
             timerManager.stop()
         }
         logState("nextStation after")
@@ -111,6 +114,7 @@ final class DisplayViewModel: ObservableObject {
         print("[VM] finishWorkout called")
         logState("finishWorkout before")
         workoutManager.finish()
+        captureWorkoutSummaryIfNeeded()
         timerManager.stop()
         logState("finishWorkout after")
     }
@@ -126,6 +130,7 @@ final class DisplayViewModel: ObservableObject {
         workoutManager.reset()
         timerManager.reset()
         heartRateManager.resetMetrics()
+        workoutSummary = nil
         logState("resetWorkout after")
         print("[RESET] after status=\(workoutManager.status.rawValue)")
     }
@@ -151,5 +156,33 @@ final class DisplayViewModel: ObservableObject {
 
             self.heartRateManager.tickZoneTimeIfWorkoutRunning()
         }
+    }
+
+    private func captureWorkoutSummaryIfNeeded() {
+        guard workoutSummary == nil else {
+            return
+        }
+
+        let station = workoutManager.currentStation
+        let summary = WorkoutSummary(
+            workoutName: workoutManager.workout.title,
+            workoutType: workoutManager.workout.type,
+            elapsedSeconds: timerManager.elapsedSeconds,
+            averageHeartRate: heartRateManager.averageHeartRate,
+            maximumHeartRate: heartRateManager.maximumHeartRate,
+            zone1Seconds: heartRateManager.zoneTimes[1, default: 0],
+            zone2Seconds: heartRateManager.zoneTimes[2, default: 0],
+            zone3Seconds: heartRateManager.zoneTimes[3, default: 0],
+            zone4Seconds: heartRateManager.zoneTimes[4, default: 0],
+            zone5Seconds: heartRateManager.zoneTimes[5, default: 0],
+            caloriesBurned: nil,
+            finalRound: workoutManager.currentRound,
+            finalStationIndex: workoutManager.currentStationIndex,
+            finalMovementName: station?.displayName ?? "None",
+            finishedAt: Date()
+        )
+
+        workoutSummary = summary
+        print("[SUMMARY] captured elapsed=\(summary.elapsedSeconds) avgHR=\(summary.averageHeartRate) maxHR=\(summary.maximumHeartRate) movement=\(summary.finalMovementName)")
     }
 }
