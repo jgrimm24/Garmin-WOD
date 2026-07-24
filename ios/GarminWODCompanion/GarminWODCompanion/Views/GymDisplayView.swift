@@ -86,22 +86,23 @@ struct GymDisplayView: View {
     }
 
     private func landscapeLayout(metrics: DashboardMetrics) -> some View {
-        VStack(spacing: metrics.sectionSpacing) {
+        let leftWidth = metrics.landscapeHeartPanelWidth
+        let rightWidth = metrics.landscapeWorkoutPanelWidth
+
+        return VStack(spacing: metrics.sectionSpacing) {
             HeaderView(
                 workoutManager: viewModel.workoutManager,
                 metrics: metrics
             )
             .frame(height: metrics.activeHeaderHeight)
 
-            HStack(spacing: metrics.landscapePanelGap) {
+            HStack(alignment: .top, spacing: metrics.landscapePanelGap) {
                 HeartRatePanel(
                     manager: viewModel.heartRateManager,
                     metrics: metrics,
                     isCompact: true
                 )
-                .frame(width: metrics.landscapeHeartPanelWidth)
-                .frame(maxHeight: .infinity)
-                .layoutPriority(0)
+                .frame(width: leftWidth, height: metrics.activeMainHeight)
 
                 WorkoutPanel(
                     workoutManager: viewModel.workoutManager,
@@ -109,11 +110,9 @@ struct GymDisplayView: View {
                     metrics: metrics,
                     isLandscape: true
                 )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .layoutPriority(1)
+                .frame(width: rightWidth, height: metrics.activeMainHeight)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .frame(height: metrics.activeMainHeight)
+            .frame(width: metrics.availableWidth, height: metrics.activeMainHeight, alignment: .center)
         }
         .frame(maxWidth: .infinity, maxHeight: metrics.activeDashboardHeight)
     }
@@ -165,6 +164,14 @@ private struct DashboardMetrics {
 
     var landscapeHeartPanelWidth: CGFloat {
         availableWidth * 0.255
+    }
+
+    var landscapeWorkoutPanelWidth: CGFloat {
+        max(availableWidth - landscapeHeartPanelWidth - landscapePanelGap, 0)
+    }
+
+    var mockHeartRateButtonWidth: CGFloat {
+        isLandscape ? clamp(landscapeHeartPanelWidth * 0.22, min: 34, max: 44) : 72
     }
 
     var activeHeaderHeight: CGFloat {
@@ -511,20 +518,23 @@ private struct MockControls: View {
                 manager.decreaseHeartRate()
             }
             .buttonStyle(MockHeartRateButtonStyle(metrics: metrics))
+            .frame(width: metrics.mockHeartRateButtonWidth)
 
             Toggle("Demo", isOn: $manager.isDemoModeEnabled)
                 .toggleStyle(.switch)
                 .font(.system(size: metrics.isLandscape ? 11 : 14, weight: .bold))
                 .lineLimit(1)
-                .fixedSize()
                 .scaleEffect(metrics.isLandscape ? 0.9 : 1)
+                .frame(maxWidth: .infinity)
 
             Button("+ HR") {
                 print("[UI] + HR tapped")
                 manager.increaseHeartRate()
             }
             .buttonStyle(MockHeartRateButtonStyle(metrics: metrics))
+            .frame(width: metrics.mockHeartRateButtonWidth)
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
