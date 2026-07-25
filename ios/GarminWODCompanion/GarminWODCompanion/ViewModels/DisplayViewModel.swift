@@ -214,6 +214,8 @@ final class DisplayViewModel: ObservableObject {
                 return "DEVICE FOUND"
             case .connecting:
                 return "CONNECTING"
+            case .reconnecting:
+                return "RECONNECTING…"
             case .connected:
                 return "\(compactConnectedDeviceName) CONNECTED"
             case .disconnected:

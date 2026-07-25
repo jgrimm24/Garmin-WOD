@@ -27,6 +27,7 @@ enum BluetoothHeartRateConnectionState: String {
     case scanning = "Scanning"
     case deviceFound = "Device found"
     case connecting = "Connecting"
+    case reconnecting = "Reconnecting…"
     case connected = "Connected"
     case disconnected = "Disconnected"
     case failed = "Failed"
@@ -48,6 +49,7 @@ final class BluetoothHeartRateManager: NSObject, ObservableObject {
     static let bodySensorLocationUUID = CBUUID(string: "2A38")
     static let batteryServiceUUID = CBUUID(string: "180F")
     static let batteryLevelUUID = CBUUID(string: "2A19")
+    static let lastHeartRatePeripheralUUIDKey = "lastHeartRatePeripheralUUID"
 
     @Published private(set) var connectionState: BluetoothHeartRateConnectionState = .idle
     @Published private(set) var discoveredDevices: [BluetoothHeartRateDevice] = []
@@ -65,8 +67,12 @@ final class BluetoothHeartRateManager: NSObject, ObservableObject {
     private var centralManager: CBCentralManager?
     private var peripheralsByID: [UUID: CBPeripheral] = [:]
     private var connectedPeripheral: CBPeripheral?
+    private var reconnectTimeoutTimer: Timer?
+    private var autoReconnectPeripheralID: UUID?
+    private var hasAttemptedAutoReconnect = false
     private var reconnectAttempts = 0
     private let maximumReconnectAttempts = 2
+    private let reconnectTimeoutSeconds: TimeInterval = 8
     private var sampleCount = 0
     private var sampleTotal = 0
 
@@ -75,12 +81,14 @@ final class BluetoothHeartRateManager: NSObject, ObservableObject {
         super.init()
         print("[LIFECYCLE] BluetoothHeartRateManager init")
         resetZoneTimes()
+        ensureCentralManager()
     }
 
     deinit {
         print("[LIFECYCLE] BluetoothHeartRateManager deinit")
+        reconnectTimeoutTimer?.invalidate()
         stopScan()
-        disconnect()
+        disconnect(clearSavedPeripheral: false)
     }
 
     var currentZone: HeartRateZone {
@@ -130,6 +138,7 @@ final class BluetoothHeartRateManager: NSObject, ObservableObject {
         case .unauthorized:
             setState(.bluetoothUnauthorized)
         case .poweredOff:
+            hasAttemptedAutoReconnect = false
             setState(.poweredOff)
         case .unsupported, .unknown, .resetting:
             setState(.bluetoothUnavailable)
@@ -152,17 +161,51 @@ final class BluetoothHeartRateManager: NSObject, ObservableObject {
             return
         }
 
-        stopScan()
-        reconnectAttempts = 0
-        connectedPeripheral = peripheral
-        connectedPeripheralName = displayName(for: peripheral)
-        peripheral.delegate = self
-        setState(.connecting)
-        centralManager?.connect(peripheral, options: nil)
+        connect(to: peripheral, state: .connecting, isAutoReconnect: false)
     }
 
     func disconnect() {
+        disconnect(clearSavedPeripheral: true)
+    }
+
+    func attemptAutoReconnectIfPossible() {
+        ensureCentralManager()
+
+        guard let centralManager, centralManager.state == .poweredOn else {
+            return
+        }
+
+        guard !hasAttemptedAutoReconnect,
+              connectedPeripheral == nil,
+              connectionState != .scanning,
+              connectionState != .connecting,
+              connectionState != .reconnecting,
+              let savedIdentifier = savedPeripheralIdentifier else {
+            return
+        }
+
+        hasAttemptedAutoReconnect = true
+        let peripherals = centralManager.retrievePeripherals(withIdentifiers: [savedIdentifier])
+
+        guard let peripheral = peripherals.first else {
+            errorMessage = "Last heart-rate monitor was not found."
+            setState(.disconnected)
+            return
+        }
+
+        peripheralsByID[peripheral.identifier] = peripheral
+        connect(to: peripheral, state: .reconnecting, isAutoReconnect: true)
+    }
+
+    private func disconnect(clearSavedPeripheral: Bool) {
+        reconnectTimeoutTimer?.invalidate()
+        reconnectTimeoutTimer = nil
         stopScan()
+
+        if clearSavedPeripheral {
+            clearSavedPeripheralIdentifier()
+        }
+
         guard let connectedPeripheral else {
             setState(.idle)
             return
@@ -175,7 +218,7 @@ final class BluetoothHeartRateManager: NSObject, ObservableObject {
     }
 
     func rescan() {
-        disconnect()
+        disconnect(clearSavedPeripheral: false)
         startScan()
     }
 
@@ -222,6 +265,66 @@ final class BluetoothHeartRateManager: NSObject, ObservableObject {
         centralManager = CBCentralManager(delegate: self, queue: .main)
     }
 
+    private var savedPeripheralIdentifier: UUID? {
+        guard let value = UserDefaults.standard.string(forKey: Self.lastHeartRatePeripheralUUIDKey) else {
+            return nil
+        }
+
+        return UUID(uuidString: value)
+    }
+
+    private func savePeripheralIdentifier(_ identifier: UUID) {
+        UserDefaults.standard.set(identifier.uuidString, forKey: Self.lastHeartRatePeripheralUUIDKey)
+        print("[BLE] saved peripheral UUID=\(identifier.uuidString)")
+    }
+
+    private func clearSavedPeripheralIdentifier() {
+        UserDefaults.standard.removeObject(forKey: Self.lastHeartRatePeripheralUUIDKey)
+        print("[BLE] cleared saved peripheral UUID")
+    }
+
+    private func connect(
+        to peripheral: CBPeripheral,
+        state: BluetoothHeartRateConnectionState,
+        isAutoReconnect: Bool
+    ) {
+        reconnectTimeoutTimer?.invalidate()
+        reconnectTimeoutTimer = nil
+        stopScan()
+        errorMessage = nil
+        reconnectAttempts = 0
+        autoReconnectPeripheralID = isAutoReconnect ? peripheral.identifier : nil
+        connectedPeripheral = peripheral
+        connectedPeripheralName = displayName(for: peripheral)
+        peripheral.delegate = self
+        setState(state)
+        centralManager?.connect(peripheral, options: nil)
+
+        if isAutoReconnect {
+            scheduleReconnectTimeout(for: peripheral.identifier)
+        }
+    }
+
+    private func scheduleReconnectTimeout(for identifier: UUID) {
+        reconnectTimeoutTimer = Timer.scheduledTimer(withTimeInterval: reconnectTimeoutSeconds, repeats: false) { [weak self] _ in
+            guard let self,
+                  self.connectionState == .reconnecting,
+                  self.autoReconnectPeripheralID == identifier else {
+                return
+            }
+
+            self.errorMessage = "Unable to reconnect to last heart-rate monitor."
+            if let connectedPeripheral = self.connectedPeripheral,
+               connectedPeripheral.identifier == identifier {
+                self.centralManager?.cancelPeripheralConnection(connectedPeripheral)
+            }
+            self.connectedPeripheral = nil
+            self.connectedPeripheralName = nil
+            self.autoReconnectPeripheralID = nil
+            self.setState(.disconnected)
+        }
+    }
+
     private func recordHeartRateSample(_ heartRate: Int) {
         guard (30...250).contains(heartRate) else {
             return
@@ -258,6 +361,7 @@ extension BluetoothHeartRateManager: CBCentralManagerDelegate {
         switch central.state {
         case .poweredOn:
             setState(.idle)
+            attemptAutoReconnectIfPossible()
         case .unauthorized:
             setState(.bluetoothUnauthorized)
         case .poweredOff:
@@ -294,9 +398,13 @@ extension BluetoothHeartRateManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        reconnectTimeoutTimer?.invalidate()
+        reconnectTimeoutTimer = nil
+        autoReconnectPeripheralID = nil
         connectedPeripheral = peripheral
         connectedPeripheralName = displayName(for: peripheral)
         reconnectAttempts = 0
+        savePeripheralIdentifier(peripheral.identifier)
         setState(.connected)
         peripheral.discoverServices([
             Self.heartRateServiceUUID,
@@ -305,11 +413,18 @@ extension BluetoothHeartRateManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        let wasAutoReconnect = autoReconnectPeripheralID == peripheral.identifier
+        reconnectTimeoutTimer?.invalidate()
+        reconnectTimeoutTimer = nil
+        autoReconnectPeripheralID = nil
         errorMessage = error?.localizedDescription ?? "Unable to connect."
-        setState(.failed)
+        setState(wasAutoReconnect ? .disconnected : .failed)
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        reconnectTimeoutTimer?.invalidate()
+        reconnectTimeoutTimer = nil
+        autoReconnectPeripheralID = nil
         errorMessage = error?.localizedDescription
         setState(.disconnected)
 
