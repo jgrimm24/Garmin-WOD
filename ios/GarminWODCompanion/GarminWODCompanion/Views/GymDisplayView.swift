@@ -178,19 +178,19 @@ private struct DashboardMetrics {
     }
 
     var outerPadding: CGFloat {
-        isLandscape ? 8 : 10
+        isLandscape ? 10 : 10
     }
 
     var cardPadding: CGFloat {
-        isLandscape ? 10 : 14
+        isLandscape ? 12 : 14
     }
 
     var heartPanelPadding: CGFloat {
-        isLandscape ? 7 : cardPadding
+        isLandscape ? 10 : cardPadding
     }
 
     var landscapePanelGap: CGFloat {
-        isLandscape ? clamp(size.width * 0.018, min: 10, max: 16) : sectionSpacing
+        isLandscape ? 14 : sectionSpacing
     }
 
     var landscapePanelWidthBudget: CGFloat {
@@ -198,7 +198,7 @@ private struct DashboardMetrics {
     }
 
     var landscapeHeartPanelWidth: CGFloat {
-        landscapePanelWidthBudget * 0.42
+        landscapePanelWidthBudget * 0.38
     }
 
     var landscapeWorkoutPanelWidth: CGFloat {
@@ -210,11 +210,11 @@ private struct DashboardMetrics {
     }
 
     var activeHeaderHeight: CGFloat {
-        clamp(availableHeight * 0.16, min: 54, max: 68)
+        clamp(availableHeight * 0.13, min: 52, max: 64)
     }
 
     var activeControlHeight: CGFloat {
-        clamp(availableHeight * 0.115, min: 44, max: 50)
+        clamp(availableHeight * 0.105, min: 46, max: 54)
     }
 
     var activeDashboardHeight: CGFloat {
@@ -263,7 +263,7 @@ private struct DashboardMetrics {
     }
 
     var sectionSpacing: CGFloat {
-        isLandscape ? 8 : 12
+        isLandscape ? 10 : 12
     }
 
     var headerTitleSize: CGFloat {
