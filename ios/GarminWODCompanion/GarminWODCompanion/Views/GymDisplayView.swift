@@ -836,12 +836,16 @@ private struct WorkoutSummaryScreen: View {
     }
 
     private func landscapeSummary(size: CGSize) -> some View {
-        VStack(spacing: landscapeSpacing(size)) {
+        let spacing = landscapeSpacing(size)
+
+        return VStack(spacing: spacing) {
             summaryHeader
                 .frame(maxWidth: .infinity)
+                .frame(height: landscapeHeaderHeight(size))
+                .layoutPriority(3)
 
-            HStack(alignment: .top, spacing: landscapeSpacing(size)) {
-                VStack(spacing: landscapeSpacing(size)) {
+            HStack(alignment: .top, spacing: spacing) {
+                VStack(spacing: spacing) {
                     elapsedHero(size: size, isLandscape: true)
 
                     SummaryMetricCard(title: "Avg HR", value: "\(summary.averageHeartRate)", metrics: metrics)
@@ -854,7 +858,7 @@ private struct WorkoutSummaryScreen: View {
                 .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
                 .overlay(summaryBorder)
 
-                VStack(spacing: landscapeSpacing(size)) {
+                VStack(spacing: spacing) {
                     SummaryZoneBreakdown(summary: summary, metrics: metrics)
                         .frame(maxHeight: .infinity)
 
@@ -863,10 +867,12 @@ private struct WorkoutSummaryScreen: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .layoutPriority(1)
 
             newWorkoutButton
                 .frame(maxWidth: size.width * 0.72)
                 .frame(height: buttonHeight(size))
+                .layoutPriority(3)
         }
         .padding(outerPadding(size))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -875,12 +881,12 @@ private struct WorkoutSummaryScreen: View {
     private var summaryHeader: some View {
         VStack(spacing: metrics.isLandscape ? 2 : 3) {
             Text("Workout Complete")
-                .font(.system(size: metrics.isLandscape ? 24 : 28, weight: .black, design: .rounded))
+                .font(.system(size: metrics.isLandscape ? 21 : 28, weight: .black, design: .rounded))
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
 
             Text("\(summary.workoutName) • \(summary.workoutType.rawValue)")
-                .font(.system(size: metrics.isLandscape ? 13 : 14, weight: .heavy, design: .rounded))
+                .font(.system(size: metrics.isLandscape ? 12 : 14, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white.opacity(0.76))
                 .lineLimit(1)
                 .minimumScaleFactor(0.55)
@@ -891,7 +897,7 @@ private struct WorkoutSummaryScreen: View {
     private func elapsedHero(size: CGSize, isLandscape: Bool) -> some View {
         VStack(spacing: isLandscape ? 2 : 4) {
             Text(summary.elapsedTimeText)
-                .font(.system(size: isLandscape ? clamp(size.height * 0.18, min: 56, max: 82) : clamp(size.height * 0.095, min: 50, max: 72), weight: .black, design: .rounded))
+                .font(.system(size: isLandscape ? clamp(size.height * 0.16, min: 50, max: 72) : clamp(size.height * 0.095, min: 50, max: 72), weight: .black, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
@@ -917,7 +923,7 @@ private struct WorkoutSummaryScreen: View {
     }
 
     private func outerPadding(_ size: CGSize) -> CGFloat {
-        metrics.isLandscape ? clamp(size.height * 0.025, min: 8, max: 14) : clamp(size.width * 0.025, min: 9, max: 14)
+        metrics.isLandscape ? clamp(size.height * 0.015, min: 5, max: 8) : clamp(size.width * 0.025, min: 9, max: 14)
     }
 
     private func portraitSpacing(_ size: CGSize) -> CGFloat {
@@ -925,15 +931,19 @@ private struct WorkoutSummaryScreen: View {
     }
 
     private func landscapeSpacing(_ size: CGSize) -> CGFloat {
-        clamp(size.height * 0.023, min: 8, max: 13)
+        clamp(size.height * 0.016, min: 5, max: 8)
     }
 
     private func buttonHeight(_ size: CGSize) -> CGFloat {
-        metrics.isLandscape ? clamp(size.height * 0.115, min: 44, max: 52) : clamp(size.height * 0.055, min: 44, max: 52)
+        metrics.isLandscape ? clamp(size.height * 0.10, min: 42, max: 46) : clamp(size.height * 0.055, min: 44, max: 52)
     }
 
     private func summaryCardPadding(_ size: CGSize) -> CGFloat {
-        metrics.isLandscape ? clamp(size.height * 0.025, min: 8, max: 12) : 10
+        metrics.isLandscape ? clamp(size.height * 0.015, min: 6, max: 8) : 10
+    }
+
+    private func landscapeHeaderHeight(_ size: CGSize) -> CGFloat {
+        clamp(size.height * 0.125, min: 40, max: 48)
     }
 
     private func landscapeLeftWidth(_ size: CGSize) -> CGFloat {
@@ -954,19 +964,19 @@ private struct SummaryMetricCard: View {
     var body: some View {
         VStack(spacing: metrics.isLandscape ? 3 : 4) {
             Text(title)
-                .font(.system(size: metrics.isLandscape ? 12 : 12.5, weight: .heavy, design: .rounded))
+                .font(.system(size: metrics.isLandscape ? 11 : 12.5, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white.opacity(0.64))
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
 
             Text(value)
-                .font(.system(size: metrics.isLandscape ? 24 : 22, weight: .black, design: .rounded))
+                .font(.system(size: metrics.isLandscape ? 20 : 22, weight: .black, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.55)
         }
-        .frame(maxWidth: .infinity, minHeight: metrics.isLandscape ? 58 : 54)
-        .padding(.horizontal, metrics.isLandscape ? 10 : 6)
+        .frame(maxWidth: .infinity, minHeight: metrics.isLandscape ? 46 : 54)
+        .padding(.horizontal, metrics.isLandscape ? 6 : 6)
         .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
@@ -980,7 +990,7 @@ private struct SummaryZoneBreakdown: View {
     let metrics: DashboardMetrics
 
     var body: some View {
-        VStack(alignment: .leading, spacing: metrics.isLandscape ? 7 : 6) {
+        VStack(alignment: .leading, spacing: metrics.isLandscape ? 4 : 6) {
             sectionTitle("HR Zone Time")
 
             ForEach(summary.zoneTimes, id: \.label) { item in
@@ -996,12 +1006,11 @@ private struct SummaryZoneBreakdown: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
-                .font(.system(size: metrics.isLandscape ? 14 : 13.5, weight: .bold, design: .rounded))
+                .font(.system(size: metrics.isLandscape ? 12.5 : 13.5, weight: .bold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.84))
-                .padding(.vertical, metrics.isLandscape ? 1 : 0)
             }
         }
-        .padding(metrics.isLandscape ? 12 : 11)
+        .padding(metrics.isLandscape ? 8 : 11)
         .frame(maxWidth: .infinity, maxHeight: metrics.isLandscape ? .infinity : nil, alignment: .topLeading)
         .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
         .overlay(
@@ -1012,7 +1021,7 @@ private struct SummaryZoneBreakdown: View {
 
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: metrics.isLandscape ? 13 : 13.5, weight: .black, design: .rounded))
+            .font(.system(size: metrics.isLandscape ? 12.5 : 13.5, weight: .black, design: .rounded))
             .foregroundStyle(.yellow)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
@@ -1024,9 +1033,9 @@ private struct SummaryProgressCard: View {
     let metrics: DashboardMetrics
 
     var body: some View {
-        VStack(alignment: .leading, spacing: metrics.isLandscape ? 7 : 6) {
+        VStack(alignment: .leading, spacing: metrics.isLandscape ? 4 : 6) {
             Text("Final Progress")
-                .font(.system(size: metrics.isLandscape ? 13 : 13.5, weight: .black, design: .rounded))
+                .font(.system(size: metrics.isLandscape ? 12.5 : 13.5, weight: .black, design: .rounded))
                 .foregroundStyle(.yellow)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -1034,10 +1043,10 @@ private struct SummaryProgressCard: View {
             summaryLine(title: "Round", value: "\(summary.finalRound)")
             summaryLine(title: "Station", value: "\(summary.finalStationIndex + 1)")
             if summary.finalMovementName != "None" {
-                summaryLine(title: "Movement", value: summary.finalMovementName)
+                movementLine(value: summary.finalMovementName)
             }
         }
-        .padding(metrics.isLandscape ? 12 : 11)
+        .padding(metrics.isLandscape ? 8 : 11)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
         .overlay(
@@ -1061,6 +1070,22 @@ private struct SummaryProgressCard: View {
                 .lineLimit(metrics.isLandscape ? 1 : 2)
                 .minimumScaleFactor(0.6)
         }
-        .font(.system(size: metrics.isLandscape ? 14 : 13.5, weight: .bold, design: .rounded))
+        .font(.system(size: metrics.isLandscape ? 12.5 : 13.5, weight: .bold, design: .rounded))
+    }
+
+    private func movementLine(value: String) -> some View {
+        VStack(alignment: .leading, spacing: metrics.isLandscape ? 1 : 2) {
+            Text("Movement")
+                .foregroundStyle(.white.opacity(0.62))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            Text(value)
+                .foregroundStyle(.white)
+                .lineLimit(metrics.isLandscape ? 1 : 2)
+                .minimumScaleFactor(0.6)
+        }
+        .font(.system(size: metrics.isLandscape ? 12.5 : 13.5, weight: .bold, design: .rounded))
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
