@@ -7,6 +7,92 @@ func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
     }
 }
 
+final class StubLatestWorkoutClient: LatestWorkoutServing {
+    var fetchCount = 0
+    var result: Result<WorkoutContract, LatestWorkoutError>?
+    private var pendingCompletions: [(Result<WorkoutContract, LatestWorkoutError>) -> Void] = []
+
+    init(result: Result<WorkoutContract, LatestWorkoutError>? = nil) {
+        self.result = result
+    }
+
+    func fetchLatestWorkout(completion: @escaping (Result<WorkoutContract, LatestWorkoutError>) -> Void) {
+        fetchCount += 1
+        if let result {
+            completion(result)
+        } else {
+            pendingCompletions.append(completion)
+        }
+    }
+
+    func complete(_ result: Result<WorkoutContract, LatestWorkoutError>) {
+        let completions = pendingCompletions
+        pendingCompletions = []
+        completions.forEach { $0(result) }
+    }
+}
+
+final class MemoryWorkoutCache: WorkoutCaching {
+    var cachedWorkout: WorkoutContract?
+    var saveCount = 0
+
+    init(cachedWorkout: WorkoutContract? = nil) {
+        self.cachedWorkout = cachedWorkout
+    }
+
+    func loadCachedWorkout() -> WorkoutContract? {
+        cachedWorkout
+    }
+
+    func saveCachedWorkout(_ workout: WorkoutContract) -> Bool {
+        saveCount += 1
+        cachedWorkout = workout
+        return true
+    }
+}
+
+func latestWorkoutFixture(title: String = "Roney") -> Data {
+    """
+    {
+      "schemaVersion": 1,
+      "id": "latest-roney",
+      "title": "\(title)",
+      "type": "For Time",
+      "durationMinutes": null,
+      "rounds": 4,
+      "notes": ["Hero workout"],
+      "sourceText": "Roney\\n4 rounds for time",
+      "createdAt": "2026-07-01T00:00:00.000Z",
+      "updatedAt": "2026-07-01T00:00:00.000Z",
+      "stations": [
+        { "id": "run-1", "name": "Run", "reps": null, "calories": null, "meters": 200, "weightLb": null, "maleWeightLb": null, "femaleWeightLb": null, "workSeconds": null, "notes": "" },
+        { "id": "thrusters", "name": "Thrusters", "reps": 11, "calories": null, "meters": null, "weightLb": 135, "maleWeightLb": 135, "femaleWeightLb": 95, "workSeconds": null, "notes": "11 Thrusters, 135/95 lbs" },
+        { "id": "run-2", "name": "Run", "reps": null, "calories": null, "meters": 200, "weightLb": null, "maleWeightLb": null, "femaleWeightLb": null, "workSeconds": null, "notes": "" },
+        { "id": "push-press", "name": "Push Press", "reps": 11, "calories": null, "meters": null, "weightLb": 135, "maleWeightLb": 135, "femaleWeightLb": 95, "workSeconds": null, "notes": "11 Push Press, 135/95 lbs" },
+        { "id": "run-3", "name": "Run", "reps": null, "calories": null, "meters": 200, "weightLb": null, "maleWeightLb": null, "femaleWeightLb": null, "workSeconds": null, "notes": "" },
+        { "id": "bench-press", "name": "Bench Presses", "reps": 11, "calories": null, "meters": null, "weightLb": 135, "maleWeightLb": 135, "femaleWeightLb": 95, "workSeconds": null, "notes": "11 Bench Presses, 135/95 lbs" }
+      ]
+    }
+    """.data(using: .utf8)!
+}
+
+func makeWorkout(id: String, title: String, type: WorkoutType = .amrap, rounds: Int? = nil) -> WorkoutContract {
+    WorkoutContract(
+        schemaVersion: 1,
+        id: id,
+        title: title,
+        type: type,
+        durationMinutes: type == .amrap ? 15 : nil,
+        rounds: rounds,
+        stations: [
+            WorkoutStation(id: "\(id)-row", name: "Row", calories: 15),
+            WorkoutStation(id: "\(id)-cleans", name: "Power Cleans", reps: 8, weightLb: 135, maleWeightLb: 135, femaleWeightLb: 95)
+        ],
+        notes: [],
+        sourceText: title
+    )
+}
+
 let workout = WorkoutContract(
     schemaVersion: 1,
     id: "state-test",
@@ -163,5 +249,121 @@ expect(
     BluetoothHeartRateManager.parseHeartRateMeasurement(Data([0x01, 0x96, 0x00, 0x10])) == 150,
     "16-bit HR packet with optional trailing bytes should parse BPM"
 )
+
+print("[TEST] Latest workout contract decoding")
+let decodedLatest = try JSONDecoder().decode(WorkoutContract.self, from: latestWorkoutFixture())
+expect(decodedLatest.title == "Roney", "latest fixture should decode workout title")
+expect(decodedLatest.type == .forTime, "latest fixture should decode workout type")
+expect(decodedLatest.rounds == 4, "latest fixture should decode rounds")
+expect(decodedLatest.stations.map(\.name) == ["Run", "Thrusters", "Run", "Push Press", "Run", "Bench Presses"], "latest fixture should preserve station order")
+expect(decodedLatest.stations[1].maleWeightLb == 135, "latest fixture should preserve male prescribed weight")
+expect(decodedLatest.stations[1].femaleWeightLb == 95, "latest fixture should preserve female prescribed weight")
+expect(decodedLatest.stations[1].weightLb == 135, "latest fixture should preserve compatibility weight")
+expect(decodedLatest.stations[0].distanceMeters == 200, "latest fixture should decode meters into distanceMeters")
+
+do {
+    _ = try WorkoutAPIClient.decodeLatestWorkoutResponse(data: Data("{".utf8), statusCode: 200)
+    expect(false, "malformed JSON should be rejected")
+} catch {
+    expect(true, "malformed JSON rejected")
+}
+
+do {
+    _ = try WorkoutAPIClient.decodeLatestWorkoutResponse(data: latestWorkoutFixture(), statusCode: 500)
+    expect(false, "unsuccessful HTTP status should be rejected")
+} catch let error as LatestWorkoutError {
+    expect(error == .invalidStatus(500), "HTTP 500 should produce invalidStatus")
+} catch {
+    expect(false, "HTTP 500 should produce LatestWorkoutError")
+}
+
+print("[TEST] Latest workout startup and refresh behavior")
+let cachedWorkout = makeWorkout(id: "cached", title: "Cached WOD", type: .forTime, rounds: 3)
+let webWorkout = makeWorkout(id: "web", title: "Web WOD", type: .amrap)
+let successCache = MemoryWorkoutCache(cachedWorkout: cachedWorkout)
+let successClient = StubLatestWorkoutClient(result: .success(webWorkout))
+let successViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: successClient,
+    workoutCache: successCache
+)
+successViewModel.loadLatestWorkoutIfNeeded()
+expect(successClient.fetchCount == 1, "startup should make one web request")
+expect(successViewModel.workoutManager.workout.id == "web", "web success should apply while idle")
+expect(successCache.cachedWorkout?.id == "web", "web success should be cached")
+expect(successCache.saveCount == 1, "web success should save cache once")
+
+let runningClient = StubLatestWorkoutClient()
+let runningCache = MemoryWorkoutCache(cachedWorkout: cachedWorkout)
+let runningViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: cachedWorkout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: runningClient,
+    workoutCache: runningCache
+)
+runningViewModel.refreshLatestWorkout()
+runningViewModel.startWorkout()
+runningClient.complete(.success(webWorkout))
+expect(runningViewModel.workoutManager.workout.id == "cached", "web response should not replace running workout")
+expect(runningCache.cachedWorkout?.id == "cached", "ignored running response should not overwrite cache")
+
+let failureClient = StubLatestWorkoutClient(result: .failure(.invalidStatus(404)))
+let failureViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: cachedWorkout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: failureClient,
+    workoutCache: MemoryWorkoutCache(cachedWorkout: cachedWorkout)
+)
+failureViewModel.refreshLatestWorkout()
+expect(failureViewModel.workoutManager.workout.id == "cached", "failed refresh should keep existing workout")
+
+let repeatedClient = StubLatestWorkoutClient()
+let repeatedViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: repeatedClient,
+    workoutCache: MemoryWorkoutCache()
+)
+repeatedViewModel.loadLatestWorkoutIfNeeded()
+repeatedViewModel.loadLatestWorkoutIfNeeded()
+expect(repeatedClient.fetchCount == 1, "repeated lifecycle callbacks should not duplicate startup requests")
+repeatedClient.complete(.failure(.invalidStatus(404)))
+
+print("[TEST] Latest workout file cache behavior")
+let cacheDirectory = FileManager.default.temporaryDirectory
+    .appendingPathComponent("garmin-wod-cache-tests-\(UUID().uuidString)", isDirectory: true)
+try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+let cacheURL = cacheDirectory.appendingPathComponent("latest-workout.json")
+let fileCache = WorkoutCache(fileURL: cacheURL)
+expect(fileCache.saveCachedWorkout(webWorkout), "valid downloaded workout should save to file cache")
+expect(fileCache.loadCachedWorkout()?.id == "web", "valid downloaded workout should load from file cache")
+
+try Data("not json".utf8).write(to: cacheURL)
+let invalidCacheViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: StubLatestWorkoutClient(result: .failure(.invalidStatus(404))),
+    workoutCache: WorkoutCache(fileURL: cacheURL)
+)
+invalidCacheViewModel.loadLatestWorkoutIfNeeded()
+expect(invalidCacheViewModel.workoutManager.workout.title == "Roney", "missing or invalid cache should fall back to Roney")
+
+let protectedCache = MemoryWorkoutCache(cachedWorkout: cachedWorkout)
+let invalidResponseViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: StubLatestWorkoutClient(result: .failure(.transport("bad json"))),
+    workoutCache: protectedCache
+)
+invalidResponseViewModel.loadLatestWorkoutIfNeeded()
+expect(protectedCache.cachedWorkout?.id == "cached", "invalid response should not overwrite valid cache")
+expect(invalidResponseViewModel.workoutManager.workout.id == "cached", "invalid response should keep cached workout displayed")
 
 print("[TEST] PASS: DisplayViewModel state transitions")

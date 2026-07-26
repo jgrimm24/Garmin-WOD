@@ -51,6 +51,7 @@ struct GymDisplayView: View {
             }
             .onAppear {
                 viewModel.selectedHeartRateSource = .bluetooth
+                viewModel.loadLatestWorkoutIfNeeded()
                 viewModel.logLayout(width: geometry.size.width, height: geometry.size.height, isLandscape: isLandscape)
             }
             .onChange(of: geometry.size) { _, newSize in
@@ -242,6 +243,28 @@ private struct HeaderView: View {
                 Text(workoutManager.workout.type.rawValue.uppercased())
                     .font(.system(size: metrics.headerMetaSize, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.8))
+
+                if workoutManager.status == .idle {
+                    HStack(spacing: 8) {
+                        Button {
+                            viewModel.refreshLatestWorkout()
+                        } label: {
+                            Text(viewModel.isRefreshingLatestWorkout ? "Refreshing…" : "Refresh WOD")
+                                .font(.system(size: max(metrics.headerMetaSize - 2, 10), weight: .black, design: .rounded))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.yellow)
+                        .disabled(viewModel.isRefreshingLatestWorkout)
+
+                        Text(viewModel.latestWorkoutStatusText)
+                            .font(.system(size: max(metrics.headerMetaSize - 3, 10), weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.62))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                    }
+                }
             }
 
             Spacer(minLength: 8)

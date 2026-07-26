@@ -7,20 +7,29 @@ final class DisplayViewModel: ObservableObject {
     let bluetoothHeartRateManager: BluetoothHeartRateManager
 
     @Published private(set) var workoutSummary: WorkoutSummary?
+    @Published private(set) var isRefreshingLatestWorkout: Bool = false
+    @Published private(set) var latestWorkoutStatusText: String = "Roney sample"
     @Published var selectedHeartRateSource: HeartRateSource = .mock
 
     private var zoneTimer: Timer?
+    private let latestWorkoutClient: LatestWorkoutServing
+    private let workoutCache: WorkoutCaching
+    private var hasLoadedStartupWorkout = false
 
     init(
         workoutManager: WorkoutManager = WorkoutManager(),
         timerManager: TimerManager = TimerManager(),
         heartRateManager: MockHeartRateManager = MockHeartRateManager(),
-        bluetoothHeartRateManager: BluetoothHeartRateManager = BluetoothHeartRateManager()
+        bluetoothHeartRateManager: BluetoothHeartRateManager = BluetoothHeartRateManager(),
+        latestWorkoutClient: LatestWorkoutServing = WorkoutAPIClient(),
+        workoutCache: WorkoutCaching = WorkoutCache()
     ) {
         self.workoutManager = workoutManager
         self.timerManager = timerManager
         self.heartRateManager = heartRateManager
         self.bluetoothHeartRateManager = bluetoothHeartRateManager
+        self.latestWorkoutClient = latestWorkoutClient
+        self.workoutCache = workoutCache
         print("[LIFECYCLE] DisplayViewModel init")
         scheduleZoneTimer()
     }
@@ -58,6 +67,53 @@ final class DisplayViewModel: ObservableObject {
             startWorkout()
         }
         logState("primaryAction after")
+    }
+
+    func loadLatestWorkoutIfNeeded() {
+        guard !hasLoadedStartupWorkout else {
+            print("[LATEST WOD] startup load skipped; already attempted")
+            return
+        }
+
+        hasLoadedStartupWorkout = true
+
+        guard workoutManager.status == .idle else {
+            print("[LATEST WOD] startup load skipped; status=\(workoutManager.status.rawValue)")
+            return
+        }
+
+        if let cachedWorkout = workoutCache.loadCachedWorkout() {
+            print("[LATEST WOD] loaded cache id=\(cachedWorkout.id) title=\(cachedWorkout.title)")
+            workoutManager.load(cachedWorkout)
+            latestWorkoutStatusText = "CACHE"
+        } else {
+            print("[LATEST WOD] no valid cache; using bundled sample")
+            latestWorkoutStatusText = "Roney sample"
+        }
+
+        refreshLatestWorkout()
+    }
+
+    func refreshLatestWorkout() {
+        guard workoutManager.status == .idle else {
+            print("[LATEST WOD] refresh skipped; status=\(workoutManager.status.rawValue)")
+            return
+        }
+
+        guard !isRefreshingLatestWorkout else {
+            print("[LATEST WOD] refresh skipped; request already running")
+            return
+        }
+
+        print("[LATEST WOD] refresh started")
+        isRefreshingLatestWorkout = true
+        latestWorkoutStatusText = "Refreshing…"
+
+        latestWorkoutClient.fetchLatestWorkout { [weak self] result in
+            self?.performOnMain {
+                self?.handleLatestWorkoutResult(result)
+            }
+        }
     }
 
     func startWorkout() {
@@ -278,6 +334,38 @@ final class DisplayViewModel: ObservableObject {
 
         workoutSummary = summary
         print("[SUMMARY] captured elapsed=\(summary.elapsedSeconds) avgHR=\(summary.averageHeartRate) maxHR=\(summary.maximumHeartRate) movement=\(summary.finalMovementName)")
+    }
+
+    private func handleLatestWorkoutResult(_ result: Result<WorkoutContract, LatestWorkoutError>) {
+        isRefreshingLatestWorkout = false
+
+        guard workoutManager.status == .idle else {
+            print("[LATEST WOD] response ignored; status=\(workoutManager.status.rawValue)")
+            latestWorkoutStatusText = "Current workout locked"
+            return
+        }
+
+        switch result {
+        case .success(let workout):
+            print("[LATEST WOD] web response applied id=\(workout.id) title=\(workout.title) type=\(workout.type.rawValue) stations=\(workout.stations.count)")
+            workoutManager.load(workout)
+            if workoutCache.saveCachedWorkout(workout) {
+                print("[LATEST WOD] cache saved id=\(workout.id)")
+            }
+            latestWorkoutStatusText = "WEB WOD"
+
+        case .failure(let error):
+            print("[LATEST WOD] refresh failed: \(error)")
+            latestWorkoutStatusText = "Refresh failed"
+        }
+    }
+
+    private func performOnMain(_ action: @escaping () -> Void) {
+        if Thread.isMainThread {
+            action()
+        } else {
+            DispatchQueue.main.async(execute: action)
+        }
     }
 
     private var compactConnectedDeviceName: String {
