@@ -25,13 +25,18 @@ function normalizeWorkout(workout) {
 }
 
 function normalizeStation(station) {
+  const maleWeightLb = numberOrNull(station.maleWeightLb === undefined ? station.weightLb : station.maleWeightLb);
+  const femaleWeightLb = numberOrNull(station.femaleWeightLb);
+
   return {
     name: stringOrDefault(station.name, "Station"),
     reps: numberOrNull(station.reps),
     workSeconds: numberOrNull(station.workSeconds),
     calories: station.calories === undefined || station.calories === "" ? null : station.calories,
     meters: numberOrNull(station.meters === undefined ? station.distanceMeters : station.meters),
-    weightLb: numberOrNull(station.weightLb),
+    weightLb: numberOrNull(station.weightLb === undefined || station.weightLb === null ? maleWeightLb : station.weightLb),
+    maleWeightLb,
+    femaleWeightLb,
   };
 }
 
@@ -94,7 +99,7 @@ function renderWorkoutClass(workout) {
                 stationSeconds.add(getContractValue(station, "workSeconds", null));
                 stationCalories.add(getContractValue(station, "calories", null));
                 stationMeters.add(getContractValue(station, "meters", null));
-                stationWeights.add(getContractValue(station, "weightLb", null));
+                stationWeights.add(getContractValue(station, "weightLb", getContractValue(station, "maleWeightLb", null)));
             }
         }
 

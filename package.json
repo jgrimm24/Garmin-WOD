@@ -2,7 +2,9 @@
   "scripts": {
     "start": "node server.js",
     "sync:watch": "node scripts/generate-watch-workout.js",
-    "build:watch": "npm run sync:watch && node scripts/build-watch.js"
+    "build:watch": "npm run sync:watch && node scripts/build-watch.js",
+    "test:parser": "node scripts/validate-importer-parser.js",
+    "test:session": "node tests/workout-session.test.js"
   },
   "dependencies": {}
 }

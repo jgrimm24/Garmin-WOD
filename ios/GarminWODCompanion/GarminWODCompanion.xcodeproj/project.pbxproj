@@ -1,0 +1,424 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0A0000012D00000000000001 /* GarminWODCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001012D00000000000001 /* GarminWODCompanionApp.swift */; };
+		0A0000022D00000000000001 /* WorkoutModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001022D00000000000001 /* WorkoutModels.swift */; };
+		0A0000032D00000000000001 /* HeartRateZone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001032D00000000000001 /* HeartRateZone.swift */; };
+		0A0000042D00000000000001 /* WorkoutContractLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001042D00000000000001 /* WorkoutContractLoader.swift */; };
+		0A0000052D00000000000001 /* WorkoutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001052D00000000000001 /* WorkoutManager.swift */; };
+		0A0000062D00000000000001 /* TimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001062D00000000000001 /* TimerManager.swift */; };
+		0A0000072D00000000000001 /* MockHeartRateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001072D00000000000001 /* MockHeartRateManager.swift */; };
+		0A0000082D00000000000001 /* DisplayViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001082D00000000000001 /* DisplayViewModel.swift */; };
+		0A0000092D00000000000001 /* GymDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001092D00000000000001 /* GymDisplayView.swift */; };
+		0A0000102D00000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0A0001102D00000000000001 /* Assets.xcassets */; };
+		0A0000112D00000000000001 /* roney-sample.json in Resources */ = {isa = PBXBuildFile; fileRef = 0A0001112D00000000000001 /* roney-sample.json */; };
+		0A0000122D00000000000001 /* DebugControlHarnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001132D00000000000001 /* DebugControlHarnessView.swift */; };
+		0A0000132D00000000000001 /* BluetoothHeartRateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001142D00000000000001 /* BluetoothHeartRateManager.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0A0000202D00000000000001 /* GarminWODCompanion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GarminWODCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0A0001012D00000000000001 /* GarminWODCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GarminWODCompanionApp.swift; sourceTree = "<group>"; };
+		0A0001022D00000000000001 /* WorkoutModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutModels.swift; sourceTree = "<group>"; };
+		0A0001032D00000000000001 /* HeartRateZone.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeartRateZone.swift; sourceTree = "<group>"; };
+		0A0001042D00000000000001 /* WorkoutContractLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutContractLoader.swift; sourceTree = "<group>"; };
+		0A0001052D00000000000001 /* WorkoutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutManager.swift; sourceTree = "<group>"; };
+		0A0001062D00000000000001 /* TimerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerManager.swift; sourceTree = "<group>"; };
+		0A0001072D00000000000001 /* MockHeartRateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockHeartRateManager.swift; sourceTree = "<group>"; };
+		0A0001082D00000000000001 /* DisplayViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayViewModel.swift; sourceTree = "<group>"; };
+		0A0001092D00000000000001 /* GymDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymDisplayView.swift; sourceTree = "<group>"; };
+		0A0001102D00000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		0A0001112D00000000000001 /* roney-sample.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "roney-sample.json"; sourceTree = "<group>"; };
+		0A0001122D00000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		0A0001132D00000000000001 /* DebugControlHarnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugControlHarnessView.swift; sourceTree = "<group>"; };
+		0A0001142D00000000000001 /* BluetoothHeartRateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothHeartRateManager.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0A0000722D00000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0A0000302D00000000000001 = {
+			isa = PBXGroup;
+			children = (
+				0A0000402D00000000000001 /* GarminWODCompanion */,
+				0A0000502D00000000000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		0A0000402D00000000000001 /* GarminWODCompanion */ = {
+			isa = PBXGroup;
+			children = (
+				0A0001012D00000000000001 /* GarminWODCompanionApp.swift */,
+				0A0000602D00000000000001 /* Models */,
+				0A0000612D00000000000001 /* Managers */,
+				0A0000622D00000000000001 /* ViewModels */,
+				0A0000632D00000000000001 /* Views */,
+				0A0000642D00000000000001 /* Resources */,
+				0A0001102D00000000000001 /* Assets.xcassets */,
+				0A0001122D00000000000001 /* Info.plist */,
+			);
+			path = GarminWODCompanion;
+			sourceTree = "<group>";
+		};
+		0A0000502D00000000000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0A0000202D00000000000001 /* GarminWODCompanion.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		0A0000602D00000000000001 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				0A0001022D00000000000001 /* WorkoutModels.swift */,
+				0A0001032D00000000000001 /* HeartRateZone.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		0A0000612D00000000000001 /* Managers */ = {
+			isa = PBXGroup;
+			children = (
+				0A0001042D00000000000001 /* WorkoutContractLoader.swift */,
+				0A0001052D00000000000001 /* WorkoutManager.swift */,
+				0A0001062D00000000000001 /* TimerManager.swift */,
+				0A0001072D00000000000001 /* MockHeartRateManager.swift */,
+				0A0001142D00000000000001 /* BluetoothHeartRateManager.swift */,
+			);
+			path = Managers;
+			sourceTree = "<group>";
+		};
+		0A0000622D00000000000001 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				0A0001082D00000000000001 /* DisplayViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		0A0000632D00000000000001 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				0A0001092D00000000000001 /* GymDisplayView.swift */,
+				0A0001132D00000000000001 /* DebugControlHarnessView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		0A0000642D00000000000001 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				0A0000652D00000000000001 /* SampleWorkouts */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		0A0000652D00000000000001 /* SampleWorkouts */ = {
+			isa = PBXGroup;
+			children = (
+				0A0001112D00000000000001 /* roney-sample.json */,
+			);
+			path = SampleWorkouts;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0A0000702D00000000000001 /* GarminWODCompanion */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0A0002002D00000000000001 /* Build configuration list for PBXNativeTarget "GarminWODCompanion" */;
+			buildPhases = (
+				0A0000712D00000000000001 /* Sources */,
+				0A0000722D00000000000001 /* Frameworks */,
+				0A0000732D00000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GarminWODCompanion;
+			productName = GarminWODCompanion;
+			productReference = 0A0000202D00000000000001 /* GarminWODCompanion.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0A0000802D00000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					0A0000702D00000000000001 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+				};
+			};
+			buildConfigurationList = 0A0000812D00000000000001 /* Build configuration list for PBXProject "GarminWODCompanion" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 0A0000302D00000000000001;
+			productRefGroup = 0A0000502D00000000000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0A0000702D00000000000001 /* GarminWODCompanion */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0A0000732D00000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0A0000102D00000000000001 /* Assets.xcassets in Resources */,
+				0A0000112D00000000000001 /* roney-sample.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0A0000712D00000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0A0000012D00000000000001 /* GarminWODCompanionApp.swift in Sources */,
+				0A0000022D00000000000001 /* WorkoutModels.swift in Sources */,
+				0A0000032D00000000000001 /* HeartRateZone.swift in Sources */,
+				0A0000042D00000000000001 /* WorkoutContractLoader.swift in Sources */,
+				0A0000052D00000000000001 /* WorkoutManager.swift in Sources */,
+				0A0000062D00000000000001 /* TimerManager.swift in Sources */,
+				0A0000072D00000000000001 /* MockHeartRateManager.swift in Sources */,
+				0A0000132D00000000000001 /* BluetoothHeartRateManager.swift in Sources */,
+				0A0000082D00000000000001 /* DisplayViewModel.swift in Sources */,
+				0A0000092D00000000000001 /* GymDisplayView.swift in Sources */,
+				0A0000122D00000000000001 /* DebugControlHarnessView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0A0000902D00000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		0A0000912D00000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		0A0000922D00000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = V6DRJ6CK23;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GarminWODCompanion/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jgrimm.garminwodcompanion;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		0A0000932D00000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = V6DRJ6CK23;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GarminWODCompanion/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jgrimm.garminwodcompanion;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0A0000812D00000000000001 /* Build configuration list for PBXProject "GarminWODCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0A0000902D00000000000001 /* Debug */,
+				0A0000912D00000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0A0002002D00000000000001 /* Build configuration list for PBXNativeTarget "GarminWODCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0A0000922D00000000000001 /* Debug */,
+				0A0000932D00000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0A0000802D00000000000001 /* Project object */;
+}

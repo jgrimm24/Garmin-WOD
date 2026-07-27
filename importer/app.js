@@ -146,7 +146,7 @@ function parseStation(line, workoutType) {
     .trim();
   const secondsMatch = cleaned.match(/(\d+)\s*(?:sec|secs|second|seconds)\b/i);
   const minutesMatch = cleaned.match(/(\d+)\s*(?:min|minute|minutes)\b/i);
-  const weightMatch = cleaned.match(/(?:@|with\s+)?(\d+)\s*(?:lb|lbs|#)\b/i);
+  const weightInfo = parseWeightInfo(cleaned);
   const distanceMatch = cleaned.match(/(\d+)\s*(?:-| )?\s*(?:m|meter|meters)\b/i);
   const caloriesMatch = cleaned.match(/(\d+(?:\s*\/\s*\d+)?)\s*(?:cal|cals|calorie|calories)\b/i);
   const repsMatch = cleaned.match(/^(\d+)\s+(?!sec|secs|second|seconds|min|minute|minutes|m\b|meter|meters|cal|cals|calorie|calories)(.+)$/i);
@@ -166,12 +166,14 @@ function parseStation(line, workoutType) {
   }
 
   name = name
+    .replace(weightInfo.matchedText, " ")
     .replace(/\s*\d+(?:\s*\/\s*\d+)?\s*(?:cal|cals|calorie|calories)\b/i, "")
     .replace(/\s*\d+\s*(?:-| )?\s*(?:m|meter|meters)\b/i, "")
     .replace(/\s*@\s*\d+\s*(?:lb|lbs|#)?/i, "")
     .replace(/\s*\d+\s*(?:lb|lbs|#)\b/i, "")
     .replace(/\s*\d+\s*(?:sec|secs|second|seconds)\b/i, "")
     .replace(/\s*\d+\s*(?:min|minute|minutes)\b/i, "")
+    .replace(/[,\s]+$/g, "")
     .trim();
 
   name = normalizeMovementName(name);
@@ -182,8 +184,48 @@ function parseStation(line, workoutType) {
     workSeconds: timedSeconds != null ? timedSeconds : getDefaultWorkSeconds(workoutType),
     distanceMeters: distanceMatch ? Number(distanceMatch[1]) : null,
     calories: caloriesMatch ? caloriesMatch[1].replace(/\s+/g, "") : null,
-    weightLb: weightMatch ? Number(weightMatch[1]) : null,
+    weightLb: weightInfo.weightLb,
+    maleWeightLb: weightInfo.maleWeightLb,
+    femaleWeightLb: weightInfo.femaleWeightLb,
     notes: cleaned,
+  };
+}
+
+function parseWeightInfo(text) {
+  const pairedWeightMatch =
+    text.match(/(?:^|[\s,])(?:@|with\s+)\s*(\d+)\s*\/\s*(\d+)\s*(?:lb|lbs|#)?(?=$|[\s,.)])/i) ||
+    text.match(/(?:^|[\s,])(\d+)\s*\/\s*(\d+)\s*(?:lb|lbs|#)(?=$|[\s,.)])/i);
+
+  if (pairedWeightMatch) {
+    const maleWeightLb = Number(pairedWeightMatch[1]);
+    const femaleWeightLb = Number(pairedWeightMatch[2]);
+
+    return {
+      weightLb: maleWeightLb,
+      maleWeightLb,
+      femaleWeightLb,
+      matchedText: pairedWeightMatch[0],
+    };
+  }
+
+  const singleWeightMatch = text.match(/(?:^|[\s,])(?:@|with\s+)?\s*(\d+)\s*(?:lb|lbs|#)(?=$|[\s,.)])/i);
+
+  if (singleWeightMatch) {
+    const weightLb = Number(singleWeightMatch[1]);
+
+    return {
+      weightLb,
+      maleWeightLb: weightLb,
+      femaleWeightLb: null,
+      matchedText: singleWeightMatch[0],
+    };
+  }
+
+  return {
+    weightLb: null,
+    maleWeightLb: null,
+    femaleWeightLb: null,
+    matchedText: "",
   };
 }
 
@@ -256,7 +298,8 @@ function renderWorkout(workout) {
             ${renderStationField(index, "reps", "Reps", "number", station.reps)}
             ${renderStationField(index, "calories", "Calories", "text", station.calories)}
             ${renderStationField(index, "distanceMeters", "Meters", "number", station.distanceMeters)}
-            ${renderStationField(index, "weightLb", "Lb", "number", station.weightLb)}
+            ${renderStationField(index, "maleWeightLb", "Male lb", "number", station.maleWeightLb)}
+            ${renderStationField(index, "femaleWeightLb", "Female lb", "number", station.femaleWeightLb)}
             ${renderStationField(index, "workSeconds", "Seconds", "number", station.workSeconds)}
             <button class="station-remove" type="button" data-remove-station="${index}">Remove</button>
           </div>
@@ -280,7 +323,11 @@ function formatStationMeta(station) {
   if (station.reps) pieces.push(`${station.reps} reps`);
   if (station.calories) pieces.push(`${station.calories} cal`);
   if (station.distanceMeters) pieces.push(`${station.distanceMeters}m`);
-  if (station.weightLb) pieces.push(`${station.weightLb} lb`);
+  if (station.maleWeightLb && station.femaleWeightLb) {
+    pieces.push(`${station.maleWeightLb}/${station.femaleWeightLb} lb`);
+  } else if (station.weightLb) {
+    pieces.push(`${station.weightLb} lb`);
+  }
   return pieces.length ? pieces.join(" · ") : station.notes;
 }
 
@@ -312,6 +359,10 @@ function normalizeWorkout(workout) {
 }
 
 function normalizeStation(station, index) {
+  const maleWeightLb = numberOrNull(station.maleWeightLb === undefined ? station.weightLb : station.maleWeightLb);
+  const femaleWeightLb = numberOrNull(station.femaleWeightLb);
+  const weightLb = numberOrNull(station.weightLb === undefined || station.weightLb === null ? maleWeightLb : station.weightLb);
+
   return {
     id: station.id || `station-${index + 1}`,
     name: station.name || "",
@@ -319,7 +370,9 @@ function normalizeStation(station, index) {
     calories: station.calories || null,
     workSeconds: station.workSeconds || null,
     distanceMeters: station.distanceMeters || station.meters || null,
-    weightLb: station.weightLb || null,
+    weightLb,
+    maleWeightLb,
+    femaleWeightLb,
     notes: station.notes || "",
   };
 }
@@ -329,7 +382,7 @@ function numberValue(value) {
 }
 
 function numberOrNull(value) {
-  if (value === "") return null;
+  if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -392,6 +445,13 @@ stationsList.addEventListener("input", (event) => {
   if (!field || !currentWorkout.stations[index]) return;
 
   currentWorkout.stations[index][field] = field === "name" || field === "calories" ? event.target.value : numberOrNull(event.target.value);
+
+  if (field === "maleWeightLb") {
+    currentWorkout.stations[index].weightLb = currentWorkout.stations[index].maleWeightLb;
+  } else if (field === "weightLb") {
+    currentWorkout.stations[index].maleWeightLb = currentWorkout.stations[index].weightLb;
+  }
+
   updateJsonOutput();
 });
 
@@ -495,6 +555,8 @@ addStationButton.addEventListener("click", () => {
     workSeconds: getDefaultWorkSeconds(currentWorkout.type),
     distanceMeters: null,
     weightLb: null,
+    maleWeightLb: null,
+    femaleWeightLb: null,
     notes: "",
   });
   renderWorkout(currentWorkout);
@@ -794,6 +856,8 @@ function toWorkoutContract(workout) {
       calories: normalizeCalories(station.calories),
       meters: station.distanceMeters,
       weightLb: station.weightLb,
+      maleWeightLb: station.maleWeightLb,
+      femaleWeightLb: station.femaleWeightLb,
       workSeconds: station.workSeconds,
       notes: station.notes,
     })),

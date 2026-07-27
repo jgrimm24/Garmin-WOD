@@ -6,7 +6,9 @@ import Toybox.Graphics;
 import Toybox.Lang;
 import Toybox.Math;
 import Toybox.Position;
+import Toybox.Sensor;
 import Toybox.System;
+import Toybox.Time;
 import Toybox.Timer;
 import Toybox.UserProfile;
 import Toybox.WatchUi;
@@ -32,8 +34,23 @@ class GarminWODView extends WatchUi.View {
     var _hasGpsFix;
     var _gpsFixAlerted;
     var _isFetchingWorkout;
+    var _hasLoadedInitialWorkout;
+    var _isTimerActive;
+    var _isLocationEventsActive;
     var _workoutSourceText;
     var _workoutSourceBeforeSync;
+    var _currentWorkoutIdentity;
+    var _currentWorkoutVersion;
+    var _activityRecorder;
+    var _summarySaveStatus;
+    var _firstValidHeartRateLogged;
+    var _missingHeartRateLogged;
+    var _heartRateMissingSeconds;
+    var _latestSensorHeartRate;
+    var _finalActiveCalories;
+    var _finalNativeDistanceMeters;
+    var _exitConfirmPending;
+    var _sessionSync;
 
     function initialize() {
         View.initialize();
@@ -57,8 +74,23 @@ class GarminWODView extends WatchUi.View {
         _hasGpsFix = false;
         _gpsFixAlerted = false;
         _isFetchingWorkout = false;
+        _hasLoadedInitialWorkout = false;
+        _isTimerActive = false;
+        _isLocationEventsActive = false;
         _workoutSourceText = "FALLBACK";
         _workoutSourceBeforeSync = "FALLBACK";
+        _currentWorkoutIdentity = "fallback";
+        _currentWorkoutVersion = null;
+        _activityRecorder = new GarminWODActivityRecorder();
+        _summarySaveStatus = "Not saved";
+        _firstValidHeartRateLogged = false;
+        _missingHeartRateLogged = false;
+        _heartRateMissingSeconds = 0;
+        _latestSensorHeartRate = null;
+        _finalActiveCalories = null;
+        _finalNativeDistanceMeters = null;
+        _exitConfirmPending = false;
+        _sessionSync = new GarminWODSessionSync();
     }
 
     // Load your resources here
@@ -69,9 +101,18 @@ class GarminWODView extends WatchUi.View {
     // the state of this View and prepare it to be shown. This includes
     // loading resources into memory.
     function onShow() as Void {
-        loadCachedWorkout();
+        if (!_hasLoadedInitialWorkout) {
+            loadCachedWorkout();
+            _hasLoadedInitialWorkout = true;
+        }
+
         fetchLatestWorkout();
-        _timer.start(method(:onTick), 1000, true);
+
+        if (!_isTimerActive) {
+            _timer.start(method(:onTick), 1000, true);
+            _isTimerActive = true;
+        }
+
         startLocationEvents();
     }
 
@@ -94,6 +135,11 @@ class GarminWODView extends WatchUi.View {
 
         if (_isFinished) {
             drawWorkoutSummary(dc, width, height);
+            return;
+        }
+
+        if (_exitConfirmPending) {
+            drawExitConfirmation(dc, width, height);
             return;
         }
 
@@ -135,22 +181,54 @@ class GarminWODView extends WatchUi.View {
     // state of this View here. This includes freeing resources from
     // memory.
     function onHide() as Void {
-        _timer.stop();
-        Position.enableLocationEvents(Position.LOCATION_DISABLE, null);
+        if (_isTimerActive) {
+            _timer.stop();
+            _isTimerActive = false;
+        }
+
+        stopLocationEvents();
     }
 
     function toggleRunning() as Void {
+        if (_exitConfirmPending) {
+            cancelExitConfirmation();
+            return;
+        }
+
         if (_isFinished) {
-            resetWorkout();
+            if (_activityRecorder.hasSaveFailed()) {
+                retrySaveRecordingSession();
+            } else {
+                resetWorkout();
+            }
             return;
         }
 
         if (_isRunning) {
-            _elapsedBeforePause = getElapsedSeconds();
+            var elapsed = getElapsedSeconds();
+
+            if (!_activityRecorder.pauseRecordingSession()) {
+                WatchUi.requestUpdate();
+                return;
+            }
+
+            _elapsedBeforePause = elapsed;
             _isRunning = false;
+            publishWorkoutSessionState("paused");
         } else {
             if (shouldWaitForGpsBeforeStart()) {
                 startLocationEvents();
+                WatchUi.requestUpdate();
+                return;
+            }
+
+            enableHeartRateSensor();
+
+            var recordingStarted = _elapsedBeforePause > 0 ?
+                _activityRecorder.resumeRecordingSession() :
+                _activityRecorder.startRecordingSession();
+
+            if (!recordingStarted) {
                 WatchUi.requestUpdate();
                 return;
             }
@@ -159,12 +237,19 @@ class GarminWODView extends WatchUi.View {
             _lastLocation = null;
             _isRunning = true;
             startLocationEvents();
+            ensureWorkoutSessionSync();
+            publishWorkoutSessionState("running");
         }
 
         WatchUi.requestUpdate();
     }
 
     function resetWorkout() as Void {
+        if (_activityRecorder.hasOpenSession() && !_activityRecorder.hasSaved()) {
+            _activityRecorder.discardRecordingSession();
+        }
+
+        disableHeartRateSensor();
         _isRunning = false;
         _elapsedBeforePause = 0;
         _startMs = 0;
@@ -180,6 +265,15 @@ class GarminWODView extends WatchUi.View {
         _lastLocation = null;
         _hasGpsFix = false;
         _gpsFixAlerted = false;
+        _summarySaveStatus = "Not saved";
+        _firstValidHeartRateLogged = false;
+        _missingHeartRateLogged = false;
+        _heartRateMissingSeconds = 0;
+        _latestSensorHeartRate = null;
+        _finalActiveCalories = null;
+        _finalNativeDistanceMeters = null;
+        _exitConfirmPending = false;
+        _sessionSync.clearSession();
         WatchUi.requestUpdate();
     }
 
@@ -196,12 +290,22 @@ class GarminWODView extends WatchUi.View {
             return false;
         }
 
+        _currentWorkoutIdentity = getWorkoutIdentity(data);
+        _currentWorkoutVersion = getWorkoutVersion(data);
         _totalSeconds = _workout.getTotalSeconds();
         _manualStationIndex = 0;
         _manualRoundNumber = 1;
         _startMs = 0;
         _elapsedBeforePause = 0;
         _isFinished = false;
+        _summarySaveStatus = "Not saved";
+        _firstValidHeartRateLogged = false;
+        _missingHeartRateLogged = false;
+        _heartRateMissingSeconds = 0;
+        _latestSensorHeartRate = null;
+        _finalActiveCalories = null;
+        _finalNativeDistanceMeters = null;
+        _exitConfirmPending = false;
         resetStationDistanceStart();
 
         return true;
@@ -209,9 +313,20 @@ class GarminWODView extends WatchUi.View {
 
     function loadCachedWorkout() as Void {
         var cachedWorkout = Storage.getValue("latestWorkoutV2");
+        var cachedSavedAt = Storage.getValue("latestWorkoutV2SavedAt");
+        var cachedIdentity = Storage.getValue("latestWorkoutV2Identity");
+
+        System.println("GarminWOD cache exists=" + (cachedWorkout != null) +
+            " savedAt=" + getLogValue(cachedSavedAt) +
+            " storedIdentity=" + getLogValue(cachedIdentity));
 
         if (cachedWorkout != null && loadWorkoutData(cachedWorkout)) {
-            _workoutSourceText = "CACHE";
+            _workoutSourceText = getCacheSourceText(cachedSavedAt);
+            System.println("GarminWOD cache loaded identity=" + _currentWorkoutIdentity +
+                " title=" + getWorkoutLogTitle(cachedWorkout) +
+                " header=" + _workout.getHeader(_manualRoundNumber));
+        } else if (cachedWorkout != null) {
+            System.println("GarminWOD cache load failed title=" + getWorkoutLogTitle(cachedWorkout));
         }
     }
 
@@ -242,15 +357,210 @@ class GarminWODView extends WatchUi.View {
 
     function onLatestWorkoutResponse(responseCode as Number, data as Dictionary or String or Null) as Void {
         _isFetchingWorkout = false;
+        var incomingIdentity = data instanceof Dictionary ? getWorkoutIdentity(data) : "none";
+        var incomingTitle = data instanceof Dictionary ? getWorkoutLogTitle(data) : "none";
+        var loadSucceeded = false;
+        var storedWorkout = false;
 
-        if (responseCode == 200 && data instanceof Dictionary && loadWorkoutData(data)) {
-            Storage.setValue("latestWorkoutV2", data);
-            _workoutSourceText = "WEB WOD";
-        } else if (_workoutSourceText.equals("SYNC...")) {
+        System.println("GarminWOD web response code=" + responseCode +
+            " identity=" + incomingIdentity +
+            " title=" + incomingTitle);
+
+        if (responseCode == 200 && data instanceof Dictionary) {
+            if (!canReplaceWorkout()) {
+                System.println("GarminWOD web ignored; workout no longer replaceable");
+                if (_workoutSourceText.equals("SYNC...")) {
+                    _workoutSourceText = _workoutSourceBeforeSync;
+                }
+            } else if (isIncomingWorkoutOlder(data)) {
+                _workoutSourceText = "WEB OLD";
+            } else {
+                loadSucceeded = loadWorkoutData(data);
+
+                if (loadSucceeded) {
+                    storedWorkout = saveLatestWorkoutToCache(data, incomingIdentity);
+                    _workoutSourceText = "WEB WOD";
+                }
+            }
+        }
+
+        System.println("GarminWOD web loadSucceeded=" + loadSucceeded +
+            " stored=" + storedWorkout +
+            " header=" + _workout.getHeader(_manualRoundNumber));
+
+        if (responseCode != 200 && _workoutSourceText.equals("SYNC...")) {
+            _workoutSourceText = "WEB FAIL";
+        } else if (!loadSucceeded && _workoutSourceText.equals("SYNC...")) {
             _workoutSourceText = _workoutSourceBeforeSync;
         }
 
         WatchUi.requestUpdate();
+    }
+
+    function saveLatestWorkoutToCache(data, incomingIdentity) {
+        try {
+            var savedAt = Time.now().value();
+            Storage.setValue("latestWorkoutV2", data);
+            Storage.setValue("latestWorkoutV2SavedAt", savedAt);
+            Storage.setValue("latestWorkoutV2Identity", incomingIdentity);
+
+            var readBack = Storage.getValue("latestWorkoutV2");
+            var readBackIdentity = readBack instanceof Dictionary ? getWorkoutIdentity(readBack) : "none";
+
+            if (!readBackIdentity.equals(incomingIdentity)) {
+                System.println("GarminWOD WARNING cache verify mismatch incoming=" +
+                    incomingIdentity + " readBack=" + readBackIdentity);
+            } else {
+                System.println("GarminWOD cache saved savedAt=" + savedAt +
+                    " identity=" + incomingIdentity);
+            }
+
+            return true;
+        } catch (e) {
+            System.println("GarminWOD cache save failed: " + getExceptionText(e));
+        }
+
+        return false;
+    }
+
+    function isIncomingWorkoutOlder(data) {
+        var incomingVersion = getWorkoutVersion(data);
+
+        if (incomingVersion != null && _currentWorkoutVersion != null && incomingVersion < _currentWorkoutVersion) {
+            System.println("GarminWOD web ignored older workout incomingVersion=" +
+                incomingVersion + " currentVersion=" + _currentWorkoutVersion +
+                " incomingIdentity=" + getWorkoutIdentity(data) +
+                " currentIdentity=" + _currentWorkoutIdentity);
+            return true;
+        }
+
+        return false;
+    }
+
+    function getWorkoutIdentity(data) {
+        var fingerprint = getWorkoutFingerprint(data);
+        var id = getDictionaryValue(data, "id");
+        if (id != null) {
+            return "id:" + id + "|fp:" + fingerprint;
+        }
+
+        var updatedAt = getDictionaryValue(data, "updatedAt");
+        if (updatedAt != null) {
+            return "updatedAt:" + updatedAt + "|fp:" + fingerprint;
+        }
+
+        var generatedAt = getDictionaryValue(data, "generatedAt");
+        if (generatedAt != null) {
+            return "generatedAt:" + generatedAt + "|fp:" + fingerprint;
+        }
+
+        var timestamp = getDictionaryValue(data, "timestamp");
+        if (timestamp != null) {
+            return "timestamp:" + timestamp + "|fp:" + fingerprint;
+        }
+
+        var title = getDictionaryValue(data, "title");
+        if (title != null) {
+            return "title:" + title + "|fp:" + fingerprint;
+        }
+
+        return "fp:" + fingerprint;
+    }
+
+    function getWorkoutVersion(data) {
+        var updatedAt = getDictionaryValue(data, "updatedAt");
+        if (updatedAt instanceof Number) {
+            return updatedAt;
+        }
+
+        var generatedAt = getDictionaryValue(data, "generatedAt");
+        if (generatedAt instanceof Number) {
+            return generatedAt;
+        }
+
+        var timestamp = getDictionaryValue(data, "timestamp");
+        if (timestamp instanceof Number) {
+            return timestamp;
+        }
+
+        var version = getDictionaryValue(data, "version");
+        if (version instanceof Number) {
+            return version;
+        }
+
+        return null;
+    }
+
+    function getWorkoutFingerprint(data) {
+        var stations = getDictionaryValue(data, "stations");
+        var fingerprint = "" + getDictionaryValue(data, "type") +
+            "|" + getDictionaryValue(data, "durationMinutes") +
+            "|" + getDictionaryValue(data, "rounds");
+
+        if (stations instanceof Array) {
+            fingerprint += "|count:" + stations.size();
+
+            for (var i = 0; i < stations.size(); i++) {
+                var station = stations[i];
+
+                if (station instanceof Dictionary) {
+                    fingerprint += "|" + getDictionaryValue(station, "name") +
+                        ":" + getDictionaryValue(station, "reps") +
+                        ":" + getDictionaryValue(station, "calories") +
+                        ":" + getDictionaryValue(station, "meters") +
+                        ":" + getDictionaryValue(station, "weightLb") +
+                        ":" + getDictionaryValue(station, "maleWeightLb") +
+                        ":" + getDictionaryValue(station, "femaleWeightLb") +
+                        ":" + getDictionaryValue(station, "workSeconds");
+                }
+            }
+        }
+
+        return fingerprint;
+    }
+
+    function getWorkoutLogTitle(data) {
+        var title = getDictionaryValue(data, "title");
+
+        if (title != null) {
+            return "" + title;
+        }
+
+        return "untitled";
+    }
+
+    function getDictionaryValue(data, key) {
+        if (data == null) {
+            return null;
+        }
+
+        return data[key];
+    }
+
+    function getLogValue(value) {
+        if (value == null) {
+            return "null";
+        }
+
+        return "" + value;
+    }
+
+    function getCacheSourceText(savedAt) {
+        if (!(savedAt instanceof Number)) {
+            return "CACHE";
+        }
+
+        var ageSeconds = Time.now().value() - savedAt;
+
+        if (ageSeconds < 0) {
+            return "CACHE";
+        }
+
+        if (ageSeconds < 3600) {
+            return "CACHE " + (ageSeconds / 60) + "m";
+        }
+
+        return "CACHE " + (ageSeconds / 3600) + "h";
     }
 
     function getWorkoutSourceText() {
@@ -271,9 +581,11 @@ class GarminWODView extends WatchUi.View {
             resetStationDistanceStart();
         } else {
             finishWorkout();
+            return;
         }
 
         WatchUi.requestUpdate();
+        publishWorkoutSessionState("running");
     }
 
     function previousStation() as Void {
@@ -291,6 +603,7 @@ class GarminWODView extends WatchUi.View {
         }
 
         WatchUi.requestUpdate();
+        publishWorkoutSessionState(_isRunning ? "running" : "paused");
     }
 
     function hasMoreManualRounds() {
@@ -314,13 +627,29 @@ class GarminWODView extends WatchUi.View {
     }
 
     function handleBackButton() as Void {
+        if (_exitConfirmPending) {
+            confirmDiscardAndExit();
+            return;
+        }
+
+        if (_isFinished && _activityRecorder.hasSaveFailed()) {
+            disableHeartRateSensor();
+            resetWorkout();
+            return;
+        }
+
+        if (_isFinished) {
+            exitApp();
+            return;
+        }
+
+        if (!_isRunning && _elapsedBeforePause == 0) {
+            exitApp();
+            return;
+        }
+
         if (_workout.isManualStationWorkout()) {
             if (!_isRunning) {
-                if (_elapsedBeforePause == 0) {
-                    toggleRunning();
-                    return;
-                }
-
                 resetWorkout();
                 return;
             }
@@ -329,20 +658,186 @@ class GarminWODView extends WatchUi.View {
             return;
         }
 
-        if (!_isRunning && _elapsedBeforePause == 0) {
-            toggleRunning();
-            return;
+        resetWorkout();
+    }
+
+    function handlePageNavigation() as Void {
+        // Reserved for future metric pages. For now, consume scroll buttons safely.
+        WatchUi.requestUpdate();
+    }
+
+    function handleMenuButton() as Void {
+        // Consume menu/light behavior so it cannot silently exit or discard a workout.
+        WatchUi.requestUpdate();
+    }
+
+    function getInputStateText() {
+        if (_isFinished) {
+            if (_activityRecorder.hasSaveFailed()) {
+                return "finished-save-failed";
+            }
+
+            return "finished-saved";
         }
 
-        resetWorkout();
+        if (_isRunning) {
+            return "running";
+        }
+
+        if (_elapsedBeforePause > 0) {
+            return "paused";
+        }
+
+        return "idle";
     }
 
     function finishWorkout() as Void {
         updateHeartRateStats();
         _elapsedBeforePause = getElapsedSeconds();
         _isRunning = false;
+        captureFinalSummaryMetrics();
+        var saved = _activityRecorder.stopAndSaveRecordingSession();
+        _summarySaveStatus = saved ? "Saved to Garmin" : "Save failed";
+        if (saved) {
+            disableHeartRateSensor();
+        }
         _isFinished = true;
+        publishWorkoutSessionState("finished");
         WatchUi.requestUpdate();
+    }
+
+    function ensureWorkoutSessionSync() as Void {
+        if (!_sessionSync.hasSession()) {
+            _sessionSync.startSession(_currentWorkoutIdentity);
+        }
+    }
+
+    function publishWorkoutSessionState(status) as Void {
+        if (!_sessionSync.hasSession()) {
+            System.println("GarminWOD sync no active session for status=" + status);
+            return;
+        }
+
+        _sessionSync.publish(
+            status,
+            _manualRoundNumber,
+            _manualStationIndex,
+            getElapsedSeconds()
+        );
+    }
+
+    function retrySaveRecordingSession() as Void {
+        if (!_activityRecorder.hasOpenSession()) {
+            _summarySaveStatus = "Save failed";
+            WatchUi.requestUpdate();
+            return;
+        }
+
+        var saved = _activityRecorder.stopAndSaveRecordingSession();
+        _summarySaveStatus = saved ? "Saved to Garmin" : "Save failed";
+        if (saved) {
+            disableHeartRateSensor();
+        }
+        WatchUi.requestUpdate();
+    }
+
+    function cleanupBeforeExit() as Void {
+        if (_activityRecorder.hasOpenSession() && !_activityRecorder.hasSaved()) {
+            _activityRecorder.discardRecordingSession();
+        }
+        disableHeartRateSensor();
+        _sessionSync.clearSession();
+    }
+
+    function exitApp() as Void {
+        if (_exitConfirmPending) {
+            confirmDiscardAndExit();
+            return;
+        }
+
+        if (_activityRecorder.hasOpenSession() && !_activityRecorder.hasSaved()) {
+            _exitConfirmPending = true;
+            WatchUi.requestUpdate();
+            return;
+        }
+
+        cleanupBeforeExit();
+        System.exit();
+    }
+
+    function confirmDiscardAndExit() as Void {
+        cleanupBeforeExit();
+        System.exit();
+    }
+
+    function cancelExitConfirmation() as Void {
+        _exitConfirmPending = false;
+        WatchUi.requestUpdate();
+    }
+
+    function enableHeartRateSensor() as Void {
+        try {
+            Sensor.setEnabledSensors([Sensor.SENSOR_HEARTRATE]);
+            Sensor.enableSensorEvents(method(:onSensor));
+            System.println("GarminWOD: heart rate sensor enabled");
+        } catch (e) {
+            System.println("GarminWOD: heart rate sensor enable failed: " + getExceptionText(e));
+        }
+    }
+
+    function disableHeartRateSensor() as Void {
+        try {
+            Sensor.enableSensorEvents(null);
+            Sensor.setEnabledSensors([]);
+            System.println("GarminWOD: heart rate sensor disabled");
+        } catch (e) {
+            System.println("GarminWOD: heart rate sensor disable failed: " + getExceptionText(e));
+        }
+    }
+
+    function onSensor(sensorInfo as Sensor.Info) as Void {
+        if (sensorInfo == null || !(sensorInfo has :heartRate) || sensorInfo.heartRate == null) {
+            return;
+        }
+
+        var heartRate = sensorInfo.heartRate;
+
+        if (isValidHeartRate(heartRate)) {
+            _latestSensorHeartRate = heartRate;
+        }
+    }
+
+    function isValidHeartRate(heartRate) {
+        return heartRate != null && heartRate >= 30 && heartRate <= 250;
+    }
+
+    function captureFinalSummaryMetrics() as Void {
+        var info = Activity.getActivityInfo();
+
+        _finalActiveCalories = null;
+        _finalNativeDistanceMeters = null;
+
+        if (info has :calories && info.calories != null) {
+            _finalActiveCalories = info.calories;
+        }
+
+        if (workoutNeedsGps() && info has :elapsedDistance && info.elapsedDistance != null) {
+            _finalNativeDistanceMeters = info.elapsedDistance;
+        }
+    }
+
+    function getExceptionText(exception) {
+        if (exception == null) {
+            return "Unknown exception";
+        }
+
+        var message = exception.getErrorMessage();
+
+        if (message == null) {
+            message = exception.toString();
+        }
+
+        return message;
     }
 
     function onTick() as Void {
@@ -507,26 +1002,30 @@ class GarminWODView extends WatchUi.View {
 
     function getStatusText() {
         if (_isFinished) {
-            return "DOWN reset";
+            if (_activityRecorder.hasSaveFailed()) {
+                return "START retry";
+            }
+
+            return "BACK exit";
         }
 
         if (_isRunning) {
             if (_workout.isManualStationWorkout()) {
                 if (_manualStationIndex >= _workout.getStationCount() - 1) {
-                    return "DOWN pause";
+                    return "START pause";
                 }
 
-                return "DOWN pause";
+                return "START pause";
             }
 
-            return "DOWN pauses";
+            return "START pause";
         }
 
         if (_elapsedBeforePause > 0) {
-            return "DOWN resumes";
+            return "START resume";
         }
 
-        return "BACK starts";
+        return "START start";
     }
 
     function getSecondaryStatusText() {
@@ -551,7 +1050,11 @@ class GarminWODView extends WatchUi.View {
 
     function getControlHintText() {
         if (_isFinished) {
-            return "DOWN reset UP exit";
+            if (_activityRecorder.hasSaveFailed()) {
+                return "START retry  BACK discard";
+            }
+
+            return "START reset  BACK exit";
         }
 
         if (!_workout.isManualStationWorkout()) {
@@ -560,21 +1063,21 @@ class GarminWODView extends WatchUi.View {
 
         if (_isRunning) {
             if (_manualStationIndex >= _workout.getStationCount() - 1 && !shouldContinueManualRoundFlow()) {
-                return "DOWN pause BACK finish";
+                return "START pause  BACK finish";
             }
 
-            return "DOWN pause BACK next";
+            return "START pause  BACK next";
         }
 
         if (_elapsedBeforePause > 0) {
-            return "DOWN resume BACK reset";
+            return "START resume  BACK reset";
         }
 
         if (shouldWaitForGpsBeforeStart()) {
-            return "WAIT GPS BACK start";
+            return "WAIT GPS  START start";
         }
 
-        return "BACK start UP exit";
+        return "START start";
     }
 
     function shouldWaitForGpsBeforeStart() {
@@ -592,7 +1095,21 @@ class GarminWODView extends WatchUi.View {
     }
 
     function startLocationEvents() as Void {
+        if (_isLocationEventsActive) {
+            return;
+        }
+
         Position.enableLocationEvents(Position.LOCATION_CONTINUOUS, method(:onPosition));
+        _isLocationEventsActive = true;
+    }
+
+    function stopLocationEvents() as Void {
+        if (!_isLocationEventsActive) {
+            return;
+        }
+
+        Position.enableLocationEvents(Position.LOCATION_DISABLE, null);
+        _isLocationEventsActive = false;
     }
 
     function onPosition(info as Position.Info) as Void {
@@ -729,10 +1246,18 @@ class GarminWODView extends WatchUi.View {
     }
 
     function getCurrentHeartRate() {
+        if (_latestSensorHeartRate != null) {
+            return _latestSensorHeartRate;
+        }
+
         var info = Activity.getActivityInfo();
 
         if (info has :currentHeartRate && info.currentHeartRate != null) {
-            return info.currentHeartRate;
+            var heartRate = info.currentHeartRate;
+
+            if (isValidHeartRate(heartRate)) {
+                return heartRate;
+            }
         }
 
         return null;
@@ -815,10 +1340,28 @@ class GarminWODView extends WatchUi.View {
     }
 
     function updateHeartRateStats() as Void {
+        if (!_activityRecorder.isRecordingSessionActive()) {
+            return;
+        }
+
         var heartRate = getCurrentHeartRate();
 
         if (heartRate == null) {
+            _heartRateMissingSeconds++;
+
+            if (_heartRateMissingSeconds > 10 && !_missingHeartRateLogged) {
+                _missingHeartRateLogged = true;
+                System.println("GarminWOD: HR unavailable for more than 10 seconds");
+            }
+
             return;
+        }
+
+        _heartRateMissingSeconds = 0;
+
+        if (!_firstValidHeartRateLogged) {
+            _firstValidHeartRateLogged = true;
+            System.println("GarminWOD: first valid HR " + heartRate);
         }
 
         _heartRateSum += heartRate;
@@ -830,18 +1373,22 @@ class GarminWODView extends WatchUi.View {
     }
 
     function drawWorkoutSummary(dc, width, height) as Void {
-        var titleY = height * 9 / 100;
-        var timeY = height * 21 / 100;
-        var labelY = height * 33 / 100;
-        var distanceY = height * 45 / 100;
-        var caloriesY = height * 56 / 100;
-        var averageY = height * 67 / 100;
-        var maxY = height * 78 / 100;
-        var resetY = height * 88 / 100;
+        var titleY = height * 7 / 100;
+        var statusY = height * 17 / 100;
+        var timeY = height * 28 / 100;
+        var labelY = height * 38 / 100;
+        var distanceY = height * 49 / 100;
+        var caloriesY = height * 59 / 100;
+        var averageY = height * 69 / 100;
+        var maxY = height * 79 / 100;
+        var resetY = height * 89 / 100;
         var exitY = height * 96 / 100;
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(width / 2, titleY, Graphics.FONT_XTINY, "Workout Complete", Graphics.TEXT_JUSTIFY_CENTER);
+
+        dc.setColor(_activityRecorder.hasSaveFailed() ? Graphics.COLOR_RED : Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(width / 2, statusY, Graphics.FONT_XTINY, _summarySaveStatus, Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
         dc.drawText(width / 2, timeY, Graphics.FONT_MEDIUM, formatTime(_elapsedBeforePause), Graphics.TEXT_JUSTIFY_CENTER);
@@ -856,8 +1403,35 @@ class GarminWODView extends WatchUi.View {
         dc.drawText(width / 2, maxY, Graphics.FONT_XTINY, getMaxHeartRateText(), Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width / 2, resetY, Graphics.FONT_XTINY, "START reset", Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(width / 2, exitY, Graphics.FONT_XTINY, "UP exit", Graphics.TEXT_JUSTIFY_CENTER);
+        if (_activityRecorder.hasSaveFailed()) {
+            dc.drawText(width / 2, resetY, Graphics.FONT_XTINY, "START retry", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(width / 2, exitY, Graphics.FONT_XTINY, "BACK discard", Graphics.TEXT_JUSTIFY_CENTER);
+        } else {
+            dc.drawText(width / 2, resetY, Graphics.FONT_XTINY, "START reset", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(width / 2, exitY, Graphics.FONT_XTINY, "BACK exit", Graphics.TEXT_JUSTIFY_CENTER);
+        }
+    }
+
+    function drawExitConfirmation(dc, width, height) as Void {
+        var titleY = height * 18 / 100;
+        var warningY = height * 32 / 100;
+        var detailY = height * 45 / 100;
+        var cancelY = height * 63 / 100;
+        var discardY = height * 76 / 100;
+
+        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
+        dc.fillRectangle(0, 0, width, height);
+
+        dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(width / 2, titleY, Graphics.FONT_XTINY, "Unsaved workout", Graphics.TEXT_JUSTIFY_CENTER);
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(width / 2, warningY, Graphics.FONT_XTINY, "Activity not saved", Graphics.TEXT_JUSTIFY_CENTER);
+
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(width / 2, detailY, Graphics.FONT_XTINY, "Choose before exit", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(width / 2, cancelY, Graphics.FONT_XTINY, "START continue", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(width / 2, discardY, Graphics.FONT_XTINY, "BACK discard exit", Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     function getSummaryWorkoutLine() {
@@ -877,7 +1451,11 @@ class GarminWODView extends WatchUi.View {
     }
 
     function getSummaryDistanceText() {
-        var distanceMeters = getCurrentDistanceMeters();
+        if (!workoutNeedsGps()) {
+            return "Distance N/A";
+        }
+
+        var distanceMeters = _finalNativeDistanceMeters;
 
         if (distanceMeters == null) {
             return "Distance --";
@@ -901,7 +1479,7 @@ class GarminWODView extends WatchUi.View {
     }
 
     function getSummaryCaloriesText() {
-        var currentCalories = getCurrentCalories();
+        var currentCalories = _finalActiveCalories;
 
         if (currentCalories != null) {
             return "Active Cal " + currentCalories;

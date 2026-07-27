@@ -108,7 +108,7 @@ class GarminWODWorkout {
                 stationSeconds.add(getContractValue(station, "workSeconds", null));
                 stationCalories.add(getContractValue(station, "calories", null));
                 stationMeters.add(getContractValue(station, "meters", null));
-                stationWeights.add(getContractValue(station, "weightLb", null));
+                stationWeights.add(getContractValue(station, "weightLb", getContractValue(station, "maleWeightLb", null)));
             }
         }
 

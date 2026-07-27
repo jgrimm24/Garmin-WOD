@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "sample-roney-4-rft",
+  "title": "Roney",
+  "type": "For Time",
+  "durationMinutes": null,
+  "rounds": 4,
+  "stations": [
+    {
+      "id": "station-1-run",
+      "name": "Run",
+      "reps": null,
+      "workSeconds": null,
+      "distanceMeters": 200,
+      "calories": null,
+      "weightLb": null,
+      "maleWeightLb": null,
+      "femaleWeightLb": null,
+      "notes": "200m Run"
+    },
+    {
+      "id": "station-2-thrusters",
+      "name": "Thrusters",
+      "reps": 11,
+      "workSeconds": null,
+      "distanceMeters": null,
+      "calories": null,
+      "weightLb": 135,
+      "maleWeightLb": 135,
+      "femaleWeightLb": 95,
+      "notes": "11 Thrusters, 135/95 lbs"
+    },
+    {
+      "id": "station-3-run",
+      "name": "Run",
+      "reps": null,
+      "workSeconds": null,
+      "distanceMeters": 200,
+      "calories": null,
+      "weightLb": null,
+      "maleWeightLb": null,
+      "femaleWeightLb": null,
+      "notes": "200m Run"
+    },
+    {
+      "id": "station-4-push-press",
+      "name": "Push Press",
+      "reps": 11,
+      "workSeconds": null,
+      "distanceMeters": null,
+      "calories": null,
+      "weightLb": 135,
+      "maleWeightLb": 135,
+      "femaleWeightLb": 95,
+      "notes": "11 Push Press, 135/95 lbs"
+    },
+    {
+      "id": "station-5-run",
+      "name": "Run",
+      "reps": null,
+      "workSeconds": null,
+      "distanceMeters": 200,
+      "calories": null,
+      "weightLb": null,
+      "maleWeightLb": null,
+      "femaleWeightLb": null,
+      "notes": "200m Run"
+    },
+    {
+      "id": "station-6-bench-press",
+      "name": "Bench Presses",
+      "reps": 11,
+      "workSeconds": null,
+      "distanceMeters": null,
+      "calories": null,
+      "weightLb": 135,
+      "maleWeightLb": 135,
+      "femaleWeightLb": 95,
+      "notes": "11 Bench Presses, 135/95 lbs"
+    }
+  ],
+  "notes": [],
+  "sourceText": "Roney\n4 rounds for time\n\n200m Run\n11 Thrusters, 135/95 lbs\n200m Run\n11 Push Press, 135/95 lbs\n200m Run\n11 Bench Presses, 135/95 lbs"
+}
