@@ -10,6 +10,7 @@ final class DisplayViewModel: ObservableObject {
     @Published private(set) var isRefreshingLatestWorkout: Bool = false
     @Published private(set) var latestWorkoutStatusText: String = "Roney sample"
     @Published var selectedHeartRateSource: HeartRateSource = .mock
+    @Published var displayMode: GymDisplayMode = .defaultMode
     @Published private(set) var isFollowingWatch: Bool = false
     @Published private(set) var isMirroringWatchSession: Bool = false
     @Published private(set) var watchSyncStatusText: String = "Follow Watch Off"
@@ -534,6 +535,7 @@ final class DisplayViewModel: ObservableObject {
 
         let station = workoutManager.currentStation
         let summary = WorkoutSummary(
+            displayMode: displayMode,
             workoutName: workoutManager.workout.title,
             workoutType: workoutManager.workout.type,
             elapsedSeconds: timerManager.elapsedSeconds,

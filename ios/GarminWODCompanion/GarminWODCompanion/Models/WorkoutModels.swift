@@ -79,6 +79,7 @@ struct WorkoutContract: Codable, Identifiable {
 }
 
 struct WorkoutSummary: Equatable {
+    let displayMode: GymDisplayMode
     let workoutName: String
     let workoutType: WorkoutType
     let elapsedSeconds: Int

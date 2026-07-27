@@ -14,7 +14,10 @@ struct GymDisplayView: View {
     private var displayModeBinding: Binding<GymDisplayMode> {
         Binding(
             get: { GymDisplayMode(storedValue: displayModeRawValue) },
-            set: { displayModeRawValue = $0.rawValue }
+            set: {
+                displayModeRawValue = $0.rawValue
+                viewModel.displayMode = $0
+            }
         )
     }
 
@@ -66,6 +69,7 @@ struct GymDisplayView: View {
             }
             .onAppear {
                 migrateDisplayModePreferenceIfNeeded()
+                viewModel.displayMode = displayMode
                 viewModel.selectedHeartRateSource = .bluetooth
                 viewModel.loadLatestWorkoutIfNeeded()
                 viewModel.logLayout(width: geometry.size.width, height: geometry.size.height, isLandscape: isLandscape)
@@ -241,7 +245,7 @@ struct GymDisplayView: View {
             )
             .frame(width: metrics.availableWidth, height: metrics.activeMainHeight)
         }
-        .frame(maxWidth: .infinity, maxHeight: metrics.activeDashboardHeight)
+        .frame(width: metrics.availableWidth, height: metrics.activeDashboardHeight)
     }
 }
 
@@ -311,13 +315,13 @@ private struct DashboardMetrics {
     var currentMovementSize: CGFloat { isLandscape ? 21 : 26 }
     var secondaryMovementSize: CGFloat { isLandscape ? 16 : 19 }
     var wodCurrentMovementSize: CGFloat {
-        isLandscape ? clamp(activeMainHeight * 0.26, min: 46, max: 72) : clamp(activeMainHeight * 0.14, min: 34, max: 54)
+        isLandscape ? clamp(activeMainHeight * 0.22, min: 38, max: 62) : clamp(activeMainHeight * 0.14, min: 34, max: 54)
     }
     var wodCurrentPrescriptionSize: CGFloat {
-        isLandscape ? clamp(activeMainHeight * 0.12, min: 22, max: 34) : clamp(activeMainHeight * 0.07, min: 18, max: 27)
+        isLandscape ? clamp(activeMainHeight * 0.10, min: 19, max: 28) : clamp(activeMainHeight * 0.07, min: 18, max: 27)
     }
     var wodNextMovementSize: CGFloat {
-        isLandscape ? clamp(activeMainHeight * 0.14, min: 26, max: 40) : clamp(activeMainHeight * 0.065, min: 18, max: 27)
+        isLandscape ? clamp(activeMainHeight * 0.12, min: 22, max: 34) : clamp(activeMainHeight * 0.065, min: 18, max: 27)
     }
     var wodMetaSize: CGFloat {
         isLandscape ? clamp(activeMainHeight * 0.07, min: 16, max: 22) : clamp(activeMainHeight * 0.045, min: 15, max: 20)
@@ -611,41 +615,51 @@ private struct WODProgressPanel: View {
     }
 
     private var landscapeBody: some View {
-        VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
-            HStack(alignment: .center, spacing: 14) {
-                progressPill(text: workoutManager.roundText, isPrimary: true)
-                progressPill(text: timerManager.elapsedTimeText, isPrimary: false)
-                Spacer(minLength: 0)
+        GeometryReader { geometry in
+            let spacing = max(metrics.sectionSpacing - 3, 6)
+            let verticalPadding = max(metrics.cardPadding - 2, 7)
+            let usableHeight = max(geometry.size.height - (verticalPadding * 2) - (spacing * 3) - 1, 0)
+            let progressHeight = clamp(usableHeight * 0.17, min: 34, max: 46)
+            let movementHeight = max(usableHeight - progressHeight, 0)
+            let currentHeight = movementHeight * 0.58
+            let nextHeight = movementHeight * 0.42
+
+            VStack(alignment: .leading, spacing: spacing) {
+                HStack(alignment: .center, spacing: 14) {
+                    progressPill(text: workoutManager.roundText, isPrimary: true)
+                    progressPill(text: timerManager.elapsedTimeText, isPrimary: false)
+                    Spacer(minLength: 0)
+                }
+                .frame(height: progressHeight)
+
+                WODMovementBlock(
+                    label: "Current",
+                    station: workoutManager.currentStation,
+                    titleSize: metrics.wodCurrentMovementSize,
+                    prescriptionSize: metrics.wodCurrentPrescriptionSize,
+                    maxTitleLines: 2,
+                    maxPrescriptionLines: 2,
+                    isPrimary: true
+                )
+                .frame(height: currentHeight, alignment: .center)
+
+                Divider()
+                    .overlay(.white.opacity(0.16))
+
+                WODMovementBlock(
+                    label: "Next",
+                    station: workoutManager.nextStation,
+                    titleSize: metrics.wodNextMovementSize,
+                    prescriptionSize: max(metrics.wodCurrentPrescriptionSize * 0.72, 16),
+                    maxTitleLines: 2,
+                    maxPrescriptionLines: 2,
+                    isPrimary: false
+                )
+                .frame(height: nextHeight, alignment: .top)
             }
-
-            WODMovementBlock(
-                label: "Current",
-                station: workoutManager.currentStation,
-                titleSize: metrics.wodCurrentMovementSize,
-                prescriptionSize: metrics.wodCurrentPrescriptionSize,
-                maxTitleLines: 2,
-                maxPrescriptionLines: 1,
-                isPrimary: true
-            )
-            .layoutPriority(3)
-
-            Divider()
-                .overlay(.white.opacity(0.16))
-
-            WODMovementBlock(
-                label: "Next",
-                station: workoutManager.nextStation,
-                titleSize: metrics.wodNextMovementSize,
-                prescriptionSize: max(metrics.wodCurrentPrescriptionSize * 0.72, 18),
-                maxTitleLines: 1,
-                maxPrescriptionLines: 1,
-                isPrimary: false
-            )
-            .layoutPriority(2)
-
-            Spacer(minLength: 0)
+            .padding(verticalPadding)
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
-        .padding(metrics.cardPadding + 2)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
         .overlay(
@@ -1463,8 +1477,10 @@ private struct WorkoutSummaryScreen: View {
             SummaryZoneBreakdown(summary: summary, metrics: metrics)
                 .layoutPriority(1)
 
-            SummaryProgressCard(summary: summary, metrics: metrics)
-                .layoutPriority(1)
+            if showsWorkoutProgress {
+                SummaryProgressCard(summary: summary, metrics: metrics)
+                    .layoutPriority(1)
+            }
 
             Spacer(minLength: 0)
 
@@ -1504,7 +1520,9 @@ private struct WorkoutSummaryScreen: View {
                     SummaryZoneBreakdown(summary: summary, metrics: metrics)
                         .frame(maxHeight: .infinity)
 
-                    SummaryProgressCard(summary: summary, metrics: metrics)
+                    if showsWorkoutProgress {
+                        SummaryProgressCard(summary: summary, metrics: metrics)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -1522,18 +1540,47 @@ private struct WorkoutSummaryScreen: View {
 
     private var summaryHeader: some View {
         VStack(spacing: metrics.isLandscape ? 2 : 3) {
-            Text("Workout Complete")
+            Text(summaryTitle)
                 .font(.system(size: metrics.isLandscape ? 21 : 28, weight: .black, design: .rounded))
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
 
-            Text("\(summary.workoutName) • \(summary.workoutType.rawValue)")
-                .font(.system(size: metrics.isLandscape ? 12 : 14, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white.opacity(0.76))
-                .lineLimit(1)
-                .minimumScaleFactor(0.55)
+            if !summarySubtitle.isEmpty {
+                Text(summarySubtitle)
+                    .font(.system(size: metrics.isLandscape ? 12 : 14, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.76))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+            }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var showsWorkoutProgress: Bool {
+        summary.displayMode == .workout
+    }
+
+    private var summaryTitle: String {
+        summary.displayMode == .run ? "Run Complete" : "Workout Complete"
+    }
+
+    private var summarySubtitle: String {
+        guard summary.displayMode == .workout else {
+            return ""
+        }
+
+        let title = summary.workoutName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let type = summary.workoutType.rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if title.isEmpty {
+            return type
+        }
+
+        if title.caseInsensitiveCompare(type) == .orderedSame {
+            return title
+        }
+
+        return "\(title) • \(type)"
     }
 
     private func elapsedHero(size: CGSize, isLandscape: Bool) -> some View {

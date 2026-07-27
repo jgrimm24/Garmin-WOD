@@ -315,6 +315,7 @@ guard let capturedSummary = summaryViewModel.workoutSummary else {
 
 expect(capturedSummary.workoutName == workout.title, "summary should capture workout name")
 expect(capturedSummary.workoutType == workout.type, "summary should capture workout type")
+expect(capturedSummary.displayMode == .workout, "summary should default to WORKOUT presentation mode")
 expect(capturedSummary.elapsedSeconds == finalElapsed, "summary elapsed should match final timer value")
 expect(capturedSummary.averageHeartRate == finalAverageHeartRate, "summary avg HR should match accumulated value")
 expect(capturedSummary.maximumHeartRate == finalMaximumHeartRate, "summary max HR should match accumulated value")
@@ -331,6 +332,16 @@ expect(summaryViewModel.workoutSummary == capturedSummary, "summary should not m
 summaryViewModel.logLayout(width: 844, height: 390, isLandscape: true)
 summaryViewModel.logLayout(width: 390, height: 844, isLandscape: false)
 expect(summaryViewModel.workoutSummary == capturedSummary, "summary should survive orientation/layout changes")
+
+let runSummaryViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager()
+)
+runSummaryViewModel.displayMode = .run
+runSummaryViewModel.startWorkout()
+runSummaryViewModel.finishWorkout()
+expect(runSummaryViewModel.workoutSummary?.displayMode == .run, "summary should capture RUN presentation mode at finish")
 
 summaryViewModel.resetWorkout()
 expect(summaryViewModel.workoutManager.status == .idle, "new workout reset should restore idle")
