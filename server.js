@@ -7,6 +7,7 @@ const PORT = Number(process.env.PORT || 4175);
 const HOST = process.env.HOST || "0.0.0.0";
 const DATA_DIR = path.join(ROOT, "data");
 const LATEST_WORKOUT_PATH = path.join(DATA_DIR, "latest-workout.json");
+const WORKOUT_SESSION_PATH = path.join(DATA_DIR, "workout-session.json");
 
 loadEnvFile(path.join(ROOT, ".env"));
 
@@ -45,6 +46,16 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/workout-session") {
+      await handleGetWorkoutSession(response);
+      return;
+    }
+
+    if (request.method === "PUT" && url.pathname === "/api/workout-session") {
+      await handleSaveWorkoutSession(request, response);
+      return;
+    }
+
     if (request.method !== "GET") {
       sendJson(response, 405, { error: "Method not allowed" });
       return;
@@ -56,11 +67,13 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
-  const displayHost = HOST === "0.0.0.0" ? "127.0.0.1" : HOST;
-  console.log(`Garmin WOD importer running at http://${displayHost}:${PORT}/importer/`);
-  console.log(`OpenAI key configured: ${hasOpenAiKey() ? "yes" : "no"}`);
-});
+if (require.main === module) {
+  server.listen(PORT, HOST, () => {
+    const displayHost = HOST === "0.0.0.0" ? "127.0.0.1" : HOST;
+    console.log(`Garmin WOD importer running at http://${displayHost}:${PORT}/importer/`);
+    console.log(`OpenAI key configured: ${hasOpenAiKey() ? "yes" : "no"}`);
+  });
+}
 
 async function handleExtract(request, response) {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -118,6 +131,40 @@ async function handleSaveLatestWorkout(request, response) {
   await fs.promises.writeFile(LATEST_WORKOUT_PATH, JSON.stringify(workout, null, 2) + "\n", "utf8");
 
   sendJson(response, 200, { workout });
+}
+
+async function handleGetWorkoutSession(response) {
+  try {
+    const data = await fs.promises.readFile(WORKOUT_SESSION_PATH, "utf8");
+    sendJson(response, 200, JSON.parse(data));
+  } catch (error) {
+    sendJson(response, 404, { error: "No workout session has been published yet." });
+  }
+}
+
+async function handleSaveWorkoutSession(request, response) {
+  const body = await readJsonBody(request);
+  const result = normalizeWorkoutSessionState(body, Date.now());
+
+  if (!result.ok) {
+    sendJson(response, 400, { error: result.error });
+    return;
+  }
+
+  const existing = await readWorkoutSessionFromDisk();
+  const decision = acceptWorkoutSessionState(existing, result.state);
+
+  if (!decision.ok) {
+    sendJson(response, 409, { error: decision.error, session: existing });
+    return;
+  }
+
+  if (decision.write) {
+    await fs.promises.mkdir(DATA_DIR, { recursive: true });
+    await fs.promises.writeFile(WORKOUT_SESSION_PATH, JSON.stringify(decision.session, null, 2) + "\n", "utf8");
+  }
+
+  sendJson(response, 200, { session: decision.session });
 }
 
 async function extractWithFallbacks(apiKey, imageDataUrl) {
@@ -317,6 +364,85 @@ function normalizeWorkoutType(type) {
   return allowedTypes[type] ? type : "Unknown";
 }
 
+function normalizeWorkoutSessionState(input, nowMs = Date.now()) {
+  const statusValues = {
+    idle: true,
+    running: true,
+    paused: true,
+    finished: true,
+  };
+
+  const workoutId = stringOrEmpty(input.workoutId);
+  const sessionId = stringOrEmpty(input.sessionId);
+  const status = stringOrEmpty(input.status);
+  const revision = integerOrNull(input.revision);
+  const round = integerOrNull(input.round);
+  const stationIndex = integerOrNull(input.stationIndex);
+  const elapsedSeconds = integerOrNull(input.elapsedSeconds);
+
+  if (!workoutId) return { ok: false, error: "workoutId is required." };
+  if (!sessionId) return { ok: false, error: "sessionId is required." };
+  if (revision === null || revision < 1) return { ok: false, error: "revision must be a positive integer." };
+  if (!statusValues[status]) return { ok: false, error: "status is invalid." };
+  if (round === null || round < 1) return { ok: false, error: "round must be a positive integer." };
+  if (stationIndex === null || stationIndex < 0) return { ok: false, error: "stationIndex must be a non-negative integer." };
+  if (elapsedSeconds === null || elapsedSeconds < 0) return { ok: false, error: "elapsedSeconds must be a non-negative integer." };
+
+  return {
+    ok: true,
+    state: {
+      workoutId,
+      sessionId,
+      revision,
+      status,
+      round,
+      stationIndex,
+      elapsedSeconds,
+      updatedAt: nowMs,
+    },
+  };
+}
+
+function acceptWorkoutSessionState(existing, incoming) {
+  if (
+    existing &&
+    existing.sessionId === incoming.sessionId &&
+    Number(existing.revision) > incoming.revision
+  ) {
+    return {
+      ok: false,
+      error: "Older session revision cannot replace a newer revision.",
+    };
+  }
+
+  if (
+    existing &&
+    existing.sessionId === incoming.sessionId &&
+    Number(existing.revision) === incoming.revision
+  ) {
+    return {
+      ok: true,
+      write: false,
+      session: existing,
+    };
+  }
+
+  return {
+    ok: true,
+    write: true,
+    session: incoming,
+  };
+}
+
+async function readWorkoutSessionFromDisk() {
+  try {
+    const data = await fs.promises.readFile(WORKOUT_SESSION_PATH, "utf8");
+    return JSON.parse(data);
+  } catch (error) {
+    return null;
+  }
+}
+
 function numberOrNull(value) {
   if (value === null || value === undefined || value === "") return null;
 
@@ -329,6 +455,18 @@ function caloriesOrNull(value) {
 
   const number = Number(value);
   return Number.isFinite(number) && !String(value).includes("/") ? number : String(value);
+}
+
+function stringOrEmpty(value) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function integerOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+
+  const number = Number(value);
+  return Number.isInteger(number) ? number : null;
 }
 
 function makeWorkoutId(title, sourceText) {
@@ -407,3 +545,10 @@ function loadEnvFile(filePath) {
     }
   }
 }
+
+module.exports = {
+  acceptWorkoutSessionState,
+  normalizeWorkoutSessionState,
+  normalizeWorkoutContract,
+  server,
+};
