@@ -254,7 +254,7 @@ struct GymDisplayView: View {
                         isBluetoothSheetPresented = true
                     }
                 )
-                .frame(height: metrics.activeHeaderHeight)
+                .frame(height: metrics.wodLandscapeHeaderHeight)
 
                 WODProgressPanel(
                     workoutManager: viewModel.workoutManager,
@@ -322,10 +322,11 @@ private struct DashboardMetrics {
     var activeControlHeight: CGFloat { isLandscape ? clamp(availableHeight * 0.105, min: 46, max: 54) : 112 }
     var activeDashboardHeight: CGFloat { max(availableHeight - activeControlHeight - sectionSpacing, 0) }
     var activeMainHeight: CGFloat { max(activeDashboardHeight - activeHeaderHeight - sectionSpacing, 0) }
-    var wodLandscapeRailWidth: CGFloat { clamp(availableWidth * 0.12, min: 74, max: 104) }
+    var wodLandscapeHeaderHeight: CGFloat { clamp(availableHeight * 0.105, min: 42, max: 54) }
+    var wodLandscapeRailWidth: CGFloat { clamp(availableWidth * 0.095, min: 62, max: 86) }
     var wodLandscapeRailGap: CGFloat { clamp(availableWidth * 0.014, min: 8, max: 14) }
-    var wodLandscapeHeroHeight: CGFloat { max(availableHeight - activeHeaderHeight - sectionSpacing, 0) }
-    var wodLandscapeRailButtonHeight: CGFloat { clamp(availableHeight * 0.13, min: 42, max: 54) }
+    var wodLandscapeHeroHeight: CGFloat { max(availableHeight - wodLandscapeHeaderHeight - sectionSpacing, 0) }
+    var wodLandscapeRailButtonHeight: CGFloat { clamp(availableHeight * 0.11, min: 38, max: 46) }
 
     func wodLandscapeCenterWidth(followWatchActive: Bool) -> CGFloat {
         let railCount: CGFloat = followWatchActive ? 1 : 2
@@ -355,16 +356,16 @@ private struct DashboardMetrics {
     var currentMovementSize: CGFloat { isLandscape ? 21 : 26 }
     var secondaryMovementSize: CGFloat { isLandscape ? 16 : 19 }
     var wodCurrentMovementSize: CGFloat {
-        isLandscape ? clamp(activeMainHeight * 0.22, min: 38, max: 62) : clamp(activeMainHeight * 0.14, min: 34, max: 54)
+        isLandscape ? clamp(wodLandscapeHeroHeight * 0.28, min: 70, max: 124) : clamp(activeMainHeight * 0.20, min: 62, max: 112)
     }
     var wodCurrentPrescriptionSize: CGFloat {
-        isLandscape ? clamp(activeMainHeight * 0.10, min: 19, max: 28) : clamp(activeMainHeight * 0.07, min: 18, max: 27)
+        isLandscape ? clamp(wodLandscapeHeroHeight * 0.105, min: 26, max: 42) : clamp(activeMainHeight * 0.075, min: 22, max: 36)
     }
     var wodNextMovementSize: CGFloat {
-        isLandscape ? clamp(activeMainHeight * 0.12, min: 22, max: 34) : clamp(activeMainHeight * 0.065, min: 18, max: 27)
+        isLandscape ? clamp(wodLandscapeHeroHeight * 0.145, min: 36, max: 62) : clamp(activeMainHeight * 0.105, min: 32, max: 58)
     }
     var wodMetaSize: CGFloat {
-        isLandscape ? clamp(activeMainHeight * 0.07, min: 16, max: 22) : clamp(activeMainHeight * 0.045, min: 15, max: 20)
+        isLandscape ? clamp(wodLandscapeHeroHeight * 0.055, min: 16, max: 24) : clamp(activeMainHeight * 0.045, min: 15, max: 22)
     }
     var controlFontSize: CGFloat { isLandscape ? 14 : 16 }
     var controlHeight: CGFloat { isLandscape ? activeControlHeight : 50 }
@@ -656,19 +657,18 @@ private struct WODProgressPanel: View {
 
     private var landscapeBody: some View {
         GeometryReader { geometry in
-            let spacing = max(metrics.sectionSpacing - 3, 6)
-            let verticalPadding = max(metrics.cardPadding - 2, 7)
+            let spacing = max(metrics.sectionSpacing - 5, 5)
+            let verticalPadding = max(metrics.cardPadding - 4, 6)
             let usableHeight = max(geometry.size.height - (verticalPadding * 2) - (spacing * 3) - 1, 0)
-            let progressHeight = clamp(usableHeight * 0.17, min: 34, max: 46)
+            let progressHeight = clamp(usableHeight * 0.13, min: 32, max: 42)
             let movementHeight = max(usableHeight - progressHeight, 0)
-            let currentHeight = movementHeight * 0.58
-            let nextHeight = movementHeight * 0.42
+            let currentHeight = movementHeight * 0.68
+            let nextHeight = movementHeight * 0.32
 
-            VStack(alignment: .leading, spacing: spacing) {
+            VStack(alignment: .center, spacing: spacing) {
                 HStack(alignment: .center, spacing: 14) {
                     progressPill(text: workoutManager.roundText, isPrimary: true)
                     progressPill(text: timerManager.elapsedTimeText, isPrimary: false)
-                    Spacer(minLength: 0)
                 }
                 .frame(height: progressHeight)
 
@@ -682,6 +682,7 @@ private struct WODProgressPanel: View {
                     isPrimary: true
                 )
                 .frame(height: currentHeight, alignment: .center)
+                .layoutPriority(3)
 
                 Divider()
                     .overlay(.white.opacity(0.16))
@@ -695,12 +696,13 @@ private struct WODProgressPanel: View {
                     maxPrescriptionLines: 2,
                     isPrimary: false
                 )
-                .frame(height: nextHeight, alignment: .top)
+                .frame(height: nextHeight, alignment: .center)
+                .layoutPriority(2)
             }
             .padding(verticalPadding)
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .center)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
@@ -710,15 +712,15 @@ private struct WODProgressPanel: View {
 
     private var portraitBody: some View {
         GeometryReader { geometry in
-            let spacing = max(metrics.sectionSpacing - 4, 6)
-            let verticalPadding = max(metrics.cardPadding - 2, 8)
+            let spacing = max(metrics.sectionSpacing - 5, 5)
+            let verticalPadding = max(metrics.cardPadding - 4, 7)
             let usableHeight = max(geometry.size.height - (verticalPadding * 2) - (spacing * 3) - 1, 0)
-            let progressHeight = clamp(usableHeight * 0.14, min: 42, max: 54)
+            let progressHeight = clamp(usableHeight * 0.12, min: 38, max: 50)
             let movementHeight = max(usableHeight - progressHeight, 0)
-            let currentHeight = movementHeight * 0.58
-            let nextHeight = movementHeight * 0.42
+            let currentHeight = movementHeight * 0.68
+            let nextHeight = movementHeight * 0.32
 
-            VStack(alignment: .leading, spacing: spacing) {
+            VStack(alignment: .center, spacing: spacing) {
                 HStack(spacing: 10) {
                     progressPill(text: workoutManager.roundText, isPrimary: true)
                     progressPill(text: timerManager.elapsedTimeText, isPrimary: false)
@@ -735,6 +737,7 @@ private struct WODProgressPanel: View {
                     isPrimary: true
                 )
                 .frame(height: currentHeight, alignment: .center)
+                .layoutPriority(3)
 
                 Divider()
                     .overlay(.white.opacity(0.14))
@@ -748,12 +751,13 @@ private struct WODProgressPanel: View {
                     maxPrescriptionLines: 2,
                     isPrimary: false
                 )
-                .frame(height: nextHeight, alignment: .top)
+                .frame(height: nextHeight, alignment: .center)
+                .layoutPriority(2)
             }
             .padding(verticalPadding)
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .center)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
@@ -789,9 +793,9 @@ private struct WODMovementBlock: View {
     let isPrimary: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: isPrimary ? 8 : 5) {
+        VStack(alignment: .center, spacing: isPrimary ? 8 : 5) {
             Text(label.uppercased())
-                .font(.system(size: isPrimary ? 18 : 14, weight: .black, design: .rounded))
+                .font(.system(size: isPrimary ? max(titleSize * 0.18, 18) : max(titleSize * 0.24, 14), weight: .black, design: .rounded))
                 .foregroundStyle(.yellow)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -800,6 +804,7 @@ private struct WODMovementBlock: View {
                 .font(.system(size: titleSize, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(maxTitleLines)
+                .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.58)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -808,11 +813,12 @@ private struct WODMovementBlock: View {
                     .font(.system(size: prescriptionSize, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white.opacity(0.72))
                     .lineLimit(maxPrescriptionLines)
+                    .multilineTextAlignment(.center)
                     .minimumScaleFactor(0.62)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 }
 
@@ -1330,6 +1336,7 @@ private struct WODLandscapeControlRail: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 2)
+        .opacity(0.72)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -1398,7 +1405,7 @@ private struct WODLandscapeRailButtonStyle: ButtonStyle {
             .lineLimit(1)
             .minimumScaleFactor(0.5)
             .frame(maxWidth: .infinity, minHeight: metrics.wodLandscapeRailButtonHeight)
-            .padding(.horizontal, 5)
+            .padding(.horizontal, 3)
             .contentShape(Rectangle())
             .background(background.opacity(configuration.isPressed ? 0.72 : 1), in: RoundedRectangle(cornerRadius: 8))
             .overlay(
