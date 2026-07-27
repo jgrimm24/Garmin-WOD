@@ -1,6 +1,8 @@
 import SwiftUI
+import UIKit
 
 struct GymDisplayView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel = DisplayViewModel()
     @State private var isBluetoothSheetPresented = false
 
@@ -53,9 +55,22 @@ struct GymDisplayView: View {
                 viewModel.selectedHeartRateSource = .bluetooth
                 viewModel.loadLatestWorkoutIfNeeded()
                 viewModel.logLayout(width: geometry.size.width, height: geometry.size.height, isLandscape: isLandscape)
+                updateIdleTimer(for: scenePhase)
+            }
+            .onDisappear {
+                setIdleTimerDisabled(false, reason: "view disappeared")
             }
             .onChange(of: geometry.size) { _, newSize in
                 viewModel.logLayout(width: newSize.width, height: newSize.height, isLandscape: newSize.width > newSize.height)
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                updateIdleTimer(for: newPhase)
+            }
+            .onChange(of: viewModel.isFollowingWatch) { _, _ in
+                updateIdleTimer(for: scenePhase)
+            }
+            .onReceive(viewModel.workoutManager.$status) { _ in
+                updateIdleTimer(for: scenePhase)
             }
         }
         .preferredColorScheme(.dark)
@@ -67,6 +82,20 @@ struct GymDisplayView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+    }
+
+    private func updateIdleTimer(for scenePhase: ScenePhase) {
+        let shouldDisable = scenePhase == .active && viewModel.shouldPreventDisplaySleep
+        setIdleTimerDisabled(shouldDisable, reason: "scene=\(scenePhase) preventSleep=\(viewModel.shouldPreventDisplaySleep)")
+    }
+
+    private func setIdleTimerDisabled(_ isDisabled: Bool, reason: String) {
+        guard UIApplication.shared.isIdleTimerDisabled != isDisabled else {
+            return
+        }
+
+        UIApplication.shared.isIdleTimerDisabled = isDisabled
+        print("[IDLE TIMER] \(isDisabled ? "disabled" : "enabled") \(reason)")
     }
 
     // MARK: - Layouts

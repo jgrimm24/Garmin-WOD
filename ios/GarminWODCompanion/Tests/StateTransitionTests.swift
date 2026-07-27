@@ -215,6 +215,40 @@ expect(viewModel.heartRateManager.currentHeartRate == 155, "mock HR should updat
 expect(viewModel.heartRateManager.currentZone.id == 4, "mock HR 155 should be zone 4")
 expect(viewModel.heartRateManager.maximumHeartRate >= 155, "mock HR update should affect max HR")
 
+print("[TEST] display sleep prevention policy")
+expect(
+    !DisplayViewModel.shouldPreventDisplaySleep(isFollowingWatch: false, workoutStatus: .idle),
+    "idle with follow off should allow normal auto-lock"
+)
+expect(
+    DisplayViewModel.shouldPreventDisplaySleep(isFollowingWatch: true, workoutStatus: .idle),
+    "follow on while waiting should prevent display sleep"
+)
+expect(
+    DisplayViewModel.shouldPreventDisplaySleep(isFollowingWatch: false, workoutStatus: .running),
+    "local running should prevent display sleep"
+)
+expect(
+    DisplayViewModel.shouldPreventDisplaySleep(isFollowingWatch: false, workoutStatus: .paused),
+    "local paused should prevent display sleep"
+)
+expect(
+    DisplayViewModel.shouldPreventDisplaySleep(isFollowingWatch: true, workoutStatus: .running),
+    "remote running while following should prevent display sleep"
+)
+expect(
+    DisplayViewModel.shouldPreventDisplaySleep(isFollowingWatch: true, workoutStatus: .paused),
+    "remote paused while following should prevent display sleep"
+)
+expect(
+    !DisplayViewModel.shouldPreventDisplaySleep(isFollowingWatch: true, workoutStatus: .finished),
+    "finished workout should restore normal auto-lock even if follow remains enabled"
+)
+expect(
+    !DisplayViewModel.shouldPreventDisplaySleep(isFollowingWatch: false, workoutStatus: .finished),
+    "local finished should allow normal auto-lock"
+)
+
 print("[TEST] workout summary snapshot")
 let summaryHeartRateManager = MockHeartRateManager()
 summaryHeartRateManager.isDemoModeEnabled = false

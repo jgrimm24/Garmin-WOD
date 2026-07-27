@@ -237,6 +237,24 @@ final class DisplayViewModel: ObservableObject {
         !(isFollowingWatch && isMirroringWatchSession)
     }
 
+    var shouldPreventDisplaySleep: Bool {
+        Self.shouldPreventDisplaySleep(
+            isFollowingWatch: isFollowingWatch,
+            workoutStatus: workoutManager.status
+        )
+    }
+
+    static func shouldPreventDisplaySleep(isFollowingWatch: Bool, workoutStatus: WorkoutStatus) -> Bool {
+        switch workoutStatus {
+        case .running, .paused:
+            return true
+        case .idle:
+            return isFollowingWatch
+        case .finished:
+            return false
+        }
+    }
+
     func toggleFollowWatch() {
         if isFollowingWatch {
             stopFollowingWatch()
