@@ -56,7 +56,7 @@ struct GymDisplayView: View {
                                 isLandscape: isLandscape,
                                 displayMode: displayMode
                             )
-                            .frame(height: isLandscape ? metrics.activeControlHeight : nil)
+                            .frame(height: metrics.activeControlHeight)
                         }
                     }
                 }
@@ -276,7 +276,7 @@ private struct DashboardMetrics {
     var availableHeight: CGFloat { size.height - (outerPadding * 2) }
 
     var outerPadding: CGFloat { isLandscape ? 10 : 12 }
-    var cardPadding: CGFloat { isLandscape ? 12 : 14 }
+    var cardPadding: CGFloat { isLandscape ? 10 : 12 }
     var heartPanelPadding: CGFloat { isLandscape ? 10 : 14 }
     var landscapePanelGap: CGFloat { isLandscape ? 14 : sectionSpacing }
 
@@ -286,8 +286,8 @@ private struct DashboardMetrics {
     var landscapeHeartPanelWidth: CGFloat { landscapePanelWidthBudget * 0.38 }
     var landscapeWorkoutPanelWidth: CGFloat { max(landscapePanelWidthBudget - landscapeHeartPanelWidth, 0) }
 
-    var activeHeaderHeight: CGFloat { clamp(availableHeight * 0.13, min: 52, max: 64) }
-    var activeControlHeight: CGFloat { clamp(availableHeight * 0.105, min: 46, max: 54) }
+    var activeHeaderHeight: CGFloat { isLandscape ? clamp(availableHeight * 0.13, min: 52, max: 64) : clamp(availableHeight * 0.115, min: 84, max: 104) }
+    var activeControlHeight: CGFloat { isLandscape ? clamp(availableHeight * 0.105, min: 46, max: 54) : 112 }
     var activeDashboardHeight: CGFloat { max(availableHeight - activeControlHeight - sectionSpacing, 0) }
     var activeMainHeight: CGFloat { max(activeDashboardHeight - activeHeaderHeight - sectionSpacing, 0) }
 
@@ -313,16 +313,16 @@ private struct DashboardMetrics {
     var currentMovementSize: CGFloat { isLandscape ? 21 : 26 }
     var secondaryMovementSize: CGFloat { isLandscape ? 16 : 19 }
     var wodCurrentMovementSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.16, min: 54, max: 82) : clamp(size.height * 0.062, min: 42, max: 62)
+        isLandscape ? clamp(activeMainHeight * 0.26, min: 46, max: 72) : clamp(activeMainHeight * 0.14, min: 34, max: 54)
     }
     var wodCurrentPrescriptionSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.075, min: 26, max: 38) : clamp(size.height * 0.035, min: 23, max: 32)
+        isLandscape ? clamp(activeMainHeight * 0.12, min: 22, max: 34) : clamp(activeMainHeight * 0.07, min: 18, max: 27)
     }
     var wodNextMovementSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.085, min: 30, max: 44) : clamp(size.height * 0.034, min: 22, max: 30)
+        isLandscape ? clamp(activeMainHeight * 0.14, min: 26, max: 40) : clamp(activeMainHeight * 0.065, min: 18, max: 27)
     }
     var wodMetaSize: CGFloat {
-        isLandscape ? clamp(size.height * 0.052, min: 18, max: 25) : clamp(size.height * 0.026, min: 17, max: 22)
+        isLandscape ? clamp(activeMainHeight * 0.07, min: 16, max: 22) : clamp(activeMainHeight * 0.045, min: 15, max: 20)
     }
     var controlFontSize: CGFloat { isLandscape ? 14 : 16 }
     var controlHeight: CGFloat { isLandscape ? activeControlHeight : 50 }
@@ -354,18 +354,28 @@ private struct HeaderView: View {
     let onHeartRateSettings: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        if metrics.isLandscape {
+            landscapeBody
+        } else {
+            portraitBody
+        }
+    }
+
+    private var landscapeBody: some View {
+        HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(primaryTitle)
                     .font(.system(size: metrics.headerTitleSize, weight: .black, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
 
-                Text(secondaryTitle)
-                    .font(.system(size: metrics.headerMetaSize, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
+                if !secondaryTitle.isEmpty {
+                    Text(secondaryTitle)
+                        .font(.system(size: metrics.headerMetaSize, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                }
 
                 if workoutManager.status == .idle {
                     setupControls
@@ -377,13 +387,14 @@ private struct HeaderView: View {
                         .minimumScaleFactor(0.6)
                 }
             }
+            .layoutPriority(2)
 
-            Spacer(minLength: 8)
+            Spacer(minLength: 6)
 
             HStack(alignment: .center, spacing: 8) {
                 DisplayModeSelector(displayMode: $displayMode, metrics: metrics)
 
-                VStack(alignment: .trailing, spacing: 6) {
+                VStack(alignment: .trailing, spacing: 5) {
                     Button(action: onHeartRateSettings) {
                         Text(statusLabel)
                             .font(.system(size: metrics.headerMetaSize, weight: .heavy, design: .rounded))
@@ -405,6 +416,68 @@ private struct HeaderView: View {
                         .background(.white.opacity(0.12), in: Capsule())
                 }
             }
+            .layoutPriority(1)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var portraitBody: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(primaryTitle)
+                        .font(.system(size: metrics.headerTitleSize, weight: .black, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.58)
+
+                    if !secondaryTitle.isEmpty {
+                        Text(secondaryTitle)
+                            .font(.system(size: metrics.headerMetaSize, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                    }
+                }
+                .layoutPriority(2)
+
+                Spacer(minLength: 6)
+
+                DisplayModeSelector(displayMode: $displayMode, metrics: metrics)
+            }
+
+            HStack(alignment: .center, spacing: 8) {
+                if workoutManager.status == .idle {
+                    setupControls
+                } else if viewModel.isFollowingWatch {
+                    Text(viewModel.watchSyncStatusText.uppercased())
+                        .font(.system(size: max(metrics.headerMetaSize - 2, 10), weight: .black, design: .rounded))
+                        .foregroundStyle(.yellow.opacity(0.85))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+
+                Spacer(minLength: 6)
+
+                Button(action: onHeartRateSettings) {
+                    Text(statusLabel)
+                        .font(.system(size: metrics.headerMetaSize - 1, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.yellow)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.55)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(.yellow.opacity(0.13), in: Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Text(workoutManager.status.rawValue.uppercased())
+                    .font(.system(size: metrics.headerMetaSize - 2, weight: .black, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(.white.opacity(0.12), in: Capsule())
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -416,6 +489,10 @@ private struct HeaderView: View {
     private var secondaryTitle: String {
         if displayMode == .run {
             return viewModel.isFollowingWatch ? viewModel.watchSyncStatusText.uppercased() : "HEART RATE DASHBOARD"
+        }
+
+        if workoutManager.workout.title.caseInsensitiveCompare(workoutManager.workout.type.rawValue) == .orderedSame {
+            return ""
         }
 
         return workoutManager.workout.type.rawValue.uppercased()
@@ -504,8 +581,7 @@ private struct DisplayModeSelector: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .foregroundStyle(displayMode == mode ? .black : .white.opacity(0.82))
-                        .frame(minWidth: metrics.isLandscape ? 42 : 46, minHeight: 30)
-                        .padding(.horizontal, 2)
+                        .frame(width: mode == .workout ? (metrics.isLandscape ? 86 : 92) : 48, height: 30)
                         .background(displayMode == mode ? .yellow : .clear, in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -684,17 +760,17 @@ private struct RunDashboardPanel: View {
     }
 
     private var landscapeBody: some View {
-        HStack(alignment: .center, spacing: metrics.landscapePanelGap) {
+        VStack(spacing: metrics.sectionSpacing) {
             runHero
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(3)
 
-            VStack(spacing: metrics.sectionSpacing) {
-                runMetricCard(title: "Elapsed", value: timerManager.elapsedTimeText, isTimer: true)
-                runMetricCard(title: "Avg HR", value: "\(viewModel.activeAverageHeartRate)", isTimer: false)
-                runMetricCard(title: "Max HR", value: "\(viewModel.activeMaximumHeartRate)", isTimer: false)
+            HStack(spacing: 14) {
+                compactRunMetric(title: "Elapsed", value: timerManager.elapsedTimeText, isPrimary: true)
+                compactRunMetric(title: "Avg HR", value: "\(viewModel.activeAverageHeartRate)", isPrimary: false)
+                compactRunMetric(title: "Max HR", value: "\(viewModel.activeMaximumHeartRate)", isPrimary: false)
             }
-            .frame(width: max(metrics.availableWidth * 0.32, 210), height: metrics.activeMainHeight)
+            .frame(height: min(metrics.activeMainHeight * 0.18, 58))
         }
         .padding(metrics.cardPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -712,11 +788,11 @@ private struct RunDashboardPanel: View {
                 .layoutPriority(3)
 
             HStack(spacing: 10) {
-                runMetricCard(title: "Elapsed", value: timerManager.elapsedTimeText, isTimer: true)
-                runMetricCard(title: "Avg HR", value: "\(viewModel.activeAverageHeartRate)", isTimer: false)
-                runMetricCard(title: "Max HR", value: "\(viewModel.activeMaximumHeartRate)", isTimer: false)
+                compactRunMetric(title: "Elapsed", value: timerManager.elapsedTimeText, isPrimary: true)
+                compactRunMetric(title: "Avg HR", value: "\(viewModel.activeAverageHeartRate)", isPrimary: false)
+                compactRunMetric(title: "Max HR", value: "\(viewModel.activeMaximumHeartRate)", isPrimary: false)
             }
-            .frame(height: 92)
+            .frame(height: 62)
         }
         .padding(metrics.cardPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -755,8 +831,8 @@ private struct RunDashboardPanel: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func runMetricCard(title: String, value: String, isTimer: Bool) -> some View {
-        VStack(spacing: 4) {
+    private func compactRunMetric(title: String, value: String, isPrimary: Bool) -> some View {
+        HStack(alignment: .lastTextBaseline, spacing: 7) {
             Text(title.uppercased())
                 .font(.system(size: isLandscape ? 13 : 11, weight: .black, design: .rounded))
                 .foregroundStyle(.white.opacity(0.62))
@@ -764,14 +840,14 @@ private struct RunDashboardPanel: View {
                 .minimumScaleFactor(0.7)
 
             Text(value)
-                .font(.system(size: isTimer ? runTimerMetricSize : runSecondaryMetricSize, weight: .black, design: .rounded))
+                .font(.system(size: isPrimary ? runTimerMetricSize : runSecondaryMetricSize, weight: .black, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(isTimer ? .yellow : .white)
+                .foregroundStyle(isPrimary ? .yellow : .white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.vertical, isLandscape ? 8 : 6)
+        .padding(.vertical, isLandscape ? 6 : 5)
         .padding(.horizontal, 8)
         .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
     }
@@ -796,19 +872,19 @@ private struct RunDashboardPanel: View {
     }
 
     private var runHeartRateSize: CGFloat {
-        isLandscape ? min(metrics.activeMainHeight * 0.56, 168) : min(metrics.availableHeight * 0.23, 178)
+        isLandscape ? min(metrics.activeMainHeight * 0.72, 228) : min(metrics.activeMainHeight * 0.46, 210)
     }
 
     private var runZoneSize: CGFloat {
-        isLandscape ? min(metrics.activeMainHeight * 0.13, 42) : min(metrics.availableHeight * 0.055, 42)
+        isLandscape ? min(metrics.activeMainHeight * 0.16, 52) : min(metrics.activeMainHeight * 0.11, 48)
     }
 
     private var runTimerMetricSize: CGFloat {
-        isLandscape ? min(metrics.activeMainHeight * 0.115, 40) : 25
+        isLandscape ? min(metrics.activeMainHeight * 0.07, 28) : 21
     }
 
     private var runSecondaryMetricSize: CGFloat {
-        isLandscape ? min(metrics.activeMainHeight * 0.13, 44) : 28
+        isLandscape ? min(metrics.activeMainHeight * 0.072, 28) : 22
     }
 }
 
