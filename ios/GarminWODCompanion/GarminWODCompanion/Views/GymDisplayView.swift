@@ -263,7 +263,24 @@ private struct HeaderView: View {
                             .foregroundStyle(.white.opacity(0.62))
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
+
+                        Button {
+                            viewModel.toggleFollowWatch()
+                        } label: {
+                            Text(viewModel.isFollowingWatch ? "Stop Follow" : "Follow Watch")
+                                .font(.system(size: max(metrics.headerMetaSize - 2, 10), weight: .black, design: .rounded))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(viewModel.isFollowingWatch ? .white.opacity(0.85) : .yellow)
                     }
+                } else if viewModel.isFollowingWatch {
+                    Text(viewModel.watchSyncStatusText.uppercased())
+                        .font(.system(size: max(metrics.headerMetaSize - 3, 10), weight: .black, design: .rounded))
+                        .foregroundStyle(.yellow.opacity(0.85))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                 }
             }
 
@@ -684,6 +701,12 @@ private struct ControlBar: View {
     let isLandscape: Bool
 
     private var controls: [DashboardControl] {
+        if viewModel.isFollowingWatch && viewModel.isMirroringWatchSession {
+            return [
+                DashboardControl(label: "Stop Follow", kind: .secondary, action: .stopFollowing, isEnabled: true)
+            ]
+        }
+
         switch workoutManager.status {
         case .idle:
             return [
@@ -754,6 +777,7 @@ private struct ControlBar: View {
         case .next:    viewModel.nextStation()
         case .finish:  viewModel.finishWorkout()
         case .reset:   viewModel.resetWorkout()
+        case .stopFollowing: viewModel.stopFollowingWatch()
         }
     }
 }
@@ -767,7 +791,7 @@ private struct DashboardControl: Identifiable {
 }
 
 private enum DashboardControlAction: String {
-    case primary, back, next, finish, reset
+    case primary, back, next, finish, reset, stopFollowing
 }
 
 private enum DashboardButtonKind {

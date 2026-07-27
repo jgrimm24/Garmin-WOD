@@ -125,6 +125,16 @@ final class WorkoutManager: ObservableObject {
         status = .finished
     }
 
+    func applyRemoteSession(status: WorkoutStatus, round: Int, stationIndex: Int) {
+        guard workout.stations.indices.contains(stationIndex), round >= 1 else {
+            return
+        }
+
+        currentStationIndex = stationIndex
+        currentRound = round
+        self.status = status
+    }
+
     func reset() {
         print("[RESET] WorkoutManager before status=\(status.rawValue)")
         currentStationIndex = 0

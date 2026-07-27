@@ -32,6 +32,31 @@ final class StubLatestWorkoutClient: LatestWorkoutServing {
     }
 }
 
+final class StubWorkoutSessionClient: WorkoutSessionServing {
+    var fetchCount = 0
+    var result: Result<WorkoutSessionState, WorkoutSessionFetchError>?
+    private var pendingCompletions: [(Result<WorkoutSessionState, WorkoutSessionFetchError>) -> Void] = []
+
+    init(result: Result<WorkoutSessionState, WorkoutSessionFetchError>? = nil) {
+        self.result = result
+    }
+
+    func fetchWorkoutSession(completion: @escaping (Result<WorkoutSessionState, WorkoutSessionFetchError>) -> Void) {
+        fetchCount += 1
+        if let result {
+            completion(result)
+        } else {
+            pendingCompletions.append(completion)
+        }
+    }
+
+    func complete(_ result: Result<WorkoutSessionState, WorkoutSessionFetchError>) {
+        let completions = pendingCompletions
+        pendingCompletions = []
+        completions.forEach { $0(result) }
+    }
+}
+
 final class MemoryWorkoutCache: WorkoutCaching {
     var cachedWorkout: WorkoutContract?
     var saveCount = 0
@@ -90,6 +115,28 @@ func makeWorkout(id: String, title: String, type: WorkoutType = .amrap, rounds: 
         ],
         notes: [],
         sourceText: title
+    )
+}
+
+func makeSessionState(
+    workout: WorkoutContract,
+    sessionId: String = "session-a",
+    revision: Int = 1,
+    status: RemoteWorkoutSessionStatus = .running,
+    round: Int = 1,
+    stationIndex: Int = 0,
+    elapsedSeconds: Int = 10,
+    updatedAt: Int = Int(Date().timeIntervalSince1970)
+) -> WorkoutSessionState {
+    WorkoutSessionState(
+        workoutId: workout.syncIdentity,
+        sessionId: sessionId,
+        revision: revision,
+        status: status,
+        round: round,
+        stationIndex: stationIndex,
+        elapsedSeconds: elapsedSeconds,
+        updatedAt: updatedAt
     )
 }
 
@@ -250,6 +297,55 @@ expect(
     "16-bit HR packet with optional trailing bytes should parse BPM"
 )
 
+print("[TEST] Workout session contract decoding")
+let sessionPayload = """
+{
+  "session": {
+    "workoutId": "\(workout.syncIdentity)",
+    "sessionId": "watch-session",
+    "revision": 12,
+    "status": "paused",
+    "round": 2,
+    "stationIndex": 1,
+    "elapsedSeconds": 99,
+    "updatedAt": \(Int(Date().timeIntervalSince1970))
+  }
+}
+""".data(using: .utf8)!
+let decodedSession = try WorkoutSessionAPIClient.decodeWorkoutSessionResponse(data: sessionPayload, statusCode: 200)
+expect(decodedSession.sessionId == "watch-session", "session wrapper should decode sessionId")
+expect(decodedSession.status == .paused, "session wrapper should decode status")
+
+let rawSessionPayload = """
+{
+  "workoutId": "\(workout.syncIdentity)",
+  "sessionId": "raw-watch-session",
+  "revision": 13,
+  "status": "running",
+  "round": 1,
+  "stationIndex": 0,
+  "elapsedSeconds": 42,
+  "updatedAt": \(Int(Date().timeIntervalSince1970))
+}
+""".data(using: .utf8)!
+let decodedRawSession = try WorkoutSessionAPIClient.decodeWorkoutSessionResponse(data: rawSessionPayload, statusCode: 200)
+expect(decodedRawSession.sessionId == "raw-watch-session", "raw session response should decode sessionId")
+expect(decodedRawSession.elapsedSeconds == 42, "raw session response should decode elapsed time")
+
+do {
+    _ = try WorkoutSessionAPIClient.decodeWorkoutSessionResponse(data: Data(), statusCode: 200)
+    expect(false, "empty session data should be rejected")
+} catch let error as WorkoutSessionFetchError {
+    expect(error == .emptyData, "empty session data should return emptyData")
+}
+
+do {
+    _ = try WorkoutSessionAPIClient.decodeWorkoutSessionResponse(data: sessionPayload, statusCode: 404)
+    expect(false, "missing session should be rejected")
+} catch let error as WorkoutSessionFetchError {
+    expect(error == .notFound, "HTTP 404 should produce notFound")
+}
+
 print("[TEST] Latest workout contract decoding")
 let decodedLatest = try JSONDecoder().decode(WorkoutContract.self, from: latestWorkoutFixture())
 expect(decodedLatest.title == "Roney", "latest fixture should decode workout title")
@@ -365,5 +461,140 @@ let invalidResponseViewModel = DisplayViewModel(
 invalidResponseViewModel.loadLatestWorkoutIfNeeded()
 expect(protectedCache.cachedWorkout?.id == "cached", "invalid response should not overwrite valid cache")
 expect(invalidResponseViewModel.workoutManager.workout.id == "cached", "invalid response should keep cached workout displayed")
+
+print("[TEST] Watch session follow behavior")
+let sessionClient = StubWorkoutSessionClient()
+let followerViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: StubLatestWorkoutClient(result: .failure(.invalidStatus(404))),
+    workoutSessionClient: sessionClient,
+    workoutCache: MemoryWorkoutCache()
+)
+expect(!followerViewModel.isFollowingWatch, "follow should default off")
+expect(sessionClient.fetchCount == 0, "follow off should not poll")
+
+followerViewModel.startFollowingWatch()
+expect(followerViewModel.isFollowingWatch, "startFollowingWatch should enable follow")
+expect(sessionClient.fetchCount == 1, "startFollowingWatch should poll immediately")
+followerViewModel.refreshWatchSession()
+expect(sessionClient.fetchCount == 1, "follow polling should not overlap while a request is pending")
+
+sessionClient.complete(.success(makeSessionState(workout: workout, revision: 1, status: .running, round: 1, stationIndex: 1, elapsedSeconds: 20)))
+expect(followerViewModel.isMirroringWatchSession, "valid watch state should enable mirroring")
+expect(followerViewModel.workoutManager.status == .running, "remote running should set running")
+expect(followerViewModel.workoutManager.currentStationIndex == 1, "remote station should apply")
+expect(followerViewModel.workoutManager.currentRound == 1, "remote round should apply")
+expect(followerViewModel.timerManager.isRunning, "remote running should run local display timer")
+expect(followerViewModel.timerManager.elapsedSeconds >= 20, "remote elapsed should apply")
+
+sessionClient.result = .success(makeSessionState(workout: workout, revision: 2, status: .paused, round: 1, stationIndex: 2, elapsedSeconds: 30))
+followerViewModel.startFollowingWatch()
+followerViewModel.stopFollowingWatch()
+followerViewModel.startFollowingWatch()
+expect(sessionClient.fetchCount >= 2, "re-enabling follow should poll")
+expect(followerViewModel.isFollowingWatch, "follow should re-enable")
+
+let directSessionClient = StubWorkoutSessionClient(result: .success(makeSessionState(workout: workout, revision: 3, status: .paused, round: 1, stationIndex: 2, elapsedSeconds: 30)))
+let directFollower = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: StubLatestWorkoutClient(result: .failure(.invalidStatus(404))),
+    workoutSessionClient: directSessionClient,
+    workoutCache: MemoryWorkoutCache()
+)
+directFollower.startFollowingWatch()
+expect(directFollower.workoutManager.status == .paused, "remote paused should set paused")
+expect(!directFollower.timerManager.isRunning, "remote paused should freeze timer")
+expect(directFollower.timerManager.elapsedSeconds == 30, "remote paused elapsed should apply exactly")
+
+let oldRevisionClient = StubWorkoutSessionClient(result: .success(makeSessionState(workout: workout, revision: 2, status: .running, round: 1, stationIndex: 0, elapsedSeconds: 5)))
+directFollower.stopFollowingWatch()
+let oldRevisionFollower = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: StubLatestWorkoutClient(result: .failure(.invalidStatus(404))),
+    workoutSessionClient: oldRevisionClient,
+    workoutCache: MemoryWorkoutCache()
+)
+oldRevisionFollower.startFollowingWatch()
+oldRevisionClient.result = .success(makeSessionState(workout: workout, revision: 1, status: .paused, round: 1, stationIndex: 2, elapsedSeconds: 30))
+oldRevisionFollower.refreshWatchSession()
+expect(oldRevisionFollower.workoutManager.currentStationIndex == 0, "older duplicate revision should not apply over newer state")
+
+let mismatchedWorkout = makeWorkout(id: "other", title: "Other")
+let mismatchClient = StubWorkoutSessionClient(result: .success(makeSessionState(workout: mismatchedWorkout, revision: 1, status: .running)))
+let mismatchFollower = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: StubLatestWorkoutClient(result: .failure(.invalidStatus(404))),
+    workoutSessionClient: mismatchClient,
+    workoutCache: MemoryWorkoutCache()
+)
+mismatchFollower.startFollowingWatch()
+expect(!mismatchFollower.isMirroringWatchSession, "mismatched workout should not mirror")
+expect(mismatchFollower.workoutManager.status == .idle, "mismatched workout should not change status")
+
+let invalidIndexClient = StubWorkoutSessionClient(result: .success(makeSessionState(workout: workout, revision: 1, stationIndex: 99)))
+let invalidIndexFollower = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: StubLatestWorkoutClient(result: .failure(.invalidStatus(404))),
+    workoutSessionClient: invalidIndexClient,
+    workoutCache: MemoryWorkoutCache()
+)
+invalidIndexFollower.startFollowingWatch()
+expect(!invalidIndexFollower.isMirroringWatchSession, "invalid station index should not mirror")
+
+let staleClient = StubWorkoutSessionClient(result: .success(makeSessionState(workout: workout, revision: 1, updatedAt: Int(Date().timeIntervalSince1970) - 3600)))
+let staleFollower = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: StubLatestWorkoutClient(result: .failure(.invalidStatus(404))),
+    workoutSessionClient: staleClient,
+    workoutCache: MemoryWorkoutCache()
+)
+staleFollower.startFollowingWatch()
+expect(!staleFollower.isMirroringWatchSession, "stale session should not mirror")
+
+let finishedClient = StubWorkoutSessionClient(result: .success(makeSessionState(workout: workout, revision: 5, status: .finished, round: 2, stationIndex: 2, elapsedSeconds: 120)))
+let finishedFollower = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: StubLatestWorkoutClient(result: .failure(.invalidStatus(404))),
+    workoutSessionClient: finishedClient,
+    workoutCache: MemoryWorkoutCache()
+)
+finishedFollower.startFollowingWatch()
+expect(finishedFollower.workoutManager.status == .finished, "remote finished should set finished")
+expect(finishedFollower.workoutSummary != nil, "remote finished should capture summary")
+expect(finishedFollower.workoutSummary?.elapsedSeconds == 120, "remote finished summary should freeze remote elapsed")
+finishedFollower.heartRateManager.setSimulatedHeartRate(180)
+expect(finishedFollower.workoutSummary?.elapsedSeconds == 120, "post-finish HR should not mutate summary elapsed")
+
+finishedFollower.resetWorkout()
+expect(finishedFollower.workoutSummary == nil, "reset should clear remote summary")
+expect(finishedFollower.workoutManager.status == .idle, "reset after following should return idle")
+
+let watchFailureClient = StubWorkoutSessionClient(result: .failure(.invalidStatus(503)))
+let failureFollower = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: StubLatestWorkoutClient(result: .failure(.invalidStatus(404))),
+    workoutSessionClient: watchFailureClient,
+    workoutCache: MemoryWorkoutCache()
+)
+failureFollower.startFollowingWatch()
+expect(failureFollower.isFollowingWatch, "failed watch fetch should keep follow mode enabled")
+expect(!failureFollower.isMirroringWatchSession, "failed watch fetch should not start mirroring")
+expect(failureFollower.workoutManager.status == .idle, "failed watch fetch should not change workout status")
 
 print("[TEST] PASS: DisplayViewModel state transitions")

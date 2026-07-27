@@ -51,6 +51,23 @@ final class TimerManager: ObservableObject {
         elapsedSeconds = 0
     }
 
+    func applyRemoteSnapshot(elapsedSeconds remoteElapsedSeconds: Int, isRunning remoteIsRunning: Bool, allowsBackwardAdjustment: Bool) {
+        let safeElapsedSeconds = max(remoteElapsedSeconds, 0)
+
+        if allowsBackwardAdjustment {
+            elapsedSeconds = safeElapsedSeconds
+        } else {
+            elapsedSeconds = max(elapsedSeconds, safeElapsedSeconds)
+        }
+
+        if remoteIsRunning {
+            start()
+        } else {
+            stop()
+            elapsedSeconds = safeElapsedSeconds
+        }
+    }
+
     private func scheduleTimerIfNeeded() {
         guard timer == nil else {
             return

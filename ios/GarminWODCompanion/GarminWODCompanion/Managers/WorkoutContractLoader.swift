@@ -7,8 +7,20 @@ enum LatestWorkoutError: Error, Equatable {
     case transport(String)
 }
 
+enum WorkoutSessionFetchError: Error, Equatable {
+    case emptyData
+    case notFound
+    case invalidStatus(Int)
+    case invalidResponse
+    case transport(String)
+}
+
 protocol LatestWorkoutServing {
     func fetchLatestWorkout(completion: @escaping (Result<WorkoutContract, LatestWorkoutError>) -> Void)
+}
+
+protocol WorkoutSessionServing {
+    func fetchWorkoutSession(completion: @escaping (Result<WorkoutSessionState, WorkoutSessionFetchError>) -> Void)
 }
 
 protocol WorkoutCaching {
@@ -110,6 +122,80 @@ final class WorkoutAPIClient: LatestWorkoutServing {
             throw LatestWorkoutError.transport(error.localizedDescription)
         }
     }
+}
+
+final class WorkoutSessionAPIClient: WorkoutSessionServing {
+    static let defaultEndpoint = URL(string: "https://garmin-wod.onrender.com/api/workout-session")!
+
+    private let endpoint: URL
+    private let session: URLSession
+
+    init(endpoint: URL = WorkoutSessionAPIClient.defaultEndpoint, session: URLSession = .shared) {
+        self.endpoint = endpoint
+        self.session = session
+    }
+
+    func fetchWorkoutSession(completion: @escaping (Result<WorkoutSessionState, WorkoutSessionFetchError>) -> Void) {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+
+        let task = session.dataTask(with: request) { data, response, error in
+            if let error {
+                completion(.failure(.transport(error.localizedDescription)))
+                return
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                completion(.failure(.invalidResponse))
+                return
+            }
+
+            do {
+                let state = try Self.decodeWorkoutSessionResponse(
+                    data: data,
+                    statusCode: httpResponse.statusCode
+                )
+                completion(.success(state))
+            } catch let sessionError as WorkoutSessionFetchError {
+                completion(.failure(sessionError))
+            } catch {
+                completion(.failure(.transport(error.localizedDescription)))
+            }
+        }
+
+        task.resume()
+    }
+
+    static func decodeWorkoutSessionResponse(data: Data?, statusCode: Int) throws -> WorkoutSessionState {
+        if statusCode == 404 {
+            throw WorkoutSessionFetchError.notFound
+        }
+
+        guard (200..<300).contains(statusCode) else {
+            throw WorkoutSessionFetchError.invalidStatus(statusCode)
+        }
+
+        guard let data, !data.isEmpty else {
+            throw WorkoutSessionFetchError.emptyData
+        }
+
+        do {
+            let wrapper = try JSONDecoder().decode(WorkoutSessionResponse.self, from: data)
+            return wrapper.session
+        } catch {
+            do {
+                return try JSONDecoder().decode(WorkoutSessionState.self, from: data)
+            } catch {
+                throw WorkoutSessionFetchError.transport(error.localizedDescription)
+            }
+        }
+    }
+}
+
+private struct WorkoutSessionResponse: Codable {
+    let session: WorkoutSessionState
 }
 
 final class WorkoutCache: WorkoutCaching {

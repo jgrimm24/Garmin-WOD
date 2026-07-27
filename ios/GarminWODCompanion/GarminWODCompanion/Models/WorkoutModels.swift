@@ -16,6 +16,37 @@ enum WorkoutStatus: String {
     case finished = "Finished"
 }
 
+enum RemoteWorkoutSessionStatus: String, Codable {
+    case idle
+    case running
+    case paused
+    case finished
+
+    var workoutStatus: WorkoutStatus {
+        switch self {
+        case .idle:
+            return .idle
+        case .running:
+            return .running
+        case .paused:
+            return .paused
+        case .finished:
+            return .finished
+        }
+    }
+}
+
+struct WorkoutSessionState: Codable, Equatable {
+    let workoutId: String
+    let sessionId: String
+    let revision: Int
+    let status: RemoteWorkoutSessionStatus
+    let round: Int
+    let stationIndex: Int
+    let elapsedSeconds: Int
+    let updatedAt: Int
+}
+
 struct WorkoutContract: Codable, Identifiable {
     var schemaVersion: Int
     var id: String
@@ -157,6 +188,38 @@ struct WorkoutStation: Codable, Identifiable {
         try container.encodeIfPresent(maleWeightLb, forKey: .maleWeightLb)
         try container.encodeIfPresent(femaleWeightLb, forKey: .femaleWeightLb)
         try container.encodeIfPresent(notes, forKey: .notes)
+    }
+}
+
+extension WorkoutContract {
+    var syncIdentity: String {
+        "id:\(id)|fp:\(syncFingerprint)"
+    }
+
+    private var syncFingerprint: String {
+        var fingerprint = "\(type.rawValue)|\(syncValue(durationMinutes))|\(syncValue(rounds))"
+        fingerprint += "|count:\(stations.count)"
+
+        for station in stations {
+            fingerprint += "|\(syncValue(station.name))"
+            fingerprint += ":\(syncValue(station.reps))"
+            fingerprint += ":\(syncValue(station.calories))"
+            fingerprint += ":\(syncValue(station.distanceMeters))"
+            fingerprint += ":\(syncValue(station.weightLb))"
+            fingerprint += ":\(syncValue(station.maleWeightLb))"
+            fingerprint += ":\(syncValue(station.femaleWeightLb))"
+            fingerprint += ":\(syncValue(station.workSeconds))"
+        }
+
+        return fingerprint
+    }
+
+    private func syncValue(_ value: Any?) -> String {
+        guard let value else {
+            return "null"
+        }
+
+        return "\(value)"
     }
 }
 

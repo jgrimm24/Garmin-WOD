@@ -10,11 +10,20 @@ final class DisplayViewModel: ObservableObject {
     @Published private(set) var isRefreshingLatestWorkout: Bool = false
     @Published private(set) var latestWorkoutStatusText: String = "Roney sample"
     @Published var selectedHeartRateSource: HeartRateSource = .mock
+    @Published private(set) var isFollowingWatch: Bool = false
+    @Published private(set) var isMirroringWatchSession: Bool = false
+    @Published private(set) var watchSyncStatusText: String = "Follow Watch Off"
 
     private var zoneTimer: Timer?
+    private var watchSessionPollTimer: Timer?
     private let latestWorkoutClient: LatestWorkoutServing
+    private let workoutSessionClient: WorkoutSessionServing
     private let workoutCache: WorkoutCaching
     private var hasLoadedStartupWorkout = false
+    private var isPollingWatchSession = false
+    private var lastAppliedWatchSessionId: String?
+    private var lastAppliedWatchRevision = 0
+    private let watchSessionFreshnessSeconds = 30
 
     init(
         workoutManager: WorkoutManager = WorkoutManager(),
@@ -22,6 +31,7 @@ final class DisplayViewModel: ObservableObject {
         heartRateManager: MockHeartRateManager = MockHeartRateManager(),
         bluetoothHeartRateManager: BluetoothHeartRateManager = BluetoothHeartRateManager(),
         latestWorkoutClient: LatestWorkoutServing = WorkoutAPIClient(),
+        workoutSessionClient: WorkoutSessionServing = WorkoutSessionAPIClient(),
         workoutCache: WorkoutCaching = WorkoutCache()
     ) {
         self.workoutManager = workoutManager
@@ -29,6 +39,7 @@ final class DisplayViewModel: ObservableObject {
         self.heartRateManager = heartRateManager
         self.bluetoothHeartRateManager = bluetoothHeartRateManager
         self.latestWorkoutClient = latestWorkoutClient
+        self.workoutSessionClient = workoutSessionClient
         self.workoutCache = workoutCache
         print("[LIFECYCLE] DisplayViewModel init")
         scheduleZoneTimer()
@@ -38,6 +49,7 @@ final class DisplayViewModel: ObservableObject {
         print("[LIFECYCLE] DisplayViewModel deinit")
         zoneTimer?.invalidate()
         zoneTimer = nil
+        stopFollowingWatch()
     }
 
     var primaryActionTitle: String {
@@ -118,6 +130,10 @@ final class DisplayViewModel: ObservableObject {
 
     func startWorkout() {
         print("[VM] startWorkout called")
+        guard canUseLocalWorkoutControls else {
+            print("[WATCH SYNC] local start ignored while mirroring watch")
+            return
+        }
         logState("startWorkout before")
         workoutManager.start()
         timerManager.start()
@@ -126,6 +142,10 @@ final class DisplayViewModel: ObservableObject {
 
     func pauseWorkout() {
         print("[VM] pauseWorkout called")
+        guard canUseLocalWorkoutControls else {
+            print("[WATCH SYNC] local pause ignored while mirroring watch")
+            return
+        }
         logState("pauseWorkout before")
         workoutManager.pause()
         timerManager.pause()
@@ -134,6 +154,10 @@ final class DisplayViewModel: ObservableObject {
 
     func resumeWorkout() {
         print("[VM] resumeWorkout called")
+        guard canUseLocalWorkoutControls else {
+            print("[WATCH SYNC] local resume ignored while mirroring watch")
+            return
+        }
         logState("resumeWorkout before")
         workoutManager.resume()
         timerManager.resume()
@@ -150,6 +174,10 @@ final class DisplayViewModel: ObservableObject {
 
     func previousStation() {
         print("[VM] previousStation called")
+        guard canUseLocalWorkoutControls else {
+            print("[WATCH SYNC] local back ignored while mirroring watch")
+            return
+        }
         logState("previousStation before")
         workoutManager.goBack()
         logState("previousStation after")
@@ -157,6 +185,10 @@ final class DisplayViewModel: ObservableObject {
 
     func nextStation() {
         print("[VM] nextStation called")
+        guard canUseLocalWorkoutControls else {
+            print("[WATCH SYNC] local next ignored while mirroring watch")
+            return
+        }
         logState("nextStation before")
         workoutManager.advance()
         if workoutManager.status == .finished {
@@ -172,6 +204,10 @@ final class DisplayViewModel: ObservableObject {
 
     func finishWorkout() {
         print("[VM] finishWorkout called")
+        guard canUseLocalWorkoutControls else {
+            print("[WATCH SYNC] local finish ignored while mirroring watch")
+            return
+        }
         logState("finishWorkout before")
         workoutManager.finish()
         captureWorkoutSummaryIfNeeded()
@@ -192,8 +228,51 @@ final class DisplayViewModel: ObservableObject {
         heartRateManager.resetMetrics()
         bluetoothHeartRateManager.resetMetrics()
         workoutSummary = nil
+        clearWatchMirrorState()
         logState("resetWorkout after")
         print("[RESET] after status=\(workoutManager.status.rawValue)")
+    }
+
+    var canUseLocalWorkoutControls: Bool {
+        !(isFollowingWatch && isMirroringWatchSession)
+    }
+
+    func toggleFollowWatch() {
+        if isFollowingWatch {
+            stopFollowingWatch()
+        } else {
+            startFollowingWatch()
+        }
+    }
+
+    func startFollowingWatch() {
+        guard !isFollowingWatch else {
+            return
+        }
+
+        print("[WATCH SYNC] follow enabled")
+        isFollowingWatch = true
+        watchSyncStatusText = "Waiting for Watch"
+        pollWatchSession()
+        scheduleWatchSessionPolling()
+    }
+
+    func stopFollowingWatch() {
+        watchSessionPollTimer?.invalidate()
+        watchSessionPollTimer = nil
+        isPollingWatchSession = false
+
+        if isFollowingWatch {
+            print("[WATCH SYNC] follow disabled")
+        }
+
+        isFollowingWatch = false
+        isMirroringWatchSession = false
+        watchSyncStatusText = "Follow Watch Off"
+    }
+
+    func refreshWatchSession() {
+        pollWatchSession()
     }
 
     var activeHeartRate: Int? {
@@ -305,6 +384,128 @@ final class DisplayViewModel: ObservableObject {
             case .bluetooth:
                 self.bluetoothHeartRateManager.tickZoneTimeIfWorkoutRunning()
             }
+        }
+    }
+
+    private func scheduleWatchSessionPolling() {
+        guard watchSessionPollTimer == nil else {
+            return
+        }
+
+        watchSessionPollTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.pollWatchSession()
+        }
+    }
+
+    private func pollWatchSession() {
+        guard isFollowingWatch else {
+            return
+        }
+
+        guard !isPollingWatchSession else {
+            print("[WATCH SYNC] poll skipped; request already running")
+            return
+        }
+
+        isPollingWatchSession = true
+        workoutSessionClient.fetchWorkoutSession { [weak self] result in
+            self?.performOnMain {
+                self?.isPollingWatchSession = false
+                self?.handleWorkoutSessionResult(result)
+            }
+        }
+    }
+
+    private func handleWorkoutSessionResult(_ result: Result<WorkoutSessionState, WorkoutSessionFetchError>) {
+        guard isFollowingWatch else {
+            return
+        }
+
+        switch result {
+        case .success(let state):
+            applyWatchSessionState(state)
+
+        case .failure(.notFound):
+            if !isMirroringWatchSession {
+                watchSyncStatusText = "Waiting for Watch"
+            }
+            print("[WATCH SYNC] no session available")
+
+        case .failure(let error):
+            watchSyncStatusText = isMirroringWatchSession ? "Watch Sync Lost" : "HR Display Ready"
+            print("[WATCH SYNC] fetch failed: \(error)")
+        }
+    }
+
+    private func applyWatchSessionState(_ state: WorkoutSessionState) {
+        let currentIdentity = workoutManager.workout.syncIdentity
+        guard state.workoutId == currentIdentity else {
+            watchSyncStatusText = "Workout Mismatch"
+            print("[WATCH SYNC] ignored mismatch incoming=\(state.workoutId) current=\(currentIdentity)")
+            return
+        }
+
+        guard !state.sessionId.isEmpty else {
+            watchSyncStatusText = "Invalid Watch State"
+            print("[WATCH SYNC] ignored empty sessionId")
+            return
+        }
+
+        guard workoutManager.workout.stations.indices.contains(state.stationIndex), state.round >= 1 else {
+            watchSyncStatusText = "Invalid Watch State"
+            print("[WATCH SYNC] ignored invalid round/index round=\(state.round) station=\(state.stationIndex)")
+            return
+        }
+
+        guard isFreshWatchSession(state) else {
+            watchSyncStatusText = "Watch Session Stale"
+            print("[WATCH SYNC] ignored stale session updatedAt=\(state.updatedAt)")
+            return
+        }
+
+        let isNewSession = state.sessionId != lastAppliedWatchSessionId
+        if !isNewSession && state.revision <= lastAppliedWatchRevision {
+            print("[WATCH SYNC] ignored old revision session=\(state.sessionId) revision=\(state.revision) last=\(lastAppliedWatchRevision)")
+            return
+        }
+
+        lastAppliedWatchSessionId = state.sessionId
+        lastAppliedWatchRevision = state.revision
+        isMirroringWatchSession = state.status != .idle
+        watchSyncStatusText = "Following Watch"
+
+        print("[WATCH SYNC] applying session=\(state.sessionId) revision=\(state.revision) status=\(state.status.rawValue) round=\(state.round) station=\(state.stationIndex) elapsed=\(state.elapsedSeconds)")
+
+        workoutManager.applyRemoteSession(
+            status: state.status.workoutStatus,
+            round: state.round,
+            stationIndex: state.stationIndex
+        )
+
+        timerManager.applyRemoteSnapshot(
+            elapsedSeconds: state.elapsedSeconds,
+            isRunning: state.status == .running,
+            allowsBackwardAdjustment: isNewSession
+        )
+
+        if state.status == .finished {
+            captureWorkoutSummaryIfNeeded()
+            timerManager.stop()
+        }
+    }
+
+    private func isFreshWatchSession(_ state: WorkoutSessionState) -> Bool {
+        let nowSeconds = Int(Date().timeIntervalSince1970)
+        let updatedSeconds = state.updatedAt > 9_999_999_999 ? state.updatedAt / 1000 : state.updatedAt
+        return nowSeconds - updatedSeconds <= watchSessionFreshnessSeconds
+    }
+
+    private func clearWatchMirrorState() {
+        lastAppliedWatchSessionId = nil
+        lastAppliedWatchRevision = 0
+        isMirroringWatchSession = false
+        if isFollowingWatch {
+            watchSyncStatusText = "Waiting for Watch"
         }
     }
 
