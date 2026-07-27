@@ -161,7 +161,6 @@ struct GymDisplayView: View {
 
             RunDashboardPanel(
                 viewModel: viewModel,
-                bluetoothManager: viewModel.bluetoothHeartRateManager,
                 timerManager: viewModel.timerManager,
                 metrics: metrics,
                 isLandscape: false
@@ -187,7 +186,6 @@ struct GymDisplayView: View {
 
             RunDashboardPanel(
                 viewModel: viewModel,
-                bluetoothManager: viewModel.bluetoothHeartRateManager,
                 timerManager: viewModel.timerManager,
                 metrics: metrics,
                 isLandscape: true
@@ -626,6 +624,7 @@ private struct WODProgressPanel: View {
                 titleSize: metrics.wodCurrentMovementSize,
                 prescriptionSize: metrics.wodCurrentPrescriptionSize,
                 maxTitleLines: 2,
+                maxPrescriptionLines: 1,
                 isPrimary: true
             )
             .layoutPriority(3)
@@ -638,7 +637,8 @@ private struct WODProgressPanel: View {
                 station: workoutManager.nextStation,
                 titleSize: metrics.wodNextMovementSize,
                 prescriptionSize: max(metrics.wodCurrentPrescriptionSize * 0.72, 18),
-                maxTitleLines: 2,
+                maxTitleLines: 1,
+                maxPrescriptionLines: 1,
                 isPrimary: false
             )
             .layoutPriority(2)
@@ -655,35 +655,50 @@ private struct WODProgressPanel: View {
     }
 
     private var portraitBody: some View {
-        VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
-            HStack(spacing: 10) {
-                progressPill(text: workoutManager.roundText, isPrimary: true)
-                progressPill(text: timerManager.elapsedTimeText, isPrimary: false)
+        GeometryReader { geometry in
+            let spacing = max(metrics.sectionSpacing - 4, 6)
+            let verticalPadding = max(metrics.cardPadding - 2, 8)
+            let usableHeight = max(geometry.size.height - (verticalPadding * 2) - (spacing * 3) - 1, 0)
+            let progressHeight = clamp(usableHeight * 0.14, min: 42, max: 54)
+            let movementHeight = max(usableHeight - progressHeight, 0)
+            let currentHeight = movementHeight * 0.58
+            let nextHeight = movementHeight * 0.42
+
+            VStack(alignment: .leading, spacing: spacing) {
+                HStack(spacing: 10) {
+                    progressPill(text: workoutManager.roundText, isPrimary: true)
+                    progressPill(text: timerManager.elapsedTimeText, isPrimary: false)
+                }
+                .frame(height: progressHeight)
+
+                WODMovementBlock(
+                    label: "Current",
+                    station: workoutManager.currentStation,
+                    titleSize: metrics.wodCurrentMovementSize,
+                    prescriptionSize: metrics.wodCurrentPrescriptionSize,
+                    maxTitleLines: 2,
+                    maxPrescriptionLines: 2,
+                    isPrimary: true
+                )
+                .frame(height: currentHeight, alignment: .center)
+
+                Divider()
+                    .overlay(.white.opacity(0.14))
+
+                WODMovementBlock(
+                    label: "Next",
+                    station: workoutManager.nextStation,
+                    titleSize: metrics.wodNextMovementSize,
+                    prescriptionSize: max(metrics.wodCurrentPrescriptionSize * 0.72, 16),
+                    maxTitleLines: 2,
+                    maxPrescriptionLines: 2,
+                    isPrimary: false
+                )
+                .frame(height: nextHeight, alignment: .top)
             }
-
-            WODMovementBlock(
-                label: "Current",
-                station: workoutManager.currentStation,
-                titleSize: metrics.wodCurrentMovementSize,
-                prescriptionSize: metrics.wodCurrentPrescriptionSize,
-                maxTitleLines: 2,
-                isPrimary: true
-            )
-            .layoutPriority(3)
-
-            WODMovementBlock(
-                label: "Next",
-                station: workoutManager.nextStation,
-                titleSize: metrics.wodNextMovementSize,
-                prescriptionSize: max(metrics.wodCurrentPrescriptionSize * 0.78, 17),
-                maxTitleLines: 2,
-                isPrimary: false
-            )
-            .layoutPriority(2)
-
-            Spacer(minLength: 0)
+            .padding(verticalPadding)
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
-        .padding(metrics.cardPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
         .overlay(
@@ -704,6 +719,10 @@ private struct WODProgressPanel: View {
             .frame(maxWidth: .infinity)
             .background(.white.opacity(isPrimary ? 0.13 : 0.08), in: RoundedRectangle(cornerRadius: 10))
     }
+
+    private func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
+        Swift.min(Swift.max(value, minimum), maximum)
+    }
 }
 
 private struct WODMovementBlock: View {
@@ -712,6 +731,7 @@ private struct WODMovementBlock: View {
     let titleSize: CGFloat
     let prescriptionSize: CGFloat
     let maxTitleLines: Int
+    let maxPrescriptionLines: Int
     let isPrimary: Bool
 
     var body: some View {
@@ -733,7 +753,7 @@ private struct WODMovementBlock: View {
                 Text(prescription)
                     .font(.system(size: prescriptionSize, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white.opacity(0.72))
-                    .lineLimit(2)
+                    .lineLimit(maxPrescriptionLines)
                     .minimumScaleFactor(0.62)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -746,7 +766,6 @@ private struct WODMovementBlock: View {
 
 private struct RunDashboardPanel: View {
     @ObservedObject var viewModel: DisplayViewModel
-    @ObservedObject var bluetoothManager: BluetoothHeartRateManager
     @ObservedObject var timerManager: TimerManager
     let metrics: DashboardMetrics
     let isLandscape: Bool
@@ -767,10 +786,10 @@ private struct RunDashboardPanel: View {
 
             HStack(spacing: 14) {
                 compactRunMetric(title: "Elapsed", value: timerManager.elapsedTimeText, isPrimary: true)
-                compactRunMetric(title: "Avg HR", value: "\(viewModel.activeAverageHeartRate)", isPrimary: false)
-                compactRunMetric(title: "Max HR", value: "\(viewModel.activeMaximumHeartRate)", isPrimary: false)
+                compactRunMetric(title: "Avg", value: "\(viewModel.activeAverageHeartRate)", isPrimary: false)
+                compactRunMetric(title: "Max", value: "\(viewModel.activeMaximumHeartRate)", isPrimary: false)
             }
-            .frame(height: min(metrics.activeMainHeight * 0.18, 58))
+            .frame(height: min(metrics.activeMainHeight * 0.16, 52))
         }
         .padding(metrics.cardPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -789,10 +808,10 @@ private struct RunDashboardPanel: View {
 
             HStack(spacing: 10) {
                 compactRunMetric(title: "Elapsed", value: timerManager.elapsedTimeText, isPrimary: true)
-                compactRunMetric(title: "Avg HR", value: "\(viewModel.activeAverageHeartRate)", isPrimary: false)
-                compactRunMetric(title: "Max HR", value: "\(viewModel.activeMaximumHeartRate)", isPrimary: false)
+                compactRunMetric(title: "Avg", value: "\(viewModel.activeAverageHeartRate)", isPrimary: false)
+                compactRunMetric(title: "Max", value: "\(viewModel.activeMaximumHeartRate)", isPrimary: false)
             }
-            .frame(height: 62)
+            .frame(height: 56)
         }
         .padding(metrics.cardPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -818,15 +837,6 @@ private struct RunDashboardPanel: View {
                 .foregroundStyle(viewModel.activeCurrentZone.color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.55)
-
-            Text(connectionText)
-                .font(.system(size: isLandscape ? 15 : 16, weight: .black, design: .rounded))
-                .foregroundStyle(.white.opacity(0.82))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(.white.opacity(0.09), in: Capsule())
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -864,27 +874,20 @@ private struct RunDashboardPanel: View {
         return viewModel.activeCurrentZone.name.uppercased()
     }
 
-    private var connectionText: String {
-        if bluetoothManager.connectionState.isConnected {
-            return viewModel.compactHeartRateSourceLabel
-        }
-        return viewModel.heartRateSourceLabel
-    }
-
     private var runHeartRateSize: CGFloat {
-        isLandscape ? min(metrics.activeMainHeight * 0.72, 228) : min(metrics.activeMainHeight * 0.46, 210)
+        isLandscape ? min(metrics.activeMainHeight * 0.84, 276) : min(metrics.activeMainHeight * 0.60, 252)
     }
 
     private var runZoneSize: CGFloat {
-        isLandscape ? min(metrics.activeMainHeight * 0.16, 52) : min(metrics.activeMainHeight * 0.11, 48)
+        isLandscape ? min(metrics.activeMainHeight * 0.18, 58) : min(metrics.activeMainHeight * 0.135, 54)
     }
 
     private var runTimerMetricSize: CGFloat {
-        isLandscape ? min(metrics.activeMainHeight * 0.07, 28) : 21
+        isLandscape ? min(metrics.activeMainHeight * 0.065, 26) : 20
     }
 
     private var runSecondaryMetricSize: CGFloat {
-        isLandscape ? min(metrics.activeMainHeight * 0.072, 28) : 22
+        isLandscape ? min(metrics.activeMainHeight * 0.067, 26) : 21
     }
 }
 
