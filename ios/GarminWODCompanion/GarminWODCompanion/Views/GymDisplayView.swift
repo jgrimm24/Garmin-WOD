@@ -45,8 +45,12 @@ struct GymDisplayView: View {
                             viewModel.resetWorkout()
                         }
                     } else {
-                        if isLandscape && displayMode == .workout {
-                            wodLandscapeLayout(metrics: metrics)
+                        if displayMode == .workout {
+                            if isLandscape {
+                                wodLandscapeLayout(metrics: metrics)
+                            } else {
+                                wodPortraitLayout(metrics: metrics)
+                            }
                         } else {
                             VStack(spacing: metrics.sectionSpacing) {
                                 if isLandscape {
@@ -204,8 +208,8 @@ struct GymDisplayView: View {
     }
 
     private func wodPortraitLayout(metrics: DashboardMetrics) -> some View {
-        VStack(spacing: metrics.sectionSpacing) {
-            HeaderView(
+        VStack(spacing: metrics.wodScoreboardSpacing) {
+            WODScoreboardHeader(
                 workoutManager: viewModel.workoutManager,
                 viewModel: viewModel,
                 bluetoothManager: viewModel.bluetoothHeartRateManager,
@@ -215,6 +219,7 @@ struct GymDisplayView: View {
                     isBluetoothSheetPresented = true
                 }
             )
+            .frame(height: metrics.wodScoreboardHeaderHeight)
 
             WODProgressPanel(
                 workoutManager: viewModel.workoutManager,
@@ -222,58 +227,54 @@ struct GymDisplayView: View {
                 metrics: metrics,
                 isLandscape: false
             )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
+            .frame(width: metrics.availableWidth, height: metrics.wodScoreboardHeroHeight)
 
-    private func wodLandscapeLayout(metrics: DashboardMetrics) -> some View {
-        let followWatchActive = viewModel.isFollowingWatch
-        let railWidth = metrics.wodLandscapeRailWidth
-        let gap = metrics.wodLandscapeRailGap
-        let centerWidth = metrics.wodLandscapeCenterWidth(followWatchActive: followWatchActive)
-
-        return HStack(alignment: .center, spacing: gap) {
-            if !followWatchActive {
-                WODLandscapeControlRail(
-                    controls: WODLandscapeControlRail.leftLocalControls(for: viewModel.workoutManager.status),
-                    viewModel: viewModel,
-                    metrics: metrics
-                )
-                .frame(width: railWidth, height: metrics.availableHeight)
-            }
-
-            VStack(spacing: metrics.sectionSpacing) {
-                HeaderView(
-                    workoutManager: viewModel.workoutManager,
-                    viewModel: viewModel,
-                    bluetoothManager: viewModel.bluetoothHeartRateManager,
-                    metrics: metrics,
-                    displayMode: displayModeBinding,
-                    onHeartRateSettings: {
-                        isBluetoothSheetPresented = true
-                    }
-                )
-                .frame(height: metrics.wodLandscapeHeaderHeight)
-
-                WODProgressPanel(
-                    workoutManager: viewModel.workoutManager,
-                    timerManager: viewModel.timerManager,
-                    metrics: metrics,
-                    isLandscape: true
-                )
-                .frame(width: centerWidth, height: metrics.wodLandscapeHeroHeight)
-            }
-            .frame(width: centerWidth, height: metrics.availableHeight)
-
-            WODLandscapeControlRail(
-                controls: followWatchActive
-                    ? [DashboardControl(label: "Stop Follow", kind: .secondary, action: .stopFollowing, isEnabled: true)]
-                    : WODLandscapeControlRail.rightLocalControls(for: viewModel.workoutManager.status),
+            WODCompactControlStrip(
+                controls: WODCompactControlStrip.controls(
+                    for: viewModel.workoutManager.status,
+                    isFollowingWatch: viewModel.isFollowingWatch,
+                    isMirroringWatchSession: viewModel.isMirroringWatchSession
+                ),
                 viewModel: viewModel,
                 metrics: metrics
             )
-            .frame(width: railWidth, height: metrics.availableHeight)
+            .frame(height: metrics.wodScoreboardControlHeight)
+        }
+        .frame(width: metrics.availableWidth, height: metrics.availableHeight)
+    }
+
+    private func wodLandscapeLayout(metrics: DashboardMetrics) -> some View {
+        VStack(spacing: metrics.wodScoreboardSpacing) {
+            WODScoreboardHeader(
+                workoutManager: viewModel.workoutManager,
+                viewModel: viewModel,
+                bluetoothManager: viewModel.bluetoothHeartRateManager,
+                metrics: metrics,
+                displayMode: displayModeBinding,
+                onHeartRateSettings: {
+                    isBluetoothSheetPresented = true
+                }
+            )
+            .frame(height: metrics.wodScoreboardHeaderHeight)
+
+            WODProgressPanel(
+                workoutManager: viewModel.workoutManager,
+                timerManager: viewModel.timerManager,
+                metrics: metrics,
+                isLandscape: true
+            )
+            .frame(width: metrics.availableWidth, height: metrics.wodScoreboardHeroHeight)
+
+            WODCompactControlStrip(
+                controls: WODCompactControlStrip.controls(
+                    for: viewModel.workoutManager.status,
+                    isFollowingWatch: viewModel.isFollowingWatch,
+                    isMirroringWatchSession: viewModel.isMirroringWatchSession
+                ),
+                viewModel: viewModel,
+                metrics: metrics
+            )
+            .frame(height: metrics.wodScoreboardControlHeight)
         }
         .frame(width: metrics.availableWidth, height: metrics.availableHeight)
     }
@@ -322,10 +323,14 @@ private struct DashboardMetrics {
     var activeControlHeight: CGFloat { isLandscape ? clamp(availableHeight * 0.105, min: 46, max: 54) : 112 }
     var activeDashboardHeight: CGFloat { max(availableHeight - activeControlHeight - sectionSpacing, 0) }
     var activeMainHeight: CGFloat { max(activeDashboardHeight - activeHeaderHeight - sectionSpacing, 0) }
-    var wodLandscapeHeaderHeight: CGFloat { clamp(availableHeight * 0.105, min: 42, max: 54) }
+    var wodScoreboardSpacing: CGFloat { isLandscape ? 7 : 9 }
+    var wodScoreboardHeaderHeight: CGFloat { isLandscape ? clamp(availableHeight * 0.082, min: 32, max: 44) : clamp(availableHeight * 0.072, min: 46, max: 62) }
+    var wodScoreboardControlHeight: CGFloat { isLandscape ? clamp(availableHeight * 0.078, min: 32, max: 42) : clamp(availableHeight * 0.062, min: 42, max: 52) }
+    var wodScoreboardHeroHeight: CGFloat { max(availableHeight - wodScoreboardHeaderHeight - wodScoreboardControlHeight - (wodScoreboardSpacing * 2), 0) }
+    var wodLandscapeHeaderHeight: CGFloat { wodScoreboardHeaderHeight }
     var wodLandscapeRailWidth: CGFloat { clamp(availableWidth * 0.095, min: 62, max: 86) }
     var wodLandscapeRailGap: CGFloat { clamp(availableWidth * 0.014, min: 8, max: 14) }
-    var wodLandscapeHeroHeight: CGFloat { max(availableHeight - wodLandscapeHeaderHeight - sectionSpacing, 0) }
+    var wodLandscapeHeroHeight: CGFloat { wodScoreboardHeroHeight }
     var wodLandscapeRailButtonHeight: CGFloat { clamp(availableHeight * 0.11, min: 38, max: 46) }
 
     func wodLandscapeCenterWidth(followWatchActive: Bool) -> CGFloat {
@@ -356,16 +361,16 @@ private struct DashboardMetrics {
     var currentMovementSize: CGFloat { isLandscape ? 21 : 26 }
     var secondaryMovementSize: CGFloat { isLandscape ? 16 : 19 }
     var wodCurrentMovementSize: CGFloat {
-        isLandscape ? clamp(wodLandscapeHeroHeight * 0.28, min: 70, max: 124) : clamp(activeMainHeight * 0.20, min: 62, max: 112)
+        isLandscape ? clamp(wodScoreboardHeroHeight * 0.34, min: 96, max: 176) : clamp(wodScoreboardHeroHeight * 0.21, min: 86, max: 158)
     }
     var wodCurrentPrescriptionSize: CGFloat {
-        isLandscape ? clamp(wodLandscapeHeroHeight * 0.105, min: 26, max: 42) : clamp(activeMainHeight * 0.075, min: 22, max: 36)
+        isLandscape ? clamp(wodScoreboardHeroHeight * 0.09, min: 26, max: 44) : clamp(wodScoreboardHeroHeight * 0.055, min: 22, max: 38)
     }
     var wodNextMovementSize: CGFloat {
-        isLandscape ? clamp(wodLandscapeHeroHeight * 0.145, min: 36, max: 62) : clamp(activeMainHeight * 0.105, min: 32, max: 58)
+        isLandscape ? clamp(wodScoreboardHeroHeight * 0.18, min: 46, max: 82) : clamp(wodScoreboardHeroHeight * 0.10, min: 38, max: 70)
     }
     var wodMetaSize: CGFloat {
-        isLandscape ? clamp(wodLandscapeHeroHeight * 0.055, min: 16, max: 24) : clamp(activeMainHeight * 0.045, min: 15, max: 22)
+        isLandscape ? clamp(wodScoreboardHeroHeight * 0.052, min: 18, max: 28) : clamp(wodScoreboardHeroHeight * 0.034, min: 17, max: 25)
     }
     var controlFontSize: CGFloat { isLandscape ? 14 : 16 }
     var controlHeight: CGFloat { isLandscape ? activeControlHeight : 50 }
@@ -639,6 +644,114 @@ private struct DisplayModeSelector: View {
     }
 }
 
+// MARK: - WORKOUT Scoreboard Header
+
+private struct WODScoreboardHeader: View {
+    @ObservedObject var workoutManager: WorkoutManager
+    @ObservedObject var viewModel: DisplayViewModel
+    @ObservedObject var bluetoothManager: BluetoothHeartRateManager
+    let metrics: DashboardMetrics
+    @Binding var displayMode: GymDisplayMode
+    let onHeartRateSettings: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: metrics.isLandscape ? 10 : 7) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(workoutManager.workout.title)
+                    .font(.system(size: metrics.isLandscape ? 16 : 18, weight: .black, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+
+                Text(workoutManager.workout.type.rawValue.uppercased())
+                    .font(.system(size: metrics.isLandscape ? 10 : 11, weight: .black, design: .rounded))
+                    .foregroundStyle(.yellow.opacity(0.82))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .layoutPriority(2)
+
+            Spacer(minLength: 4)
+
+            if metrics.isLandscape {
+                compactStatusCluster
+            } else {
+                VStack(alignment: .trailing, spacing: 3) {
+                    compactStatusCluster
+                }
+            }
+        }
+        .padding(.horizontal, metrics.isLandscape ? 10 : 12)
+        .padding(.vertical, metrics.isLandscape ? 5 : 7)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.black.opacity(0.26), in: RoundedRectangle(cornerRadius: 11))
+        .overlay(
+            RoundedRectangle(cornerRadius: 11)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private var compactStatusCluster: some View {
+        HStack(spacing: metrics.isLandscape ? 7 : 5) {
+            if viewModel.isFollowingWatch {
+                Text("FOLLOW")
+                    .font(.system(size: metrics.isLandscape ? 10 : 11, weight: .black, design: .rounded))
+                    .foregroundStyle(.black)
+                    .lineLimit(1)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(.yellow, in: Capsule())
+            } else if workoutManager.status == .idle {
+                Button {
+                    viewModel.toggleFollowWatch()
+                } label: {
+                    Text("Follow")
+                        .font(.system(size: metrics.isLandscape ? 10 : 11, weight: .black, design: .rounded))
+                        .lineLimit(1)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(.white.opacity(0.1), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.yellow)
+            }
+
+            Button(action: onHeartRateSettings) {
+                Text(heartRateBadge)
+                    .font(.system(size: metrics.isLandscape ? 10 : 11, weight: .black, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.82))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(.white.opacity(0.1), in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            DisplayModeSelector(displayMode: $displayMode, metrics: metrics)
+                .scaleEffect(metrics.isLandscape ? 0.78 : 0.82)
+                .frame(width: metrics.isLandscape ? 106 : 116, height: metrics.isLandscape ? 26 : 28)
+        }
+    }
+
+    private var heartRateBadge: String {
+        if let bpm = viewModel.activeHeartRate {
+            return "HR \(bpm)"
+        }
+
+        if bluetoothManager.connectionState.isConnected {
+            return "HR --"
+        }
+
+        switch bluetoothManager.connectionState {
+        case .scanning, .connecting:
+            return "HR …"
+        default:
+            return "HR --"
+        }
+    }
+}
+
 // MARK: - WORKOUT Progress Panel
 
 private struct WODProgressPanel: View {
@@ -657,16 +770,16 @@ private struct WODProgressPanel: View {
 
     private var landscapeBody: some View {
         GeometryReader { geometry in
-            let spacing = max(metrics.sectionSpacing - 5, 5)
-            let verticalPadding = max(metrics.cardPadding - 4, 6)
+            let spacing = max(metrics.wodScoreboardSpacing, 5)
+            let verticalPadding = max(metrics.cardPadding - 6, 4)
             let usableHeight = max(geometry.size.height - (verticalPadding * 2) - (spacing * 3) - 1, 0)
-            let progressHeight = clamp(usableHeight * 0.13, min: 32, max: 42)
+            let progressHeight = clamp(usableHeight * 0.105, min: 28, max: 38)
             let movementHeight = max(usableHeight - progressHeight, 0)
-            let currentHeight = movementHeight * 0.68
-            let nextHeight = movementHeight * 0.32
+            let currentHeight = movementHeight * 0.73
+            let nextHeight = movementHeight * 0.27
 
             VStack(alignment: .center, spacing: spacing) {
-                HStack(alignment: .center, spacing: 14) {
+                HStack(alignment: .center, spacing: 12) {
                     progressPill(text: workoutManager.roundText, isPrimary: true)
                     progressPill(text: timerManager.elapsedTimeText, isPrimary: false)
                 }
@@ -685,7 +798,7 @@ private struct WODProgressPanel: View {
                 .layoutPriority(3)
 
                 Divider()
-                    .overlay(.white.opacity(0.16))
+                    .overlay(.white.opacity(0.1))
 
                 WODMovementBlock(
                     label: "Next",
@@ -703,22 +816,22 @@ private struct WODProgressPanel: View {
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
+        .background(.black.opacity(0.48), in: RoundedRectangle(cornerRadius: 14))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 14)
                 .stroke(.white.opacity(0.12), lineWidth: 1)
         )
     }
 
     private var portraitBody: some View {
         GeometryReader { geometry in
-            let spacing = max(metrics.sectionSpacing - 5, 5)
-            let verticalPadding = max(metrics.cardPadding - 4, 7)
+            let spacing = max(metrics.wodScoreboardSpacing, 6)
+            let verticalPadding = max(metrics.cardPadding - 5, 6)
             let usableHeight = max(geometry.size.height - (verticalPadding * 2) - (spacing * 3) - 1, 0)
-            let progressHeight = clamp(usableHeight * 0.12, min: 38, max: 50)
+            let progressHeight = clamp(usableHeight * 0.095, min: 34, max: 46)
             let movementHeight = max(usableHeight - progressHeight, 0)
-            let currentHeight = movementHeight * 0.68
-            let nextHeight = movementHeight * 0.32
+            let currentHeight = movementHeight * 0.72
+            let nextHeight = movementHeight * 0.28
 
             VStack(alignment: .center, spacing: spacing) {
                 HStack(spacing: 10) {
@@ -740,7 +853,7 @@ private struct WODProgressPanel: View {
                 .layoutPriority(3)
 
                 Divider()
-                    .overlay(.white.opacity(0.14))
+                    .overlay(.white.opacity(0.1))
 
                 WODMovementBlock(
                     label: "Next",
@@ -758,9 +871,9 @@ private struct WODProgressPanel: View {
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
+        .background(.black.opacity(0.48), in: RoundedRectangle(cornerRadius: 14))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 14)
                 .stroke(.white.opacity(0.12), lineWidth: 1)
         )
     }
@@ -773,7 +886,7 @@ private struct WODProgressPanel: View {
             .lineLimit(1)
             .minimumScaleFactor(0.55)
             .padding(.horizontal, isLandscape ? 14 : 10)
-            .padding(.vertical, isLandscape ? 8 : 7)
+            .padding(.vertical, isLandscape ? 6 : 6)
             .frame(maxWidth: .infinity)
             .background(.white.opacity(isPrimary ? 0.13 : 0.08), in: RoundedRectangle(cornerRadius: 10))
     }
@@ -819,6 +932,113 @@ private struct WODMovementBlock: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+}
+
+// MARK: - WORKOUT Compact Controls
+
+private struct WODCompactControlStrip: View {
+    let controls: [DashboardControl]
+    @ObservedObject var viewModel: DisplayViewModel
+    let metrics: DashboardMetrics
+
+    var body: some View {
+        HStack(spacing: metrics.isLandscape ? 7 : 6) {
+            ForEach(controls) { control in
+                Button {
+                    handle(control)
+                } label: {
+                    Text(control.label)
+                }
+                .buttonStyle(WODCompactButtonStyle(kind: control.kind, metrics: metrics))
+                .contentShape(Rectangle())
+                .disabled(!control.isEnabled)
+                .opacity(control.isEnabled ? 1 : 0.42)
+            }
+        }
+        .padding(.horizontal, metrics.isLandscape ? 6 : 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.black.opacity(0.18), in: Capsule())
+        .opacity(0.76)
+    }
+
+    static func controls(for status: WorkoutStatus, isFollowingWatch: Bool, isMirroringWatchSession: Bool) -> [DashboardControl] {
+        if isFollowingWatch && isMirroringWatchSession {
+            return [
+                DashboardControl(label: "Stop Follow", kind: .secondary, action: .stopFollowing, isEnabled: true)
+            ]
+        }
+
+        switch status {
+        case .idle:
+            return [
+                DashboardControl(label: "Start", kind: .primary, action: .primary, isEnabled: true),
+                DashboardControl(label: "Back", kind: .secondary, action: .back, isEnabled: false),
+                DashboardControl(label: "Next", kind: .secondary, action: .next, isEnabled: false),
+                DashboardControl(label: "Finish", kind: .warning, action: .finish, isEnabled: false),
+                DashboardControl(label: "Reset", kind: .secondary, action: .reset, isEnabled: true)
+            ]
+        case .running:
+            return [
+                DashboardControl(label: "Pause", kind: .primary, action: .primary, isEnabled: true),
+                DashboardControl(label: "Back", kind: .secondary, action: .back, isEnabled: true),
+                DashboardControl(label: "Next", kind: .secondary, action: .next, isEnabled: true),
+                DashboardControl(label: "Finish", kind: .warning, action: .finish, isEnabled: true),
+                DashboardControl(label: "Reset", kind: .secondary, action: .reset, isEnabled: true)
+            ]
+        case .paused:
+            return [
+                DashboardControl(label: "Resume", kind: .primary, action: .primary, isEnabled: true),
+                DashboardControl(label: "Back", kind: .secondary, action: .back, isEnabled: true),
+                DashboardControl(label: "Next", kind: .secondary, action: .next, isEnabled: true),
+                DashboardControl(label: "Finish", kind: .warning, action: .finish, isEnabled: true),
+                DashboardControl(label: "Reset", kind: .secondary, action: .reset, isEnabled: true)
+            ]
+        case .finished:
+            return [
+                DashboardControl(label: "Reset", kind: .primary, action: .reset, isEnabled: true)
+            ]
+        }
+    }
+
+    private func handle(_ control: DashboardControl) {
+        switch control.action {
+        case .primary: viewModel.primaryAction()
+        case .back:    viewModel.previousStation()
+        case .next:    viewModel.nextStation()
+        case .finish:  viewModel.finishWorkout()
+        case .reset:   viewModel.resetWorkout()
+        case .stopFollowing: viewModel.stopFollowingWatch()
+        }
+    }
+}
+
+private struct WODCompactButtonStyle: ButtonStyle {
+    let kind: DashboardButtonKind
+    let metrics: DashboardMetrics
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: metrics.isLandscape ? 11 : 12, weight: .black, design: .rounded))
+            .foregroundStyle(kind == .primary ? .black : .white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .frame(maxWidth: .infinity, minHeight: metrics.isLandscape ? 28 : 34)
+            .padding(.horizontal, 3)
+            .contentShape(Rectangle())
+            .background(background.opacity(configuration.isPressed ? 0.72 : 1), in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(.white.opacity(kind == .secondary ? 0.18 : 0), lineWidth: 1)
+            )
+    }
+
+    private var background: Color {
+        switch kind {
+        case .primary: return .yellow
+        case .secondary: return .white.opacity(0.1)
+        case .warning: return .red.opacity(0.74)
+        }
     }
 }
 
