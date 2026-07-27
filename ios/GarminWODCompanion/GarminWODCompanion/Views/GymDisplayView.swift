@@ -3,6 +3,7 @@ import UIKit
 
 struct GymDisplayView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(GymDisplayMode.storageKey) private var displayMode: GymDisplayMode = .defaultMode
     @StateObject private var viewModel = DisplayViewModel()
     @State private var isBluetoothSheetPresented = false
 
@@ -101,12 +102,35 @@ struct GymDisplayView: View {
     // MARK: - Layouts
 
     private func portraitLayout(metrics: DashboardMetrics) -> some View {
+        Group {
+            switch displayMode {
+            case .wod:
+                wodPortraitLayout(metrics: metrics)
+            case .run:
+                runPortraitLayout(metrics: metrics)
+            }
+        }
+    }
+
+    private func landscapeLayout(metrics: DashboardMetrics) -> some View {
+        Group {
+            switch displayMode {
+            case .wod:
+                wodLandscapeLayout(metrics: metrics)
+            case .run:
+                runLandscapeLayout(metrics: metrics)
+            }
+        }
+    }
+
+    private func runPortraitLayout(metrics: DashboardMetrics) -> some View {
         VStack(spacing: metrics.sectionSpacing) {
             HeaderView(
                 workoutManager: viewModel.workoutManager,
                 viewModel: viewModel,
                 bluetoothManager: viewModel.bluetoothHeartRateManager,
                 metrics: metrics,
+                displayMode: $displayMode,
                 onHeartRateSettings: {
                     isBluetoothSheetPresented = true
                 }
@@ -133,13 +157,14 @@ struct GymDisplayView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func landscapeLayout(metrics: DashboardMetrics) -> some View {
+    private func runLandscapeLayout(metrics: DashboardMetrics) -> some View {
         VStack(spacing: metrics.sectionSpacing) {
             HeaderView(
                 workoutManager: viewModel.workoutManager,
                 viewModel: viewModel,
                 bluetoothManager: viewModel.bluetoothHeartRateManager,
                 metrics: metrics,
+                displayMode: $displayMode,
                 onHeartRateSettings: {
                     isBluetoothSheetPresented = true
                 }
@@ -162,6 +187,55 @@ struct GymDisplayView: View {
                 )
                 .frame(width: metrics.landscapeWorkoutPanelWidth, height: metrics.activeMainHeight)
             }
+            .frame(width: metrics.availableWidth, height: metrics.activeMainHeight)
+        }
+        .frame(maxWidth: .infinity, maxHeight: metrics.activeDashboardHeight)
+    }
+
+    private func wodPortraitLayout(metrics: DashboardMetrics) -> some View {
+        VStack(spacing: metrics.sectionSpacing) {
+            HeaderView(
+                workoutManager: viewModel.workoutManager,
+                viewModel: viewModel,
+                bluetoothManager: viewModel.bluetoothHeartRateManager,
+                metrics: metrics,
+                displayMode: $displayMode,
+                onHeartRateSettings: {
+                    isBluetoothSheetPresented = true
+                }
+            )
+
+            WODProgressPanel(
+                workoutManager: viewModel.workoutManager,
+                timerManager: viewModel.timerManager,
+                metrics: metrics,
+                isLandscape: false
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func wodLandscapeLayout(metrics: DashboardMetrics) -> some View {
+        VStack(spacing: metrics.sectionSpacing) {
+            HeaderView(
+                workoutManager: viewModel.workoutManager,
+                viewModel: viewModel,
+                bluetoothManager: viewModel.bluetoothHeartRateManager,
+                metrics: metrics,
+                displayMode: $displayMode,
+                onHeartRateSettings: {
+                    isBluetoothSheetPresented = true
+                }
+            )
+            .frame(height: metrics.activeHeaderHeight)
+
+            WODProgressPanel(
+                workoutManager: viewModel.workoutManager,
+                timerManager: viewModel.timerManager,
+                metrics: metrics,
+                isLandscape: true
+            )
             .frame(width: metrics.availableWidth, height: metrics.activeMainHeight)
         }
         .frame(maxWidth: .infinity, maxHeight: metrics.activeDashboardHeight)
@@ -233,6 +307,18 @@ private struct DashboardMetrics {
 
     var currentMovementSize: CGFloat { isLandscape ? 21 : 26 }
     var secondaryMovementSize: CGFloat { isLandscape ? 16 : 19 }
+    var wodCurrentMovementSize: CGFloat {
+        isLandscape ? clamp(size.height * 0.16, min: 54, max: 82) : clamp(size.height * 0.062, min: 42, max: 62)
+    }
+    var wodCurrentPrescriptionSize: CGFloat {
+        isLandscape ? clamp(size.height * 0.075, min: 26, max: 38) : clamp(size.height * 0.035, min: 23, max: 32)
+    }
+    var wodNextMovementSize: CGFloat {
+        isLandscape ? clamp(size.height * 0.085, min: 30, max: 44) : clamp(size.height * 0.034, min: 22, max: 30)
+    }
+    var wodMetaSize: CGFloat {
+        isLandscape ? clamp(size.height * 0.052, min: 18, max: 25) : clamp(size.height * 0.026, min: 17, max: 22)
+    }
     var controlFontSize: CGFloat { isLandscape ? 14 : 16 }
     var controlHeight: CGFloat { isLandscape ? activeControlHeight : 50 }
 
@@ -259,6 +345,7 @@ private struct HeaderView: View {
     @ObservedObject var viewModel: DisplayViewModel
     @ObservedObject var bluetoothManager: BluetoothHeartRateManager
     let metrics: DashboardMetrics
+    @Binding var displayMode: GymDisplayMode
     let onHeartRateSettings: () -> Void
 
     var body: some View {
@@ -287,7 +374,7 @@ private struct HeaderView: View {
                         .foregroundStyle(.yellow)
                         .disabled(viewModel.isRefreshingLatestWorkout)
 
-                        Text(viewModel.latestWorkoutStatusText)
+                        Text(viewModel.isFollowingWatch ? viewModel.watchSyncStatusText : viewModel.latestWorkoutStatusText)
                             .font(.system(size: max(metrics.headerMetaSize - 3, 10), weight: .heavy, design: .rounded))
                             .foregroundStyle(.white.opacity(0.62))
                             .lineLimit(1)
@@ -315,24 +402,30 @@ private struct HeaderView: View {
 
             Spacer(minLength: 8)
 
-            VStack(alignment: .trailing, spacing: 6) {
-                Button(action: onHeartRateSettings) {
-                    Text(statusLabel)
-                        .font(.system(size: metrics.headerMetaSize, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.yellow)
+            HStack(alignment: .center, spacing: 8) {
+                DisplayModeSelector(displayMode: $displayMode, metrics: metrics)
+
+                VStack(alignment: .trailing, spacing: 6) {
+                    Button(action: onHeartRateSettings) {
+                        Text(statusLabel)
+                            .font(.system(size: metrics.headerMetaSize, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.yellow)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.55)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(.yellow.opacity(0.13), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    Text(workoutManager.status.rawValue.uppercased())
+                        .font(.system(size: metrics.headerMetaSize - 1, weight: .black, design: .rounded))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.55)
+                        .minimumScaleFactor(0.65)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(.yellow.opacity(0.13), in: Capsule())
+                        .background(.white.opacity(0.12), in: Capsule())
                 }
-                .buttonStyle(.plain)
-
-                Text(workoutManager.status.rawValue.uppercased())
-                    .font(.system(size: metrics.headerMetaSize - 1, weight: .black, design: .rounded))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(.white.opacity(0.12), in: Capsule())
             }
         }
         .frame(maxWidth: .infinity)
@@ -347,7 +440,7 @@ private struct HeaderView: View {
                 .replacingOccurrences(of: "Tactix 8", with: "TACTIX 8", options: .caseInsensitive)
 
             if let bpm = viewModel.activeHeartRate {
-                return "\(shortName) · \(bpm)"
+                return "\(shortName) • \(bpm) BPM • \(viewModel.activeCurrentZone.name.uppercased())"
             }
             return "\(shortName) CONNECTED"
         }
@@ -358,6 +451,184 @@ private struct HeaderView: View {
         default: 
             return "HR DISCONNECTED"
         }
+    }
+}
+
+private struct DisplayModeSelector: View {
+    @Binding var displayMode: GymDisplayMode
+    let metrics: DashboardMetrics
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(GymDisplayMode.allCases, id: \.self) { mode in
+                Button {
+                    displayMode = mode
+                    print("[DISPLAY MODE] selected \(mode.rawValue)")
+                } label: {
+                    Text(mode.rawValue)
+                        .font(.system(size: metrics.isLandscape ? 12 : 13, weight: .black, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .foregroundStyle(displayMode == mode ? .black : .white.opacity(0.82))
+                        .frame(minWidth: metrics.isLandscape ? 42 : 46, minHeight: 30)
+                        .padding(.horizontal, 2)
+                        .background(displayMode == mode ? .yellow : .clear, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(.white.opacity(0.1), in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(.white.opacity(0.14), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - WOD Progress Panel
+
+private struct WODProgressPanel: View {
+    @ObservedObject var workoutManager: WorkoutManager
+    @ObservedObject var timerManager: TimerManager
+    let metrics: DashboardMetrics
+    let isLandscape: Bool
+
+    var body: some View {
+        if isLandscape {
+            landscapeBody
+        } else {
+            portraitBody
+        }
+    }
+
+    private var landscapeBody: some View {
+        VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
+            HStack(alignment: .center, spacing: 14) {
+                progressPill(text: workoutManager.roundText, isPrimary: true)
+                progressPill(text: timerManager.elapsedTimeText, isPrimary: false)
+                Spacer(minLength: 0)
+            }
+
+            WODMovementBlock(
+                label: "Current",
+                station: workoutManager.currentStation,
+                titleSize: metrics.wodCurrentMovementSize,
+                prescriptionSize: metrics.wodCurrentPrescriptionSize,
+                maxTitleLines: 2,
+                isPrimary: true
+            )
+            .layoutPriority(3)
+
+            Divider()
+                .overlay(.white.opacity(0.16))
+
+            WODMovementBlock(
+                label: "Next",
+                station: workoutManager.nextStation,
+                titleSize: metrics.wodNextMovementSize,
+                prescriptionSize: max(metrics.wodCurrentPrescriptionSize * 0.72, 18),
+                maxTitleLines: 2,
+                isPrimary: false
+            )
+            .layoutPriority(2)
+
+            Spacer(minLength: 0)
+        }
+        .padding(metrics.cardPadding + 2)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private var portraitBody: some View {
+        VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
+            HStack(spacing: 10) {
+                progressPill(text: workoutManager.roundText, isPrimary: true)
+                progressPill(text: timerManager.elapsedTimeText, isPrimary: false)
+            }
+
+            WODMovementBlock(
+                label: "Current",
+                station: workoutManager.currentStation,
+                titleSize: metrics.wodCurrentMovementSize,
+                prescriptionSize: metrics.wodCurrentPrescriptionSize,
+                maxTitleLines: 2,
+                isPrimary: true
+            )
+            .layoutPriority(3)
+
+            WODMovementBlock(
+                label: "Next",
+                station: workoutManager.nextStation,
+                titleSize: metrics.wodNextMovementSize,
+                prescriptionSize: max(metrics.wodCurrentPrescriptionSize * 0.78, 17),
+                maxTitleLines: 2,
+                isPrimary: false
+            )
+            .layoutPriority(2)
+
+            Spacer(minLength: 0)
+        }
+        .padding(metrics.cardPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private func progressPill(text: String, isPrimary: Bool) -> some View {
+        Text(text)
+            .font(.system(size: metrics.wodMetaSize, weight: .black, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(isPrimary ? .yellow : .white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.55)
+            .padding(.horizontal, isLandscape ? 14 : 10)
+            .padding(.vertical, isLandscape ? 8 : 7)
+            .frame(maxWidth: .infinity)
+            .background(.white.opacity(isPrimary ? 0.13 : 0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+private struct WODMovementBlock: View {
+    let label: String
+    let station: WorkoutStation?
+    let titleSize: CGFloat
+    let prescriptionSize: CGFloat
+    let maxTitleLines: Int
+    let isPrimary: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: isPrimary ? 8 : 5) {
+            Text(label.uppercased())
+                .font(.system(size: isPrimary ? 18 : 14, weight: .black, design: .rounded))
+                .foregroundStyle(.yellow)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            Text(station?.displayName ?? "None")
+                .font(.system(size: titleSize, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .lineLimit(maxTitleLines)
+                .minimumScaleFactor(0.58)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let prescription = station?.prescriptionText, !prescription.isEmpty {
+                Text(prescription)
+                    .font(.system(size: prescriptionSize, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.72))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.62)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

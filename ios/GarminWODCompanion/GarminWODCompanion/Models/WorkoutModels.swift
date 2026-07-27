@@ -16,6 +16,14 @@ enum WorkoutStatus: String {
     case finished = "Finished"
 }
 
+enum GymDisplayMode: String, CaseIterable {
+    case wod = "WOD"
+    case run = "RUN"
+
+    static let storageKey = "gymDisplayMode"
+    static let defaultMode: GymDisplayMode = .wod
+}
+
 enum RemoteWorkoutSessionStatus: String, Codable {
     case idle
     case running

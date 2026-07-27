@@ -249,6 +249,42 @@ expect(
     "local finished should allow normal auto-lock"
 )
 
+print("[TEST] display mode preference defaults")
+expect(GymDisplayMode.defaultMode == .wod, "fresh display mode should default to WOD")
+expect(GymDisplayMode(rawValue: "WOD") == .wod, "WOD raw value should decode")
+expect(GymDisplayMode(rawValue: "RUN") == .run, "RUN raw value should decode")
+
+let displayModeSuiteName = "garmin-wod-display-mode-tests-\(UUID().uuidString)"
+let displayModeDefaults = UserDefaults(suiteName: displayModeSuiteName)!
+displayModeDefaults.removePersistentDomain(forName: displayModeSuiteName)
+expect(
+    GymDisplayMode(rawValue: displayModeDefaults.string(forKey: GymDisplayMode.storageKey) ?? GymDisplayMode.defaultMode.rawValue) == .wod,
+    "missing display mode preference should resolve to WOD"
+)
+displayModeDefaults.set(GymDisplayMode.run.rawValue, forKey: GymDisplayMode.storageKey)
+expect(
+    GymDisplayMode(rawValue: displayModeDefaults.string(forKey: GymDisplayMode.storageKey) ?? "") == .run,
+    "display mode preference should persist RUN"
+)
+
+let modeStateViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager()
+)
+modeStateViewModel.startWorkout()
+modeStateViewModel.nextStation()
+let modeStateStatus = modeStateViewModel.workoutManager.status
+let modeStateElapsed = modeStateViewModel.timerManager.elapsedSeconds
+let modeStateRound = modeStateViewModel.workoutManager.currentRound
+let modeStateStation = modeStateViewModel.workoutManager.currentStationIndex
+displayModeDefaults.set(GymDisplayMode.wod.rawValue, forKey: GymDisplayMode.storageKey)
+displayModeDefaults.set(GymDisplayMode.run.rawValue, forKey: GymDisplayMode.storageKey)
+expect(modeStateViewModel.workoutManager.status == modeStateStatus, "switching display mode should not change workout status")
+expect(modeStateViewModel.timerManager.elapsedSeconds == modeStateElapsed, "switching display mode should not reset elapsed time")
+expect(modeStateViewModel.workoutManager.currentRound == modeStateRound, "switching display mode should not change round")
+expect(modeStateViewModel.workoutManager.currentStationIndex == modeStateStation, "switching display mode should not change station")
+
 print("[TEST] workout summary snapshot")
 let summaryHeartRateManager = MockHeartRateManager()
 summaryHeartRateManager.isDemoModeEnabled = false
