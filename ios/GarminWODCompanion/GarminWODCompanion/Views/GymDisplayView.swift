@@ -3,9 +3,20 @@ import UIKit
 
 struct GymDisplayView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage(GymDisplayMode.storageKey) private var displayMode: GymDisplayMode = .defaultMode
+    @AppStorage(GymDisplayMode.storageKey) private var displayModeRawValue = GymDisplayMode.defaultMode.rawValue
     @StateObject private var viewModel = DisplayViewModel()
     @State private var isBluetoothSheetPresented = false
+
+    private var displayMode: GymDisplayMode {
+        GymDisplayMode(storedValue: displayModeRawValue)
+    }
+
+    private var displayModeBinding: Binding<GymDisplayMode> {
+        Binding(
+            get: { GymDisplayMode(storedValue: displayModeRawValue) },
+            set: { displayModeRawValue = $0.rawValue }
+        )
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -42,7 +53,8 @@ struct GymDisplayView: View {
                                 viewModel: viewModel,
                                 workoutManager: viewModel.workoutManager,
                                 metrics: metrics,
-                                isLandscape: isLandscape
+                                isLandscape: isLandscape,
+                                displayMode: displayMode
                             )
                             .frame(height: isLandscape ? metrics.activeControlHeight : nil)
                         }
@@ -53,6 +65,7 @@ struct GymDisplayView: View {
                 .zIndex(1)
             }
             .onAppear {
+                migrateDisplayModePreferenceIfNeeded()
                 viewModel.selectedHeartRateSource = .bluetooth
                 viewModel.loadLatestWorkoutIfNeeded()
                 viewModel.logLayout(width: geometry.size.width, height: geometry.size.height, isLandscape: isLandscape)
@@ -85,6 +98,16 @@ struct GymDisplayView: View {
         }
     }
 
+    private func migrateDisplayModePreferenceIfNeeded() {
+        let resolvedMode = GymDisplayMode(storedValue: displayModeRawValue)
+        guard displayModeRawValue != resolvedMode.rawValue else {
+            return
+        }
+
+        displayModeRawValue = resolvedMode.rawValue
+        print("[DISPLAY MODE] migrated preference to \(resolvedMode.rawValue)")
+    }
+
     private func updateIdleTimer(for scenePhase: ScenePhase) {
         let shouldDisable = scenePhase == .active && viewModel.shouldPreventDisplaySleep
         setIdleTimerDisabled(shouldDisable, reason: "scene=\(scenePhase) preventSleep=\(viewModel.shouldPreventDisplaySleep)")
@@ -104,7 +127,7 @@ struct GymDisplayView: View {
     private func portraitLayout(metrics: DashboardMetrics) -> some View {
         Group {
             switch displayMode {
-            case .wod:
+            case .workout:
                 wodPortraitLayout(metrics: metrics)
             case .run:
                 runPortraitLayout(metrics: metrics)
@@ -115,7 +138,7 @@ struct GymDisplayView: View {
     private func landscapeLayout(metrics: DashboardMetrics) -> some View {
         Group {
             switch displayMode {
-            case .wod:
+            case .workout:
                 wodLandscapeLayout(metrics: metrics)
             case .run:
                 runLandscapeLayout(metrics: metrics)
@@ -130,28 +153,19 @@ struct GymDisplayView: View {
                 viewModel: viewModel,
                 bluetoothManager: viewModel.bluetoothHeartRateManager,
                 metrics: metrics,
-                displayMode: $displayMode,
+                displayMode: displayModeBinding,
                 onHeartRateSettings: {
                     isBluetoothSheetPresented = true
                 }
             )
 
-            HStack(alignment: .top, spacing: metrics.sectionSpacing) {
-                HeartRatePanel(
-                    viewModel: viewModel,
-                    bluetoothManager: viewModel.bluetoothHeartRateManager,
-                    metrics: metrics
-                )
-                .frame(maxWidth: .infinity)
-
-                WorkoutPanel(
-                    workoutManager: viewModel.workoutManager,
-                    timerManager: viewModel.timerManager,
-                    metrics: metrics,
-                    isLandscape: false
-                )
-                .frame(maxWidth: .infinity)
-            }
+            RunDashboardPanel(
+                viewModel: viewModel,
+                bluetoothManager: viewModel.bluetoothHeartRateManager,
+                timerManager: viewModel.timerManager,
+                metrics: metrics,
+                isLandscape: false
+            )
             .frame(maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -164,29 +178,20 @@ struct GymDisplayView: View {
                 viewModel: viewModel,
                 bluetoothManager: viewModel.bluetoothHeartRateManager,
                 metrics: metrics,
-                displayMode: $displayMode,
+                displayMode: displayModeBinding,
                 onHeartRateSettings: {
                     isBluetoothSheetPresented = true
                 }
             )
             .frame(height: metrics.activeHeaderHeight)
 
-            HStack(alignment: .top, spacing: metrics.landscapePanelGap) {
-                HeartRatePanel(
-                    viewModel: viewModel,
-                    bluetoothManager: viewModel.bluetoothHeartRateManager,
-                    metrics: metrics
-                )
-                .frame(width: metrics.landscapeHeartPanelWidth, height: metrics.activeMainHeight)
-
-                WorkoutPanel(
-                    workoutManager: viewModel.workoutManager,
-                    timerManager: viewModel.timerManager,
-                    metrics: metrics,
-                    isLandscape: true
-                )
-                .frame(width: metrics.landscapeWorkoutPanelWidth, height: metrics.activeMainHeight)
-            }
+            RunDashboardPanel(
+                viewModel: viewModel,
+                bluetoothManager: viewModel.bluetoothHeartRateManager,
+                timerManager: viewModel.timerManager,
+                metrics: metrics,
+                isLandscape: true
+            )
             .frame(width: metrics.availableWidth, height: metrics.activeMainHeight)
         }
         .frame(maxWidth: .infinity, maxHeight: metrics.activeDashboardHeight)
@@ -199,7 +204,7 @@ struct GymDisplayView: View {
                 viewModel: viewModel,
                 bluetoothManager: viewModel.bluetoothHeartRateManager,
                 metrics: metrics,
-                displayMode: $displayMode,
+                displayMode: displayModeBinding,
                 onHeartRateSettings: {
                     isBluetoothSheetPresented = true
                 }
@@ -223,7 +228,7 @@ struct GymDisplayView: View {
                 viewModel: viewModel,
                 bluetoothManager: viewModel.bluetoothHeartRateManager,
                 metrics: metrics,
-                displayMode: $displayMode,
+                displayMode: displayModeBinding,
                 onHeartRateSettings: {
                     isBluetoothSheetPresented = true
                 }
@@ -351,46 +356,19 @@ private struct HeaderView: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(workoutManager.workout.title)
+                Text(primaryTitle)
                     .font(.system(size: metrics.headerTitleSize, weight: .black, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
 
-                Text(workoutManager.workout.type.rawValue.uppercased())
+                Text(secondaryTitle)
                     .font(.system(size: metrics.headerMetaSize, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.8))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
 
                 if workoutManager.status == .idle {
-                    HStack(spacing: 8) {
-                        Button {
-                            viewModel.refreshLatestWorkout()
-                        } label: {
-                            Text(viewModel.isRefreshingLatestWorkout ? "Refreshing…" : "Refresh WOD")
-                                .font(.system(size: max(metrics.headerMetaSize - 2, 10), weight: .black, design: .rounded))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.yellow)
-                        .disabled(viewModel.isRefreshingLatestWorkout)
-
-                        Text(viewModel.isFollowingWatch ? viewModel.watchSyncStatusText : viewModel.latestWorkoutStatusText)
-                            .font(.system(size: max(metrics.headerMetaSize - 3, 10), weight: .heavy, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.62))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-
-                        Button {
-                            viewModel.toggleFollowWatch()
-                        } label: {
-                            Text(viewModel.isFollowingWatch ? "Stop Follow" : "Follow Watch")
-                                .font(.system(size: max(metrics.headerMetaSize - 2, 10), weight: .black, design: .rounded))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(viewModel.isFollowingWatch ? .white.opacity(0.85) : .yellow)
-                    }
+                    setupControls
                 } else if viewModel.isFollowingWatch {
                     Text(viewModel.watchSyncStatusText.uppercased())
                         .font(.system(size: max(metrics.headerMetaSize - 3, 10), weight: .black, design: .rounded))
@@ -431,6 +409,54 @@ private struct HeaderView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private var primaryTitle: String {
+        displayMode == .run ? "RUN" : workoutManager.workout.title
+    }
+
+    private var secondaryTitle: String {
+        if displayMode == .run {
+            return viewModel.isFollowingWatch ? viewModel.watchSyncStatusText.uppercased() : "HEART RATE DASHBOARD"
+        }
+
+        return workoutManager.workout.type.rawValue.uppercased()
+    }
+
+    @ViewBuilder
+    private var setupControls: some View {
+        HStack(spacing: 8) {
+            if displayMode == .workout {
+                Button {
+                    viewModel.refreshLatestWorkout()
+                } label: {
+                    Text(viewModel.isRefreshingLatestWorkout ? "Refreshing…" : "Refresh WOD")
+                        .font(.system(size: max(metrics.headerMetaSize - 2, 10), weight: .black, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.yellow)
+                .disabled(viewModel.isRefreshingLatestWorkout)
+
+                Text(viewModel.isFollowingWatch ? viewModel.watchSyncStatusText : viewModel.latestWorkoutStatusText)
+                    .font(.system(size: max(metrics.headerMetaSize - 3, 10), weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.62))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
+
+            Button {
+                viewModel.toggleFollowWatch()
+            } label: {
+                Text(viewModel.isFollowingWatch ? "Stop Follow" : "Follow Watch")
+                    .font(.system(size: max(metrics.headerMetaSize - 2, 10), weight: .black, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(viewModel.isFollowingWatch ? .white.opacity(0.85) : .yellow)
+        }
+    }
+
     private var statusLabel: String {
         if bluetoothManager.connectionState.isConnected {
             let name = bluetoothManager.connectedPeripheralName ?? "Connected"
@@ -440,7 +466,7 @@ private struct HeaderView: View {
                 .replacingOccurrences(of: "Tactix 8", with: "TACTIX 8", options: .caseInsensitive)
 
             if let bpm = viewModel.activeHeartRate {
-                return "\(shortName) • \(bpm) BPM • \(viewModel.activeCurrentZone.name.uppercased())"
+                return "\(shortName) • \(bpm) BPM • \(compactZoneLabel)"
             }
             return "\(shortName) CONNECTED"
         }
@@ -451,6 +477,14 @@ private struct HeaderView: View {
         default: 
             return "HR DISCONNECTED"
         }
+    }
+
+    private var compactZoneLabel: String {
+        let name = viewModel.activeCurrentZone.name.uppercased()
+        if name.hasPrefix("ZONE ") {
+            return name.replacingOccurrences(of: "ZONE ", with: "Z")
+        }
+        return name
     }
 }
 
@@ -486,7 +520,7 @@ private struct DisplayModeSelector: View {
     }
 }
 
-// MARK: - WOD Progress Panel
+// MARK: - WORKOUT Progress Panel
 
 private struct WODProgressPanel: View {
     @ObservedObject var workoutManager: WorkoutManager
@@ -629,6 +663,152 @@ private struct WODMovementBlock: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - RUN Heart-Rate Dashboard
+
+private struct RunDashboardPanel: View {
+    @ObservedObject var viewModel: DisplayViewModel
+    @ObservedObject var bluetoothManager: BluetoothHeartRateManager
+    @ObservedObject var timerManager: TimerManager
+    let metrics: DashboardMetrics
+    let isLandscape: Bool
+
+    var body: some View {
+        if isLandscape {
+            landscapeBody
+        } else {
+            portraitBody
+        }
+    }
+
+    private var landscapeBody: some View {
+        HStack(alignment: .center, spacing: metrics.landscapePanelGap) {
+            runHero
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(3)
+
+            VStack(spacing: metrics.sectionSpacing) {
+                runMetricCard(title: "Elapsed", value: timerManager.elapsedTimeText, isTimer: true)
+                runMetricCard(title: "Avg HR", value: "\(viewModel.activeAverageHeartRate)", isTimer: false)
+                runMetricCard(title: "Max HR", value: "\(viewModel.activeMaximumHeartRate)", isTimer: false)
+            }
+            .frame(width: max(metrics.availableWidth * 0.32, 210), height: metrics.activeMainHeight)
+        }
+        .padding(metrics.cardPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private var portraitBody: some View {
+        VStack(spacing: metrics.sectionSpacing + 2) {
+            runHero
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(3)
+
+            HStack(spacing: 10) {
+                runMetricCard(title: "Elapsed", value: timerManager.elapsedTimeText, isTimer: true)
+                runMetricCard(title: "Avg HR", value: "\(viewModel.activeAverageHeartRate)", isTimer: false)
+                runMetricCard(title: "Max HR", value: "\(viewModel.activeMaximumHeartRate)", isTimer: false)
+            }
+            .frame(height: 92)
+        }
+        .padding(metrics.cardPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private var runHero: some View {
+        VStack(spacing: isLandscape ? 8 : 12) {
+            Text(heartRateText)
+                .font(.system(size: runHeartRateSize, weight: .black, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.45)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+
+            Text(zoneText)
+                .font(.system(size: runZoneSize, weight: .black, design: .rounded))
+                .foregroundStyle(viewModel.activeCurrentZone.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+
+            Text(connectionText)
+                .font(.system(size: isLandscape ? 15 : 16, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.82))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(.white.opacity(0.09), in: Capsule())
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func runMetricCard(title: String, value: String, isTimer: Bool) -> some View {
+        VStack(spacing: 4) {
+            Text(title.uppercased())
+                .font(.system(size: isLandscape ? 13 : 11, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.62))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            Text(value)
+                .font(.system(size: isTimer ? runTimerMetricSize : runSecondaryMetricSize, weight: .black, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(isTimer ? .yellow : .white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, isLandscape ? 8 : 6)
+        .padding(.horizontal, 8)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var heartRateText: String {
+        guard let heartRate = viewModel.activeHeartRate else { return "--" }
+        return "\(heartRate)"
+    }
+
+    private var zoneText: String {
+        if viewModel.activeHeartRate == nil {
+            return "HR DISCONNECTED"
+        }
+        return viewModel.activeCurrentZone.name.uppercased()
+    }
+
+    private var connectionText: String {
+        if bluetoothManager.connectionState.isConnected {
+            return viewModel.compactHeartRateSourceLabel
+        }
+        return viewModel.heartRateSourceLabel
+    }
+
+    private var runHeartRateSize: CGFloat {
+        isLandscape ? min(metrics.activeMainHeight * 0.56, 168) : min(metrics.availableHeight * 0.23, 178)
+    }
+
+    private var runZoneSize: CGFloat {
+        isLandscape ? min(metrics.activeMainHeight * 0.13, 42) : min(metrics.availableHeight * 0.055, 42)
+    }
+
+    private var runTimerMetricSize: CGFloat {
+        isLandscape ? min(metrics.activeMainHeight * 0.115, 40) : 25
+    }
+
+    private var runSecondaryMetricSize: CGFloat {
+        isLandscape ? min(metrics.activeMainHeight * 0.13, 44) : 28
     }
 }
 
@@ -999,6 +1179,7 @@ private struct ControlBar: View {
     @ObservedObject var workoutManager: WorkoutManager
     let metrics: DashboardMetrics
     let isLandscape: Bool
+    let displayMode: GymDisplayMode
 
     private var controls: [DashboardControl] {
         if viewModel.isFollowingWatch && viewModel.isMirroringWatchSession {
@@ -1007,6 +1188,41 @@ private struct ControlBar: View {
             ]
         }
 
+        if displayMode == .run {
+            return runControls
+        }
+
+        return workoutControls
+    }
+
+    private var runControls: [DashboardControl] {
+        switch workoutManager.status {
+        case .idle:
+            return [
+                DashboardControl(label: "Start", kind: .primary, action: .primary, isEnabled: true),
+                DashboardControl(label: "Finish", kind: .warning, action: .finish, isEnabled: false),
+                DashboardControl(label: "Reset", kind: .secondary, action: .reset, isEnabled: true)
+            ]
+        case .running:
+            return [
+                DashboardControl(label: "Pause", kind: .primary, action: .primary, isEnabled: true),
+                DashboardControl(label: "Finish", kind: .warning, action: .finish, isEnabled: true),
+                DashboardControl(label: "Reset", kind: .secondary, action: .reset, isEnabled: true)
+            ]
+        case .paused:
+            return [
+                DashboardControl(label: "Resume", kind: .primary, action: .primary, isEnabled: true),
+                DashboardControl(label: "Finish", kind: .warning, action: .finish, isEnabled: true),
+                DashboardControl(label: "Reset", kind: .secondary, action: .reset, isEnabled: true)
+            ]
+        case .finished:
+            return [
+                DashboardControl(label: "Reset", kind: .primary, action: .reset, isEnabled: true)
+            ]
+        }
+    }
+
+    private var workoutControls: [DashboardControl] {
         switch workoutManager.status {
         case .idle:
             return [

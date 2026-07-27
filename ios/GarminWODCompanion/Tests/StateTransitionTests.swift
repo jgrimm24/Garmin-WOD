@@ -250,20 +250,22 @@ expect(
 )
 
 print("[TEST] display mode preference defaults")
-expect(GymDisplayMode.defaultMode == .wod, "fresh display mode should default to WOD")
-expect(GymDisplayMode(rawValue: "WOD") == .wod, "WOD raw value should decode")
+expect(GymDisplayMode.defaultMode == .workout, "fresh display mode should default to WORKOUT")
+expect(GymDisplayMode(rawValue: "WORKOUT") == .workout, "WORKOUT raw value should decode")
+expect(GymDisplayMode(storedValue: "WOD") == .workout, "legacy WOD preference should map to WORKOUT")
+expect(GymDisplayMode(storedValue: "wod") == .workout, "legacy lowercase wod preference should map to WORKOUT")
 expect(GymDisplayMode(rawValue: "RUN") == .run, "RUN raw value should decode")
 
 let displayModeSuiteName = "garmin-wod-display-mode-tests-\(UUID().uuidString)"
 let displayModeDefaults = UserDefaults(suiteName: displayModeSuiteName)!
 displayModeDefaults.removePersistentDomain(forName: displayModeSuiteName)
 expect(
-    GymDisplayMode(rawValue: displayModeDefaults.string(forKey: GymDisplayMode.storageKey) ?? GymDisplayMode.defaultMode.rawValue) == .wod,
-    "missing display mode preference should resolve to WOD"
+    GymDisplayMode(storedValue: displayModeDefaults.string(forKey: GymDisplayMode.storageKey)) == .workout,
+    "missing display mode preference should resolve to WORKOUT"
 )
 displayModeDefaults.set(GymDisplayMode.run.rawValue, forKey: GymDisplayMode.storageKey)
 expect(
-    GymDisplayMode(rawValue: displayModeDefaults.string(forKey: GymDisplayMode.storageKey) ?? "") == .run,
+    GymDisplayMode(storedValue: displayModeDefaults.string(forKey: GymDisplayMode.storageKey)) == .run,
     "display mode preference should persist RUN"
 )
 
@@ -278,7 +280,7 @@ let modeStateStatus = modeStateViewModel.workoutManager.status
 let modeStateElapsed = modeStateViewModel.timerManager.elapsedSeconds
 let modeStateRound = modeStateViewModel.workoutManager.currentRound
 let modeStateStation = modeStateViewModel.workoutManager.currentStationIndex
-displayModeDefaults.set(GymDisplayMode.wod.rawValue, forKey: GymDisplayMode.storageKey)
+displayModeDefaults.set(GymDisplayMode.workout.rawValue, forKey: GymDisplayMode.storageKey)
 displayModeDefaults.set(GymDisplayMode.run.rawValue, forKey: GymDisplayMode.storageKey)
 expect(modeStateViewModel.workoutManager.status == modeStateStatus, "switching display mode should not change workout status")
 expect(modeStateViewModel.timerManager.elapsedSeconds == modeStateElapsed, "switching display mode should not reset elapsed time")

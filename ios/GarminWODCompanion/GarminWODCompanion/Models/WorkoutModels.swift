@@ -17,11 +17,22 @@ enum WorkoutStatus: String {
 }
 
 enum GymDisplayMode: String, CaseIterable {
-    case wod = "WOD"
+    case workout = "WORKOUT"
     case run = "RUN"
 
     static let storageKey = "gymDisplayMode"
-    static let defaultMode: GymDisplayMode = .wod
+    static let defaultMode: GymDisplayMode = .workout
+
+    init(storedValue: String?) {
+        switch storedValue?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
+        case "RUN":
+            self = .run
+        case "WOD", "WORKOUT":
+            self = .workout
+        default:
+            self = .defaultMode
+        }
+    }
 }
 
 enum RemoteWorkoutSessionStatus: String, Codable {
