@@ -679,10 +679,12 @@ class GarminWODView extends WatchUi.View {
         if (_manualStationIndex < _workout.getStationCount() - 1) {
             _manualStationIndex++;
             resetStationDistanceStart();
+            vibrateMovementAdvance();
         } else if (shouldContinueManualRoundFlow()) {
             _manualRoundNumber++;
             _manualStationIndex = 0;
             resetStationDistanceStart();
+            vibrateRoundComplete();
         } else {
             finishWorkout();
             return;
@@ -779,6 +781,42 @@ class GarminWODView extends WatchUi.View {
         WatchUi.requestUpdate();
     }
 
+    function vibrateMovementAdvance() as Void {
+        vibrateProgression([
+            new Attention.VibeProfile(80, 140)
+        ], "movement");
+    }
+
+    function vibrateRoundComplete() as Void {
+        vibrateProgression([
+            new Attention.VibeProfile(80, 140),
+            new Attention.VibeProfile(0, 80),
+            new Attention.VibeProfile(80, 140)
+        ], "round");
+    }
+
+    function vibrateWorkoutComplete() as Void {
+        vibrateProgression([
+            new Attention.VibeProfile(100, 300),
+            new Attention.VibeProfile(0, 100),
+            new Attention.VibeProfile(100, 300)
+        ], "complete");
+    }
+
+    function vibrateProgression(pattern, label) as Void {
+        if (!(Attention has :vibrate)) {
+            System.println("GarminWOD haptic unavailable label=" + label);
+            return;
+        }
+
+        try {
+            Attention.vibrate(pattern);
+            System.println("GarminWOD haptic label=" + label);
+        } catch (e) {
+            System.println("GarminWOD haptic failed label=" + label + ": " + getExceptionText(e));
+        }
+    }
+
     function getInputStateText() {
         if (_isFinished) {
             if (_activityRecorder.hasSaveFailed()) {
@@ -811,6 +849,7 @@ class GarminWODView extends WatchUi.View {
             disableHeartRateSensor();
         }
         _isFinished = true;
+        vibrateWorkoutComplete();
         publishWorkoutSessionState("finished");
         WatchUi.requestUpdate();
     }
