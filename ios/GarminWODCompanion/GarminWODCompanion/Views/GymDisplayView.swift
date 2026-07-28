@@ -361,13 +361,13 @@ private struct DashboardMetrics {
     var currentMovementSize: CGFloat { isLandscape ? 21 : 26 }
     var secondaryMovementSize: CGFloat { isLandscape ? 16 : 19 }
     var wodCurrentMovementSize: CGFloat {
-        isLandscape ? clamp(wodScoreboardHeroHeight * 0.34, min: 96, max: 176) : clamp(wodScoreboardHeroHeight * 0.21, min: 86, max: 158)
+        isLandscape ? wodScoreboardHeroHeight * 0.52 : wodScoreboardHeroHeight * 0.34
     }
     var wodCurrentPrescriptionSize: CGFloat {
         isLandscape ? clamp(wodScoreboardHeroHeight * 0.09, min: 26, max: 44) : clamp(wodScoreboardHeroHeight * 0.055, min: 22, max: 38)
     }
     var wodNextMovementSize: CGFloat {
-        isLandscape ? clamp(wodScoreboardHeroHeight * 0.18, min: 46, max: 82) : clamp(wodScoreboardHeroHeight * 0.10, min: 38, max: 70)
+        wodCurrentMovementSize * 0.40
     }
     var wodRoundSize: CGFloat {
         isLandscape ? clamp(wodScoreboardHeroHeight * 0.038, min: 14, max: 22) : clamp(wodScoreboardHeroHeight * 0.028, min: 14, max: 20)
@@ -778,18 +778,14 @@ private struct WODProgressPanel: View {
         GeometryReader { geometry in
             let spacing = max(metrics.wodScoreboardSpacing, 5)
             let verticalPadding = max(metrics.cardPadding - 6, 4)
-            let currentPrescription = usefulPrescription(for: workoutManager.currentStation)
-            let nextPrescription = usefulPrescription(for: workoutManager.nextStation)
             let dividerHeight: CGFloat = 1
-            let currentLabelHeight = clamp(metrics.wodCurrentMovementSize * 0.13, min: 16, max: 24)
-            let nextLabelHeight = clamp(metrics.wodNextMovementSize * 0.22, min: 13, max: 20)
-            let currentPrescriptionHeight = currentPrescription == nil ? 0 : clamp(metrics.wodCurrentPrescriptionSize * 1.35, min: 24, max: 48)
-            let nextPrescriptionHeight = nextPrescription == nil ? 0 : clamp(metrics.wodCurrentPrescriptionSize * 0.96, min: 18, max: 34)
-            let usableHeight = max(geometry.size.height - (verticalPadding * 2) - (spacing * 7) - dividerHeight, 0)
-            let progressHeight = clamp(usableHeight * 0.105, min: 28, max: 38)
-            let titleHeight = max(usableHeight - progressHeight - currentLabelHeight - nextLabelHeight - currentPrescriptionHeight - nextPrescriptionHeight, 0)
-            let currentTitleHeight = titleHeight * 0.68
-            let nextTitleHeight = titleHeight * 0.32
+            let currentLabelHeight = clamp(geometry.size.height * 0.050, min: 13, max: 20)
+            let nextLabelHeight = clamp(geometry.size.height * 0.040, min: 11, max: 16)
+            let usableHeight = max(geometry.size.height - (verticalPadding * 2) - (spacing * 5) - dividerHeight, 0)
+            let progressHeight = clamp(usableHeight * 0.085, min: 24, max: 34)
+            let titleHeight = max(usableHeight - progressHeight - currentLabelHeight - nextLabelHeight, 0)
+            let currentTitleHeight = titleHeight * 0.76
+            let nextTitleHeight = titleHeight * 0.24
 
             VStack(alignment: .center, spacing: spacing) {
                 HStack(alignment: .center, spacing: 12) {
@@ -810,11 +806,6 @@ private struct WODProgressPanel: View {
                 .frame(height: currentTitleHeight, alignment: .center)
                 .layoutPriority(3)
 
-                if let currentPrescription {
-                    prescriptionText(currentPrescription, size: metrics.wodCurrentPrescriptionSize, maxLines: 2)
-                        .frame(height: currentPrescriptionHeight)
-                }
-
                 Divider()
                     .overlay(.white.opacity(0.1))
                     .frame(height: dividerHeight)
@@ -830,11 +821,6 @@ private struct WODProgressPanel: View {
                 )
                 .frame(height: nextTitleHeight, alignment: .center)
                 .layoutPriority(2)
-
-                if let nextPrescription {
-                    prescriptionText(nextPrescription, size: max(metrics.wodCurrentPrescriptionSize * 0.72, 16), maxLines: 2)
-                        .frame(height: nextPrescriptionHeight)
-                }
             }
             .padding(verticalPadding)
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .center)
@@ -851,18 +837,14 @@ private struct WODProgressPanel: View {
         GeometryReader { geometry in
             let spacing = max(metrics.wodScoreboardSpacing, 6)
             let verticalPadding = max(metrics.cardPadding - 5, 6)
-            let currentPrescription = usefulPrescription(for: workoutManager.currentStation)
-            let nextPrescription = usefulPrescription(for: workoutManager.nextStation)
             let dividerHeight: CGFloat = 1
-            let currentLabelHeight = clamp(metrics.wodCurrentMovementSize * 0.13, min: 16, max: 24)
-            let nextLabelHeight = clamp(metrics.wodNextMovementSize * 0.24, min: 13, max: 20)
-            let currentPrescriptionHeight = currentPrescription == nil ? 0 : clamp(metrics.wodCurrentPrescriptionSize * 1.28, min: 22, max: 42)
-            let nextPrescriptionHeight = nextPrescription == nil ? 0 : clamp(metrics.wodCurrentPrescriptionSize * 0.94, min: 18, max: 32)
-            let usableHeight = max(geometry.size.height - (verticalPadding * 2) - (spacing * 7) - dividerHeight, 0)
-            let progressHeight = clamp(usableHeight * 0.095, min: 34, max: 46)
-            let titleHeight = max(usableHeight - progressHeight - currentLabelHeight - nextLabelHeight - currentPrescriptionHeight - nextPrescriptionHeight, 0)
-            let currentTitleHeight = titleHeight * 0.70
-            let nextTitleHeight = titleHeight * 0.30
+            let currentLabelHeight = clamp(geometry.size.height * 0.043, min: 14, max: 21)
+            let nextLabelHeight = clamp(geometry.size.height * 0.034, min: 12, max: 18)
+            let usableHeight = max(geometry.size.height - (verticalPadding * 2) - (spacing * 5) - dividerHeight, 0)
+            let progressHeight = clamp(usableHeight * 0.085, min: 30, max: 42)
+            let titleHeight = max(usableHeight - progressHeight - currentLabelHeight - nextLabelHeight, 0)
+            let currentTitleHeight = titleHeight * 0.75
+            let nextTitleHeight = titleHeight * 0.25
 
             VStack(alignment: .center, spacing: spacing) {
                 HStack(spacing: 10) {
@@ -883,11 +865,6 @@ private struct WODProgressPanel: View {
                 .frame(height: currentTitleHeight, alignment: .center)
                 .layoutPriority(3)
 
-                if let currentPrescription {
-                    prescriptionText(currentPrescription, size: metrics.wodCurrentPrescriptionSize, maxLines: 2)
-                        .frame(height: currentPrescriptionHeight)
-                }
-
                 Divider()
                     .overlay(.white.opacity(0.1))
                     .frame(height: dividerHeight)
@@ -903,11 +880,6 @@ private struct WODProgressPanel: View {
                 )
                 .frame(height: nextTitleHeight, alignment: .center)
                 .layoutPriority(2)
-
-                if let nextPrescription {
-                    prescriptionText(nextPrescription, size: max(metrics.wodCurrentPrescriptionSize * 0.72, 16), maxLines: 2)
-                        .frame(height: nextPrescriptionHeight)
-                }
             }
             .padding(verticalPadding)
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .center)
@@ -938,40 +910,6 @@ private struct WODProgressPanel: View {
             .foregroundStyle(.yellow)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
-    }
-
-    private func prescriptionText(_ text: String, size: CGFloat, maxLines: Int) -> some View {
-        Text(text)
-            .font(.system(size: size, weight: .heavy, design: .rounded))
-            .foregroundStyle(.white.opacity(0.72))
-            .lineLimit(maxLines)
-            .multilineTextAlignment(.center)
-            .minimumScaleFactor(0.62)
-            .frame(maxWidth: .infinity, alignment: .center)
-    }
-
-    private func usefulPrescription(for station: WorkoutStation?) -> String? {
-        guard let station else {
-            return nil
-        }
-
-        let formattedTitle = MovementDisplayFormatter.heroTitle(for: station.displayName)
-        let titleKey = comparisonKey(formattedTitle)
-        let usefulParts = station.prescriptionText
-            .components(separatedBy: " · ")
-            .filter { !titleKey.contains(comparisonKey($0)) }
-
-        guard !usefulParts.isEmpty else {
-            return nil
-        }
-
-        return usefulParts.joined(separator: " · ")
-    }
-
-    private func comparisonKey(_ text: String) -> String {
-        text
-            .uppercased()
-            .filter { $0.isLetter || $0.isNumber }
     }
 
     private enum ProgressPillRole {
@@ -1021,11 +959,11 @@ private struct WODMovementBlock: View {
     private func fittedTitleSize(for lines: [String], in size: CGSize) -> CGFloat {
         let lineCount = CGFloat(max(min(lines.count, maxTitleLines), 1))
         let longestLineCount = CGFloat(max(lines.map(\.count).max() ?? 1, 1))
-        let widthLimitedSize = size.width / max(longestLineCount * 0.64, 1)
-        let heightLimitedSize = size.height / max(lineCount * 1.14, 1)
+        let widthLimitedSize = (size.width * 0.94) / max(longestLineCount * 0.62, 1)
+        let heightLimitedSize = (size.height * 0.92) / max(lineCount * 1.04, 1)
         let lowerBound: CGFloat = isPrimary ? 12 : 10
 
-        return max(min(titleSize, widthLimitedSize, heightLimitedSize), lowerBound)
+        return max(min(widthLimitedSize, heightLimitedSize, titleSize), lowerBound)
     }
 
     private func titleLines(from title: String) -> [String] {
