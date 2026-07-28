@@ -369,6 +369,12 @@ private struct DashboardMetrics {
     var wodNextMovementSize: CGFloat {
         isLandscape ? clamp(wodScoreboardHeroHeight * 0.18, min: 46, max: 82) : clamp(wodScoreboardHeroHeight * 0.10, min: 38, max: 70)
     }
+    var wodRoundSize: CGFloat {
+        isLandscape ? clamp(wodScoreboardHeroHeight * 0.038, min: 14, max: 22) : clamp(wodScoreboardHeroHeight * 0.028, min: 14, max: 20)
+    }
+    var wodTimerSize: CGFloat {
+        isLandscape ? clamp(wodScoreboardHeroHeight * 0.058, min: 22, max: 34) : clamp(wodScoreboardHeroHeight * 0.045, min: 22, max: 32)
+    }
     var wodMetaSize: CGFloat {
         isLandscape ? clamp(wodScoreboardHeroHeight * 0.052, min: 18, max: 28) : clamp(wodScoreboardHeroHeight * 0.034, min: 17, max: 25)
     }
@@ -780,8 +786,8 @@ private struct WODProgressPanel: View {
 
             VStack(alignment: .center, spacing: spacing) {
                 HStack(alignment: .center, spacing: 12) {
-                    progressPill(text: workoutManager.roundText, isPrimary: true)
-                    progressPill(text: timerManager.elapsedTimeText, isPrimary: false)
+                    progressPill(text: workoutManager.roundText, role: .round)
+                    progressPill(text: timerManager.elapsedTimeText, role: .timer)
                 }
                 .frame(height: progressHeight)
 
@@ -835,8 +841,8 @@ private struct WODProgressPanel: View {
 
             VStack(alignment: .center, spacing: spacing) {
                 HStack(spacing: 10) {
-                    progressPill(text: workoutManager.roundText, isPrimary: true)
-                    progressPill(text: timerManager.elapsedTimeText, isPrimary: false)
+                    progressPill(text: workoutManager.roundText, role: .round)
+                    progressPill(text: timerManager.elapsedTimeText, role: .timer)
                 }
                 .frame(height: progressHeight)
 
@@ -878,17 +884,21 @@ private struct WODProgressPanel: View {
         )
     }
 
-    private func progressPill(text: String, isPrimary: Bool) -> some View {
+    private func progressPill(text: String, role: ProgressPillRole) -> some View {
         Text(text)
-            .font(.system(size: metrics.wodMetaSize, weight: .black, design: .rounded))
+            .font(.system(size: role == .timer ? metrics.wodTimerSize : metrics.wodRoundSize, weight: .black, design: .rounded))
             .monospacedDigit()
-            .foregroundStyle(isPrimary ? .yellow : .white)
+            .foregroundStyle(role == .timer ? .white : .yellow)
             .lineLimit(1)
             .minimumScaleFactor(0.55)
-            .padding(.horizontal, isLandscape ? 14 : 10)
-            .padding(.vertical, isLandscape ? 6 : 6)
-            .frame(maxWidth: .infinity)
-            .background(.white.opacity(isPrimary ? 0.13 : 0.08), in: RoundedRectangle(cornerRadius: 10))
+            .padding(.horizontal, isLandscape ? 12 : 10)
+            .padding(.vertical, isLandscape ? 5 : 6)
+            .frame(maxWidth: .infinity, alignment: role == .timer ? .trailing : .leading)
+    }
+
+    private enum ProgressPillRole {
+        case round
+        case timer
     }
 
     private func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
@@ -908,18 +918,17 @@ private struct WODMovementBlock: View {
     var body: some View {
         VStack(alignment: .center, spacing: isPrimary ? 8 : 5) {
             Text(label.uppercased())
-                .font(.system(size: isPrimary ? max(titleSize * 0.18, 18) : max(titleSize * 0.24, 14), weight: .black, design: .rounded))
+                .font(.system(size: sectionLabelSize, weight: .black, design: .rounded))
                 .foregroundStyle(.yellow)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
-            Text(station?.displayName ?? "None")
+            Text((station?.displayName ?? "None").uppercased())
                 .font(.system(size: titleSize, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(maxTitleLines)
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.58)
-                .fixedSize(horizontal: false, vertical: true)
 
             if let prescription = station?.prescriptionText, !prescription.isEmpty {
                 Text(prescription)
@@ -928,10 +937,17 @@ private struct WODMovementBlock: View {
                     .lineLimit(maxPrescriptionLines)
                     .multilineTextAlignment(.center)
                     .minimumScaleFactor(0.62)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var sectionLabelSize: CGFloat {
+        if isPrimary {
+            return Swift.min(Swift.max(titleSize * 0.12, 14), 22)
+        }
+
+        return Swift.min(Swift.max(titleSize * 0.18, 12), 18)
     }
 }
 
