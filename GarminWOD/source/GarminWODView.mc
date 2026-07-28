@@ -47,6 +47,23 @@ class GarminWODView extends WatchUi.View {
     var _missingHeartRateLogged;
     var _heartRateMissingSeconds;
     var _latestSensorHeartRate;
+    var _latestSensorHeartRateMs;
+    var _lastSensorCallbackMs;
+    var _lastSensorCallbackHeartRate;
+    var _lastActivityInfoHeartRate;
+    var _lastSelectedHeartRate;
+    var _lastSelectedHeartRateSource;
+    var _lastHeartRateStatsMs;
+    var _hrSensorCallbackCount;
+    var _hrValidSensorSampleCount;
+    var _hrMissingSensorSampleCount;
+    var _hrInvalidSensorSampleCount;
+    var _hrDiagnosticMin;
+    var _hrDiagnosticMax;
+    var _hrDiagnosticSum;
+    var _hrDiagnosticCount;
+    var _lastHrDiagnosticLogMs;
+    var _lastHrDisagreementLogMs;
     var _finalActiveCalories;
     var _finalNativeDistanceMeters;
     var _exitConfirmPending;
@@ -87,6 +104,23 @@ class GarminWODView extends WatchUi.View {
         _missingHeartRateLogged = false;
         _heartRateMissingSeconds = 0;
         _latestSensorHeartRate = null;
+        _latestSensorHeartRateMs = null;
+        _lastSensorCallbackMs = null;
+        _lastSensorCallbackHeartRate = null;
+        _lastActivityInfoHeartRate = null;
+        _lastSelectedHeartRate = null;
+        _lastSelectedHeartRateSource = "none";
+        _lastHeartRateStatsMs = null;
+        _hrSensorCallbackCount = 0;
+        _hrValidSensorSampleCount = 0;
+        _hrMissingSensorSampleCount = 0;
+        _hrInvalidSensorSampleCount = 0;
+        _hrDiagnosticMin = null;
+        _hrDiagnosticMax = null;
+        _hrDiagnosticSum = 0;
+        _hrDiagnosticCount = 0;
+        _lastHrDiagnosticLogMs = null;
+        _lastHrDisagreementLogMs = null;
         _finalActiveCalories = null;
         _finalNativeDistanceMeters = null;
         _exitConfirmPending = false;
@@ -257,6 +291,7 @@ class GarminWODView extends WatchUi.View {
 
     function resetWorkout() as Void {
         if (_activityRecorder.hasOpenSession() && !_activityRecorder.hasSaved()) {
+            logHeartRateDiagnostics("discard-reset");
             _activityRecorder.discardRecordingSession();
         }
 
@@ -280,7 +315,7 @@ class GarminWODView extends WatchUi.View {
         _firstValidHeartRateLogged = false;
         _missingHeartRateLogged = false;
         _heartRateMissingSeconds = 0;
-        _latestSensorHeartRate = null;
+        resetHeartRateDiagnostics();
         _finalActiveCalories = null;
         _finalNativeDistanceMeters = null;
         _exitConfirmPending = false;
@@ -313,7 +348,7 @@ class GarminWODView extends WatchUi.View {
         _firstValidHeartRateLogged = false;
         _missingHeartRateLogged = false;
         _heartRateMissingSeconds = 0;
-        _latestSensorHeartRate = null;
+        resetHeartRateDiagnostics();
         _finalActiveCalories = null;
         _finalNativeDistanceMeters = null;
         _exitConfirmPending = false;
@@ -769,6 +804,7 @@ class GarminWODView extends WatchUi.View {
         _elapsedBeforePause = getElapsedSeconds();
         _isRunning = false;
         captureFinalSummaryMetrics();
+        logHeartRateDiagnostics("finish");
         var saved = _activityRecorder.stopAndSaveRecordingSession();
         _summarySaveStatus = saved ? "Saved to Garmin" : "Save failed";
         if (saved) {
@@ -816,6 +852,7 @@ class GarminWODView extends WatchUi.View {
 
     function cleanupBeforeExit() as Void {
         if (_activityRecorder.hasOpenSession() && !_activityRecorder.hasSaved()) {
+            logHeartRateDiagnostics("discard-exit");
             _activityRecorder.discardRecordingSession();
         }
         disableHeartRateSensor();
@@ -850,9 +887,12 @@ class GarminWODView extends WatchUi.View {
 
     function enableHeartRateSensor() as Void {
         try {
-            Sensor.setEnabledSensors([Sensor.SENSOR_HEARTRATE]);
+            var enabledSensors = Sensor.setEnabledSensors([Sensor.SENSOR_HEARTRATE]);
             Sensor.enableSensorEvents(method(:onSensor));
-            System.println("GarminWOD: heart rate sensor enabled");
+            System.println("GarminWOD: heart rate sensor enabled requested=" +
+                Sensor.SENSOR_HEARTRATE +
+                " enabled=" + getLogValue(enabledSensors) +
+                " onboardSupported=" + (Sensor has :SENSOR_ONBOARD_HEARTRATE));
         } catch (e) {
             System.println("GarminWOD: heart rate sensor enable failed: " + getExceptionText(e));
         }
@@ -869,19 +909,145 @@ class GarminWODView extends WatchUi.View {
     }
 
     function onSensor(sensorInfo as Sensor.Info) as Void {
+        _hrSensorCallbackCount++;
+        _lastSensorCallbackMs = System.getTimer();
+
         if (sensorInfo == null || !(sensorInfo has :heartRate) || sensorInfo.heartRate == null) {
+            _hrMissingSensorSampleCount++;
+            _lastSensorCallbackHeartRate = null;
             return;
         }
 
         var heartRate = sensorInfo.heartRate;
+        _lastSensorCallbackHeartRate = heartRate;
 
         if (isValidHeartRate(heartRate)) {
             _latestSensorHeartRate = heartRate;
+            _latestSensorHeartRateMs = _lastSensorCallbackMs;
+            _hrValidSensorSampleCount++;
+            updateHeartRateDiagnosticStats(heartRate);
+        } else {
+            _hrInvalidSensorSampleCount++;
         }
     }
 
     function isValidHeartRate(heartRate) {
         return heartRate != null && heartRate >= 30 && heartRate <= 250;
+    }
+
+    function resetHeartRateDiagnostics() as Void {
+        _latestSensorHeartRate = null;
+        _latestSensorHeartRateMs = null;
+        _lastSensorCallbackMs = null;
+        _lastSensorCallbackHeartRate = null;
+        _lastActivityInfoHeartRate = null;
+        _lastSelectedHeartRate = null;
+        _lastSelectedHeartRateSource = "none";
+        _lastHeartRateStatsMs = null;
+        _hrSensorCallbackCount = 0;
+        _hrValidSensorSampleCount = 0;
+        _hrMissingSensorSampleCount = 0;
+        _hrInvalidSensorSampleCount = 0;
+        _hrDiagnosticMin = null;
+        _hrDiagnosticMax = null;
+        _hrDiagnosticSum = 0;
+        _hrDiagnosticCount = 0;
+        _lastHrDiagnosticLogMs = null;
+        _lastHrDisagreementLogMs = null;
+    }
+
+    function getLatestSensorHeartRateAgeMs(now) {
+        if (_latestSensorHeartRateMs == null) {
+            return null;
+        }
+
+        return now - _latestSensorHeartRateMs;
+    }
+
+    function updateHeartRateDiagnosticStats(heartRate) as Void {
+        if (_hrDiagnosticMin == null || heartRate < _hrDiagnosticMin) {
+            _hrDiagnosticMin = heartRate;
+        }
+
+        if (_hrDiagnosticMax == null || heartRate > _hrDiagnosticMax) {
+            _hrDiagnosticMax = heartRate;
+        }
+
+        _hrDiagnosticSum += heartRate;
+        _hrDiagnosticCount++;
+    }
+
+    function maybeLogStaleSensorHeartRate(now, sensorAgeMs, activityHeartRate) as Void {
+        if (_lastHrDiagnosticLogMs != null && now - _lastHrDiagnosticLogMs < 15000) {
+            return;
+        }
+
+        System.println("GarminWOD HR stale sensor=" + getLogValue(_latestSensorHeartRate) +
+            " ageMs=" + getLogValue(sensorAgeMs) +
+            " activity=" + getLogValue(activityHeartRate));
+        _lastHrDiagnosticLogMs = now;
+    }
+
+    function maybeLogHeartRateComparison(now, sensorAgeMs, activityHeartRate) as Void {
+        if (_latestSensorHeartRate == null || activityHeartRate == null) {
+            return;
+        }
+
+        var difference = _latestSensorHeartRate - activityHeartRate;
+
+        if (difference < 0) {
+            difference = -difference;
+        }
+
+        if (difference <= 15) {
+            return;
+        }
+
+        if (_lastHrDisagreementLogMs != null && now - _lastHrDisagreementLogMs < 15000) {
+            return;
+        }
+
+        _lastHrDisagreementLogMs = now;
+        System.println("GarminWOD HR source disagreement sensor=" + _latestSensorHeartRate +
+            " ageMs=" + getLogValue(sensorAgeMs) +
+            " activity=" + activityHeartRate +
+            " selected=" + getLogValue(_lastSelectedHeartRate) +
+            " source=" + _lastSelectedHeartRateSource);
+    }
+
+    function maybeLogHeartRateDiagnostics(now) as Void {
+        if (_lastHrDiagnosticLogMs != null && now - _lastHrDiagnosticLogMs < 15000) {
+            return;
+        }
+
+        _lastHrDiagnosticLogMs = now;
+        logHeartRateDiagnostics("active");
+    }
+
+    function logHeartRateDiagnostics(label) as Void {
+        var now = System.getTimer();
+        var sensorAgeMs = getLatestSensorHeartRateAgeMs(now);
+        var diagnosticAverage = null;
+
+        if (_hrDiagnosticCount > 0) {
+            diagnosticAverage = _hrDiagnosticSum / _hrDiagnosticCount;
+        }
+
+        System.println("GarminWOD HR diag " + label +
+            " callbacks=" + _hrSensorCallbackCount +
+            " valid=" + _hrValidSensorSampleCount +
+            " missing=" + _hrMissingSensorSampleCount +
+            " invalid=" + _hrInvalidSensorSampleCount +
+            " sensor=" + getLogValue(_latestSensorHeartRate) +
+            " sensorAgeMs=" + getLogValue(sensorAgeMs) +
+            " callbackHr=" + getLogValue(_lastSensorCallbackHeartRate) +
+            " activity=" + getLogValue(_lastActivityInfoHeartRate) +
+            " selected=" + getLogValue(_lastSelectedHeartRate) +
+            " source=" + _lastSelectedHeartRateSource +
+            " recording=" + _activityRecorder.isRecordingSessionActive() +
+            " min=" + getLogValue(_hrDiagnosticMin) +
+            " max=" + getLogValue(_hrDiagnosticMax) +
+            " avg=" + getLogValue(diagnosticAverage));
     }
 
     function captureFinalSummaryMetrics() as Void {
@@ -1344,16 +1510,43 @@ class GarminWODView extends WatchUi.View {
     }
 
     function getCurrentHeartRate() {
-        if (_latestSensorHeartRate != null) {
+        var now = System.getTimer();
+        var sensorAgeMs = getLatestSensorHeartRateAgeMs(now);
+        var activityHeartRate = getActivityInfoHeartRate();
+
+        if (_latestSensorHeartRate != null && sensorAgeMs != null && sensorAgeMs <= 3000) {
+            _lastSelectedHeartRate = _latestSensorHeartRate;
+            _lastSelectedHeartRateSource = "sensor";
+            maybeLogHeartRateComparison(now, sensorAgeMs, activityHeartRate);
             return _latestSensorHeartRate;
         }
 
+        if (_latestSensorHeartRate != null && sensorAgeMs != null && sensorAgeMs > 3000) {
+            maybeLogStaleSensorHeartRate(now, sensorAgeMs, activityHeartRate);
+        }
+
+        if (activityHeartRate != null) {
+            _lastSelectedHeartRate = activityHeartRate;
+            _lastSelectedHeartRateSource = "activity";
+            maybeLogHeartRateComparison(now, sensorAgeMs, activityHeartRate);
+            return activityHeartRate;
+        }
+
+        _lastSelectedHeartRate = null;
+        _lastSelectedHeartRateSource = "none";
+        maybeLogHeartRateComparison(now, sensorAgeMs, activityHeartRate);
+        return null;
+    }
+
+    function getActivityInfoHeartRate() {
         var info = Activity.getActivityInfo();
+        _lastActivityInfoHeartRate = null;
 
         if (info has :currentHeartRate && info.currentHeartRate != null) {
             var heartRate = info.currentHeartRate;
 
             if (isValidHeartRate(heartRate)) {
+                _lastActivityInfoHeartRate = heartRate;
                 return heartRate;
             }
         }
@@ -1442,7 +1635,14 @@ class GarminWODView extends WatchUi.View {
             return;
         }
 
+        var now = System.getTimer();
+
+        if (_lastHeartRateStatsMs != null && now - _lastHeartRateStatsMs < 900) {
+            return;
+        }
+
         var heartRate = getCurrentHeartRate();
+        _lastHeartRateStatsMs = now;
 
         if (heartRate == null) {
             _heartRateMissingSeconds++;
@@ -1468,6 +1668,8 @@ class GarminWODView extends WatchUi.View {
         if (_maxHeartRate == null || heartRate > _maxHeartRate) {
             _maxHeartRate = heartRate;
         }
+
+        maybeLogHeartRateDiagnostics(now);
     }
 
     function drawWorkoutSummary(dc, width, height) as Void {
