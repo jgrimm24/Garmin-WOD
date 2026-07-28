@@ -24,6 +24,14 @@ function movementLines(text) {
   if (words.length <= 1) return [formatted];
   if (words.length === 2) return [words[0], words[1]];
 
+  if (isNumericDisplayWord(words[0])) {
+    if (isUnitDisplayWord(words[1])) {
+      return [joinWords(words, 0, 2), joinWords(words, 2, words.length)];
+    }
+
+    return [words[0], joinWords(words, 1, words.length)];
+  }
+
   let bestIndex = 1;
   let bestBalance = formatted.length;
 
@@ -39,6 +47,24 @@ function movementLines(text) {
   }
 
   return [joinWords(words, 0, bestIndex), joinWords(words, bestIndex, words.length)];
+}
+
+function isNumericDisplayWord(word) {
+  return /^[0-9./-]+M?$/.test(word) && /[0-9]/.test(word);
+}
+
+function isUnitDisplayWord(word) {
+  return ["CAL", "LB", "LBS", "M", "SEC"].includes(word);
+}
+
+function previewStationText({ name, reps, calories, meters }) {
+  let preview = name;
+
+  if (meters != null) preview = `${meters}m ${preview}`;
+  if (calories != null) preview = `${calories} cal ${preview}`;
+  if (reps != null) preview = `${reps} ${preview}`;
+
+  return preview;
 }
 
 function usefulDetail({ stationText, reps, calories, meters, weight, seconds }) {
@@ -75,7 +101,8 @@ function nextFont() {
 
 function run() {
   assert.deepStrictEqual(movementLines("20 Cal Row"), ["20 CAL", "ROW"]);
-  assert.deepStrictEqual(movementLines("30 Wall Balls"), ["30 WALL", "BALLS"]);
+  assert.deepStrictEqual(movementLines("30 Wall Balls"), ["30", "WALL BALLS"]);
+  assert.deepStrictEqual(movementLines("95 lb Thruster"), ["95 LB", "THRUSTER"]);
   assert.deepStrictEqual(movementLines("Toes To Bar"), ["TOES", "TO BAR"]);
   assert.strictEqual(
     movementLines("Double Dumbbell Hang Power Clean").join(" "),
@@ -109,6 +136,11 @@ function run() {
 
   assert.strictEqual(currentFont(movementLines("20 Cal Row")), "medium");
   assert.strictEqual(nextFont(movementLines("20 Cal Row")), "xtiny");
+  assert.strictEqual(
+    previewStationText({ name: "Thruster", reps: 15, weight: 95 }),
+    "15 Thruster",
+    "next preview should omit programmed weight"
+  );
 
   assert.strictEqual(sourceVisible({ running: true, elapsedBeforePause: 0 }), false);
   assert.strictEqual(controlHint({ running: true, elapsedBeforePause: 0 }), null);

@@ -668,14 +668,15 @@ class GarminWODView extends WatchUi.View {
         var nextLines = getMovementDisplayLines(nextText);
         var currentDetail = getCurrentMovementDetail(stationIndex);
         var topY = height * 7 / 100;
-        var currentLabelY = height * 18 / 100;
-        var currentLineOneY = height * 34 / 100;
-        var currentLineTwoY = height * 50 / 100;
-        var currentDetailY = height * 63 / 100;
-        var nextLabelY = height * 76 / 100;
-        var nextLineOneY = height * 84 / 100;
-        var nextLineTwoY = height * 89 / 100;
-        var bottomY = height * 93 / 100;
+        var currentLabelY = height * 16 / 100;
+        var currentLineOneY = height * 35 / 100;
+        var currentLineTwoY = height * 53 / 100;
+        var currentDetailY = height * 66 / 100;
+        var dividerY = height * 76 / 100;
+        var nextLabelY = height * 80 / 100;
+        var nextLineOneY = height * 86 / 100;
+        var nextLineTwoY = height * 90 / 100;
+        var bottomY = height * 96 / 100;
         var centerX = width / 2;
 
         if (!_isRunning && _elapsedBeforePause == 0) {
@@ -704,7 +705,7 @@ class GarminWODView extends WatchUi.View {
         }
 
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawLine(width * 18 / 100, height * 72 / 100, width * 82 / 100, height * 72 / 100);
+        dc.drawLine(width * 18 / 100, dividerY, width * 82 / 100, dividerY);
 
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawText(centerX, nextLabelY, Graphics.FONT_XTINY, "NEXT", Graphics.TEXT_JUSTIFY_CENTER);
@@ -783,13 +784,38 @@ class GarminWODView extends WatchUi.View {
     function getNextMovementText(stationIndex) {
         if (stationIndex >= _workout.getStationCount() - 1) {
             if (shouldContinueManualRoundFlow()) {
-                return _workout.getStationText(0);
+                return getPreviewStationText(0);
             }
 
             return "Last station";
         }
 
-        return _workout.getStationText(stationIndex + 1);
+        return getPreviewStationText(stationIndex + 1);
+    }
+
+    function getPreviewStationText(stationIndex) {
+        if (!_workout.hasValidStationIndex(stationIndex)) {
+            return "NO WORKOUT";
+        }
+
+        var name = _workout.stationNames[stationIndex];
+        var reps = _workout.stationReps[stationIndex];
+        var calories = _workout.stationCalories[stationIndex];
+        var meters = _workout.stationMeters[stationIndex];
+
+        if (meters != null) {
+            name = "" + meters + "m " + name;
+        }
+
+        if (calories != null) {
+            name = calories + " cal " + name;
+        }
+
+        if (reps != null) {
+            name = "" + reps + " " + name;
+        }
+
+        return name;
     }
 
     function getMovementDisplayLines(text) {
@@ -804,6 +830,14 @@ class GarminWODView extends WatchUi.View {
 
         if (words.size() == 2) {
             return [words[0], words[1]];
+        }
+
+        if (isNumericDisplayWord(words[0])) {
+            if (isUnitDisplayWord(words[1])) {
+                return [joinWords(words, 0, 2), joinWords(words, 2, words.size())];
+            }
+
+            return [words[0], joinWords(words, 1, words.size())];
         }
 
         var totalLength = formatted.length();
@@ -829,6 +863,42 @@ class GarminWODView extends WatchUi.View {
         secondLine = joinWords(words, bestIndex, words.size());
 
         return [firstLine, secondLine];
+    }
+
+    function isNumericDisplayWord(word) {
+        if (word == null || word.length() == 0) {
+            return false;
+        }
+
+        var hasDigit = false;
+
+        for (var i = 0; i < word.length(); i++) {
+            var character = word.substring(i, i + 1);
+            var isAllowed = false;
+
+            if (character.compareTo("0") >= 0 && character.compareTo("9") <= 0) {
+                hasDigit = true;
+                isAllowed = true;
+            }
+
+            if (character.equals("/") || character.equals("-") || character.equals(".")) {
+                isAllowed = true;
+            }
+
+            if (character.equals("M")) {
+                isAllowed = true;
+            }
+
+            if (!isAllowed) {
+                return false;
+            }
+        }
+
+        return hasDigit;
+    }
+
+    function isUnitDisplayWord(word) {
+        return word != null && (word.equals("CAL") || word.equals("LB") || word.equals("LBS") || word.equals("M") || word.equals("SEC"));
     }
 
     function getMovementDisplayWords(text) {
@@ -1882,7 +1952,7 @@ class GarminWODView extends WatchUi.View {
         var currentDistance = getCurrentDistanceMeters();
 
         if (currentDistance == null || _stationDistanceStart == null) {
-            return "GPS distance --/" + targetMeters + "m";
+            return null;
         }
 
         var stationMeters = (currentDistance - _stationDistanceStart).toNumber();
@@ -1895,7 +1965,7 @@ class GarminWODView extends WatchUi.View {
             stationMeters = targetMeters;
         }
 
-        return stationMeters + "/" + targetMeters + "m";
+        return stationMeters + " / " + targetMeters + " M";
     }
 
     function getCurrentDistanceMeters() {
