@@ -42,7 +42,7 @@ function movementLines(text) {
 }
 
 function usefulDetail({ stationText, reps, calories, meters, weight, seconds }) {
-  const lower = stationText.toLowerCase();
+  const lower = stationText.toLowerCase().replaceAll("@", " ");
   const details = [];
 
   if (reps != null && !lower.includes(String(reps))) details.push(`${reps} REPS`);
@@ -64,6 +64,15 @@ function sourceVisible({ running, elapsedBeforePause }) {
   return !running && elapsedBeforePause === 0;
 }
 
+function currentFont(lines) {
+  const longest = Math.max(...lines.map((line) => line.length));
+  return longest <= 12 ? "medium" : "small";
+}
+
+function nextFont() {
+  return "xtiny";
+}
+
 function run() {
   assert.deepStrictEqual(movementLines("20 Cal Row"), ["20 CAL", "ROW"]);
   assert.deepStrictEqual(movementLines("30 Wall Balls"), ["30 WALL", "BALLS"]);
@@ -81,10 +90,25 @@ function run() {
   );
 
   assert.strictEqual(
+    usefulDetail({ stationText: "30 Wall Balls", reps: 30 }),
+    null,
+    "redundant rep detail should be suppressed"
+  );
+
+  assert.strictEqual(
     usefulDetail({ stationText: "Front Squats", reps: 8, weight: 135 }),
     "8 REPS / 135 LB",
     "useful rep and weight detail should be retained"
   );
+
+  assert.strictEqual(
+    usefulDetail({ stationText: "8 Front Squats @135", reps: 8, weight: 135 }),
+    null,
+    "weight already present in the movement title should be suppressed"
+  );
+
+  assert.strictEqual(currentFont(movementLines("20 Cal Row")), "medium");
+  assert.strictEqual(nextFont(movementLines("20 Cal Row")), "xtiny");
 
   assert.strictEqual(sourceVisible({ running: true, elapsedBeforePause: 0 }), false);
   assert.strictEqual(controlHint({ running: true, elapsedBeforePause: 0 }), null);

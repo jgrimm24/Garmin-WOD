@@ -667,16 +667,14 @@ class GarminWODView extends WatchUi.View {
         var nextText = getNextMovementText(stationIndex);
         var nextLines = getMovementDisplayLines(nextText);
         var currentDetail = getCurrentMovementDetail(stationIndex);
-        var nextDetail = getNextMovementDetail(stationIndex);
         var topY = height * 7 / 100;
         var currentLabelY = height * 18 / 100;
-        var currentLineOneY = height * 31 / 100;
-        var currentLineTwoY = height * 43 / 100;
-        var currentDetailY = height * 53 / 100;
-        var nextLabelY = height * 62 / 100;
-        var nextLineOneY = height * 70 / 100;
-        var nextLineTwoY = height * 77 / 100;
-        var nextDetailY = height * 84 / 100;
+        var currentLineOneY = height * 34 / 100;
+        var currentLineTwoY = height * 50 / 100;
+        var currentDetailY = height * 63 / 100;
+        var nextLabelY = height * 76 / 100;
+        var nextLineOneY = height * 84 / 100;
+        var nextLineTwoY = height * 89 / 100;
         var bottomY = height * 93 / 100;
         var centerX = width / 2;
 
@@ -706,18 +704,13 @@ class GarminWODView extends WatchUi.View {
         }
 
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawLine(width * 18 / 100, height * 58 / 100, width * 82 / 100, height * 58 / 100);
+        dc.drawLine(width * 18 / 100, height * 72 / 100, width * 82 / 100, height * 72 / 100);
 
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawText(centerX, nextLabelY, Graphics.FONT_XTINY, "NEXT", Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         drawMovementLines(dc, centerX, nextLineOneY, nextLineTwoY, nextLines, getNextMovementFont(nextLines), Graphics.COLOR_WHITE);
-
-        if (nextDetail != null) {
-            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(centerX, nextDetailY, Graphics.FONT_XTINY, nextDetail, Graphics.TEXT_JUSTIFY_CENTER);
-        }
 
         dc.setColor(getHeartRateColor(), Graphics.COLOR_TRANSPARENT);
         dc.drawText(width * 28 / 100, bottomY, Graphics.FONT_XTINY, getCompactHeartRateText(), Graphics.TEXT_JUSTIFY_CENTER);
@@ -923,12 +916,6 @@ class GarminWODView extends WatchUi.View {
     }
 
     function getNextMovementFont(lines) {
-        var longest = getLongestLineLength(lines);
-
-        if (longest <= 16) {
-            return Graphics.FONT_SMALL;
-        }
-
         return Graphics.FONT_XTINY;
     }
 
@@ -954,18 +941,9 @@ class GarminWODView extends WatchUi.View {
         return getUsefulStationDetail(stationIndex);
     }
 
-    function getNextMovementDetail(stationIndex) {
-        if (stationIndex >= _workout.getStationCount() - 1 && !shouldContinueManualRoundFlow()) {
-            return null;
-        }
-
-        var nextIndex = stationIndex >= _workout.getStationCount() - 1 ? 0 : stationIndex + 1;
-        return getUsefulStationDetail(nextIndex);
-    }
-
     function getUsefulStationDetail(stationIndex) {
         var details = [];
-        var stationText = _workout.getStationText(stationIndex).toLower();
+        var stationText = normalizeDetailComparisonText(_workout.getStationText(stationIndex));
         var reps = _workout.stationReps[stationIndex];
         var calories = _workout.stationCalories[stationIndex];
         var meters = _workout.stationMeters[stationIndex];
@@ -1002,6 +980,23 @@ class GarminWODView extends WatchUi.View {
     function containsText(text, needle) {
         var index = text.find(needle);
         return index != null && index >= 0;
+    }
+
+    function normalizeDetailComparisonText(text) {
+        var source = ("" + text).toLower();
+        var normalized = "";
+
+        for (var i = 0; i < source.length(); i++) {
+            var character = source.substring(i, i + 1);
+
+            if (character.equals("@")) {
+                normalized += " ";
+            } else {
+                normalized += character;
+            }
+        }
+
+        return normalized;
     }
 
     function joinWordsWithSeparator(words, separator) {
