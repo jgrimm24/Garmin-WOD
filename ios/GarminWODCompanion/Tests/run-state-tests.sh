@@ -13,6 +13,7 @@ swiftc \
   -o "$TEST_BINARY" \
   "$ROOT_DIR/ios/GarminWODCompanion/GarminWODCompanion/Models/WorkoutModels.swift" \
   "$ROOT_DIR/ios/GarminWODCompanion/GarminWODCompanion/Models/HeartRateZone.swift" \
+  "$ROOT_DIR/ios/GarminWODCompanion/GarminWODCompanion/Utilities/MovementDisplayFormatter.swift" \
   "$ROOT_DIR/ios/GarminWODCompanion/GarminWODCompanion/Managers/WorkoutContractLoader.swift" \
   "$ROOT_DIR/ios/GarminWODCompanion/GarminWODCompanion/Managers/WorkoutManager.swift" \
   "$ROOT_DIR/ios/GarminWODCompanion/GarminWODCompanion/Managers/TimerManager.swift" \

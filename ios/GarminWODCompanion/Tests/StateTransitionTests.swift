@@ -287,6 +287,15 @@ expect(modeStateViewModel.timerManager.elapsedSeconds == modeStateElapsed, "swit
 expect(modeStateViewModel.workoutManager.currentRound == modeStateRound, "switching display mode should not change round")
 expect(modeStateViewModel.workoutManager.currentStationIndex == modeStateStation, "switching display mode should not change station")
 
+print("[TEST] movement display formatter")
+expect(MovementDisplayFormatter.heroTitle(for: "20 Cal Row") == "20 CAL\nROW", "cal row should split after quantity")
+expect(MovementDisplayFormatter.heroTitle(for: "30 Wall Balls") == "30 WALL\nBALLS", "wall balls should split into balanced lines")
+expect(MovementDisplayFormatter.heroTitle(for: "95 lb Thruster") == "95 LB\nTHRUSTER", "weighted movement should keep weight together")
+expect(MovementDisplayFormatter.heroTitle(for: "Toes To Bar") == "TOES\nTO BAR", "toes to bar should split into readable phrase")
+expect(MovementDisplayFormatter.heroTitle(for: "Double Dumbbell Hang Power Clean") == "DOUBLE DUMBBELL\nHANG POWER CLEAN", "long movement should balance across two lines")
+expect(MovementDisplayFormatter.heroTitle(for: nil) == "NONE", "nil movement should render placeholder")
+expect(MovementDisplayFormatter.heroTitle(for: "   ") == "NONE", "blank movement should render placeholder")
+
 print("[TEST] workout summary snapshot")
 let summaryHeartRateManager = MockHeartRateManager()
 summaryHeartRateManager.isDemoModeEnabled = false

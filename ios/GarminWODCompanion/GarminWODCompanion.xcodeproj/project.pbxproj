@@ -20,6 +20,7 @@
 		0A0000112D00000000000001 /* roney-sample.json in Resources */ = {isa = PBXBuildFile; fileRef = 0A0001112D00000000000001 /* roney-sample.json */; };
 		0A0000122D00000000000001 /* DebugControlHarnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001132D00000000000001 /* DebugControlHarnessView.swift */; };
 		0A0000132D00000000000001 /* BluetoothHeartRateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001142D00000000000001 /* BluetoothHeartRateManager.swift */; };
+		0A0000142D00000000000001 /* MovementDisplayFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0001152D00000000000001 /* MovementDisplayFormatter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +39,7 @@
 		0A0001122D00000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		0A0001132D00000000000001 /* DebugControlHarnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugControlHarnessView.swift; sourceTree = "<group>"; };
 		0A0001142D00000000000001 /* BluetoothHeartRateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothHeartRateManager.swift; sourceTree = "<group>"; };
+		0A0001152D00000000000001 /* MovementDisplayFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovementDisplayFormatter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,6 +69,7 @@
 				0A0000612D00000000000001 /* Managers */,
 				0A0000622D00000000000001 /* ViewModels */,
 				0A0000632D00000000000001 /* Views */,
+				0A0000662D00000000000001 /* Utilities */,
 				0A0000642D00000000000001 /* Resources */,
 				0A0001102D00000000000001 /* Assets.xcassets */,
 				0A0001122D00000000000001 /* Info.plist */,
@@ -134,6 +137,14 @@
 				0A0001112D00000000000001 /* roney-sample.json */,
 			);
 			path = SampleWorkouts;
+			sourceTree = "<group>";
+		};
+		0A0000662D00000000000001 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				0A0001152D00000000000001 /* MovementDisplayFormatter.swift */,
+			);
+			path = Utilities;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -217,6 +228,7 @@
 				0A0000082D00000000000001 /* DisplayViewModel.swift in Sources */,
 				0A0000092D00000000000001 /* GymDisplayView.swift in Sources */,
 				0A0000122D00000000000001 /* DebugControlHarnessView.swift in Sources */,
+				0A0000142D00000000000001 /* MovementDisplayFormatter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

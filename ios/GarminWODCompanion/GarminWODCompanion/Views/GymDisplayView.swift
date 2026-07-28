@@ -923,7 +923,7 @@ private struct WODMovementBlock: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
-            Text((station?.displayName ?? "None").uppercased())
+            Text(MovementDisplayFormatter.heroTitle(for: station?.displayName))
                 .font(.system(size: titleSize, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(maxTitleLines)
