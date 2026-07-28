@@ -54,18 +54,20 @@ function renderWorkoutClass(workout) {
     var stationCalories;
     var stationMeters;
     var stationWeights;
+    var _hasWorkout;
 
     function initialize() {
-        title = ${toMonkeyCValue(workout.title)};
-        workoutType = ${toMonkeyCValue(workout.type)};
-        durationMinutes = ${toMonkeyCValue(workout.durationMinutes)};
-        rounds = ${toMonkeyCValue(workout.rounds)};
-        stationNames = ${toMonkeyCArray(stations.map((station) => station.name))};
-        stationReps = ${toMonkeyCArray(stations.map((station) => station.reps))};
-        stationSeconds = ${toMonkeyCArray(stations.map((station) => station.workSeconds))};
-        stationCalories = ${toMonkeyCArray(stations.map((station) => station.calories))};
-        stationMeters = ${toMonkeyCArray(stations.map((station) => station.meters))};
-        stationWeights = ${toMonkeyCArray(stations.map((station) => station.weightLb))};
+        title = "NO WORKOUT LOADED";
+        workoutType = "Unknown";
+        durationMinutes = null;
+        rounds = null;
+        stationNames = [];
+        stationReps = [];
+        stationSeconds = [];
+        stationCalories = [];
+        stationMeters = [];
+        stationWeights = [];
+        _hasWorkout = false;
     }
 
     function loadFromContract(data) {
@@ -79,31 +81,43 @@ function renderWorkoutClass(workout) {
             return false;
         }
 
-        title = getContractString(data, "title", title);
-        workoutType = getContractString(data, "type", workoutType);
-        durationMinutes = getContractValue(data, "durationMinutes", durationMinutes);
-        rounds = getContractValue(data, "rounds", rounds);
-        stationNames = [];
-        stationReps = [];
-        stationSeconds = [];
-        stationCalories = [];
-        stationMeters = [];
-        stationWeights = [];
+        var parsedNames = [];
+        var parsedReps = [];
+        var parsedSeconds = [];
+        var parsedCalories = [];
+        var parsedMeters = [];
+        var parsedWeights = [];
 
         for (var i = 0; i < stations.size(); i++) {
             var station = stations[i];
 
             if (station != null) {
-                stationNames.add(getContractString(station, "name", "Station"));
-                stationReps.add(getContractValue(station, "reps", null));
-                stationSeconds.add(getContractValue(station, "workSeconds", null));
-                stationCalories.add(getContractValue(station, "calories", null));
-                stationMeters.add(getContractValue(station, "meters", null));
-                stationWeights.add(getContractValue(station, "weightLb", getContractValue(station, "maleWeightLb", null)));
+                parsedNames.add(getContractString(station, "name", "Station"));
+                parsedReps.add(getContractValue(station, "reps", null));
+                parsedSeconds.add(getContractValue(station, "workSeconds", null));
+                parsedCalories.add(getContractValue(station, "calories", null));
+                parsedMeters.add(getContractValue(station, "meters", null));
+                parsedWeights.add(getContractValue(station, "weightLb", getContractValue(station, "maleWeightLb", null)));
             }
         }
 
-        return stationNames.size() > 0;
+        if (parsedNames.size() == 0) {
+            return false;
+        }
+
+        title = getContractString(data, "title", "Workout");
+        workoutType = getContractString(data, "type", "Unknown");
+        durationMinutes = getContractValue(data, "durationMinutes", null);
+        rounds = getContractValue(data, "rounds", null);
+        stationNames = parsedNames;
+        stationReps = parsedReps;
+        stationSeconds = parsedSeconds;
+        stationCalories = parsedCalories;
+        stationMeters = parsedMeters;
+        stationWeights = parsedWeights;
+        _hasWorkout = true;
+
+        return true;
     }
 
     function getContractValue(data, key, fallback) {
@@ -130,8 +144,12 @@ function renderWorkoutClass(workout) {
         return stationNames.size();
     }
 
+    function hasWorkout() {
+        return _hasWorkout && stationNames != null && stationNames.size() > 0;
+    }
+
     function getTotalSeconds() {
-        if (durationMinutes == null) {
+        if (!hasWorkout() || durationMinutes == null) {
             return null;
         }
 
@@ -139,15 +157,15 @@ function renderWorkoutClass(workout) {
     }
 
     function isForTime() {
-        return workoutType.equals("For Time") || workoutType.equals("FOR TIME");
+        return hasWorkout() && (workoutType.equals("For Time") || workoutType.equals("FOR TIME"));
     }
 
     function isEmom() {
-        return workoutType.equals("EMOM") || workoutType.equals("Emom");
+        return hasWorkout() && (workoutType.equals("EMOM") || workoutType.equals("Emom"));
     }
 
     function isAmrap() {
-        return workoutType.equals("AMRAP") || workoutType.equals("Amrap");
+        return hasWorkout() && (workoutType.equals("AMRAP") || workoutType.equals("Amrap"));
     }
 
     function isTimedPriority() {
@@ -155,10 +173,14 @@ function renderWorkoutClass(workout) {
     }
 
     function isManualStationWorkout() {
-        return !isEmom();
+        return hasWorkout() && !isEmom();
     }
 
     function getHeader(roundNumber) {
+        if (!hasWorkout()) {
+            return "NO WORKOUT";
+        }
+
         if (isForTime()) {
             if (rounds == null) {
                 return "FOR TIME";
@@ -168,7 +190,7 @@ function renderWorkoutClass(workout) {
         }
 
         if (isAmrap()) {
-            return "AMRAP " + durationMinutes;
+            return durationMinutes == null ? "AMRAP" : "AMRAP " + durationMinutes;
         }
 
         if (isManualStationWorkout() && rounds != null) {
@@ -183,6 +205,10 @@ function renderWorkoutClass(workout) {
     }
 
     function getStationText(index) {
+        if (!hasValidStationIndex(index)) {
+            return "NO WORKOUT";
+        }
+
         var name = stationNames[index];
         var reps = stationReps[index];
         var calories = stationCalories[index];
@@ -209,15 +235,31 @@ function renderWorkoutClass(workout) {
     }
 
     function getStationWorkSeconds(index) {
+        if (!hasValidStationIndex(index)) {
+            return null;
+        }
+
         return stationSeconds[index];
     }
 
     function getStationMeters(index) {
+        if (!hasValidStationIndex(index)) {
+            return null;
+        }
+
         return stationMeters[index];
     }
 
     function getStationCalories(index) {
+        if (!hasValidStationIndex(index)) {
+            return null;
+        }
+
         return stationCalories[index];
+    }
+
+    function hasValidStationIndex(index) {
+        return hasWorkout() && index >= 0 && index < stationNames.size();
     }
 }
 `;

@@ -9,72 +9,20 @@ class GarminWODWorkout {
     var stationCalories;
     var stationMeters;
     var stationWeights;
+    var _hasWorkout;
 
     function initialize() {
-        title = "FOR TIME";
-        workoutType = "For Time";
+        title = "NO WORKOUT LOADED";
+        workoutType = "Unknown";
         durationMinutes = null;
         rounds = null;
-        stationNames = [
-            "Row",
-            "Wall Balls",
-            "Toes-to-bar",
-            "Box Jumps",
-            "Sumo DL High Pulls",
-            "Burpees",
-            "Shoulder-to-Overhead",
-            "Row"
-        ];
-        stationReps = [
-            null,
-            30,
-            20,
-            30,
-            20,
-            30,
-            20,
-            null
-        ];
-        stationSeconds = [
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-        ];
-        stationCalories = [
-            20,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            20
-        ];
-        stationMeters = [
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-        ];
-        stationWeights = [
-            null,
-            20,
-            null,
-            null,
-            95,
-            null,
-            95,
-            null
-        ];
+        stationNames = [];
+        stationReps = [];
+        stationSeconds = [];
+        stationCalories = [];
+        stationMeters = [];
+        stationWeights = [];
+        _hasWorkout = false;
     }
 
     function loadFromContract(data) {
@@ -88,31 +36,43 @@ class GarminWODWorkout {
             return false;
         }
 
-        title = getContractString(data, "title", title);
-        workoutType = getContractString(data, "type", workoutType);
-        durationMinutes = getContractValue(data, "durationMinutes", durationMinutes);
-        rounds = getContractValue(data, "rounds", rounds);
-        stationNames = [];
-        stationReps = [];
-        stationSeconds = [];
-        stationCalories = [];
-        stationMeters = [];
-        stationWeights = [];
+        var parsedNames = [];
+        var parsedReps = [];
+        var parsedSeconds = [];
+        var parsedCalories = [];
+        var parsedMeters = [];
+        var parsedWeights = [];
 
         for (var i = 0; i < stations.size(); i++) {
             var station = stations[i];
 
             if (station != null) {
-                stationNames.add(getContractString(station, "name", "Station"));
-                stationReps.add(getContractValue(station, "reps", null));
-                stationSeconds.add(getContractValue(station, "workSeconds", null));
-                stationCalories.add(getContractValue(station, "calories", null));
-                stationMeters.add(getContractValue(station, "meters", null));
-                stationWeights.add(getContractValue(station, "weightLb", getContractValue(station, "maleWeightLb", null)));
+                parsedNames.add(getContractString(station, "name", "Station"));
+                parsedReps.add(getContractValue(station, "reps", null));
+                parsedSeconds.add(getContractValue(station, "workSeconds", null));
+                parsedCalories.add(getContractValue(station, "calories", null));
+                parsedMeters.add(getContractValue(station, "meters", null));
+                parsedWeights.add(getContractValue(station, "weightLb", getContractValue(station, "maleWeightLb", null)));
             }
         }
 
-        return stationNames.size() > 0;
+        if (parsedNames.size() == 0) {
+            return false;
+        }
+
+        title = getContractString(data, "title", "Workout");
+        workoutType = getContractString(data, "type", "Unknown");
+        durationMinutes = getContractValue(data, "durationMinutes", null);
+        rounds = getContractValue(data, "rounds", null);
+        stationNames = parsedNames;
+        stationReps = parsedReps;
+        stationSeconds = parsedSeconds;
+        stationCalories = parsedCalories;
+        stationMeters = parsedMeters;
+        stationWeights = parsedWeights;
+        _hasWorkout = true;
+
+        return true;
     }
 
     function getContractValue(data, key, fallback) {
@@ -139,8 +99,12 @@ class GarminWODWorkout {
         return stationNames.size();
     }
 
+    function hasWorkout() {
+        return _hasWorkout && stationNames != null && stationNames.size() > 0;
+    }
+
     function getTotalSeconds() {
-        if (durationMinutes == null) {
+        if (!hasWorkout() || durationMinutes == null) {
             return null;
         }
 
@@ -148,15 +112,15 @@ class GarminWODWorkout {
     }
 
     function isForTime() {
-        return workoutType.equals("For Time") || workoutType.equals("FOR TIME");
+        return hasWorkout() && (workoutType.equals("For Time") || workoutType.equals("FOR TIME"));
     }
 
     function isEmom() {
-        return workoutType.equals("EMOM") || workoutType.equals("Emom");
+        return hasWorkout() && (workoutType.equals("EMOM") || workoutType.equals("Emom"));
     }
 
     function isAmrap() {
-        return workoutType.equals("AMRAP") || workoutType.equals("Amrap");
+        return hasWorkout() && (workoutType.equals("AMRAP") || workoutType.equals("Amrap"));
     }
 
     function isTimedPriority() {
@@ -164,10 +128,14 @@ class GarminWODWorkout {
     }
 
     function isManualStationWorkout() {
-        return !isEmom();
+        return hasWorkout() && !isEmom();
     }
 
     function getHeader(roundNumber) {
+        if (!hasWorkout()) {
+            return "NO WORKOUT";
+        }
+
         if (isForTime()) {
             if (rounds == null) {
                 return "FOR TIME";
@@ -177,7 +145,7 @@ class GarminWODWorkout {
         }
 
         if (isAmrap()) {
-            return "AMRAP " + durationMinutes;
+            return durationMinutes == null ? "AMRAP" : "AMRAP " + durationMinutes;
         }
 
         if (isManualStationWorkout() && rounds != null) {
@@ -192,6 +160,10 @@ class GarminWODWorkout {
     }
 
     function getStationText(index) {
+        if (!hasValidStationIndex(index)) {
+            return "NO WORKOUT";
+        }
+
         var name = stationNames[index];
         var reps = stationReps[index];
         var calories = stationCalories[index];
@@ -218,14 +190,30 @@ class GarminWODWorkout {
     }
 
     function getStationWorkSeconds(index) {
+        if (!hasValidStationIndex(index)) {
+            return null;
+        }
+
         return stationSeconds[index];
     }
 
     function getStationMeters(index) {
+        if (!hasValidStationIndex(index)) {
+            return null;
+        }
+
         return stationMeters[index];
     }
 
     function getStationCalories(index) {
+        if (!hasValidStationIndex(index)) {
+            return null;
+        }
+
         return stationCalories[index];
+    }
+
+    function hasValidStationIndex(index) {
+        return hasWorkout() && index >= 0 && index < stationNames.size();
     }
 }

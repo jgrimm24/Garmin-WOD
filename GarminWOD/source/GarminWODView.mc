@@ -77,9 +77,9 @@ class GarminWODView extends WatchUi.View {
         _hasLoadedInitialWorkout = false;
         _isTimerActive = false;
         _isLocationEventsActive = false;
-        _workoutSourceText = "FALLBACK";
-        _workoutSourceBeforeSync = "FALLBACK";
-        _currentWorkoutIdentity = "fallback";
+        _workoutSourceText = "LOADING";
+        _workoutSourceBeforeSync = "LOADING";
+        _currentWorkoutIdentity = null;
         _currentWorkoutVersion = null;
         _activityRecorder = new GarminWODActivityRecorder();
         _summarySaveStatus = "Not saved";
@@ -123,15 +123,13 @@ class GarminWODView extends WatchUi.View {
         var elapsed = getElapsedSeconds();
         var remaining = getRemainingSeconds(elapsed);
 
-        var stationIndex = getStationIndex(elapsed);
-        updateStationDistanceStart(stationIndex);
-        var roundNumber = getRoundNumber(elapsed);
-        var secondInStation = getSecondInStation(elapsed);
-        var stationRemaining = getStationRemaining(stationIndex, secondInStation);
-        var stationLabel = getStationLabel(stationIndex, secondInStation);
-
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
         dc.fillRectangle(0, 0, width, height);
+
+        if (!_workout.hasWorkout()) {
+            drawWorkoutUnavailableState(dc, width, height);
+            return;
+        }
 
         if (_isFinished) {
             drawWorkoutSummary(dc, width, height);
@@ -142,6 +140,13 @@ class GarminWODView extends WatchUi.View {
             drawExitConfirmation(dc, width, height);
             return;
         }
+
+        var stationIndex = getStationIndex(elapsed);
+        updateStationDistanceStart(stationIndex);
+        var roundNumber = getRoundNumber(elapsed);
+        var secondInStation = getSecondInStation(elapsed);
+        var stationRemaining = getStationRemaining(stationIndex, secondInStation);
+        var stationLabel = getStationLabel(stationIndex, secondInStation);
 
         var sourceY = height * 4 / 100;
         var headerY = height * 10 / 100;
@@ -201,6 +206,12 @@ class GarminWODView extends WatchUi.View {
             } else {
                 resetWorkout();
             }
+            return;
+        }
+
+        if (!_workout.hasWorkout()) {
+            fetchLatestWorkout();
+            WatchUi.requestUpdate();
             return;
         }
 
@@ -327,6 +338,10 @@ class GarminWODView extends WatchUi.View {
                 " header=" + _workout.getHeader(_manualRoundNumber));
         } else if (cachedWorkout != null) {
             System.println("GarminWOD cache load failed title=" + getWorkoutLogTitle(cachedWorkout));
+            _workoutSourceText = "NO WOD";
+        } else {
+            System.println("GarminWOD cache missing");
+            _workoutSourceText = "NO WOD";
         }
     }
 
@@ -372,8 +387,14 @@ class GarminWODView extends WatchUi.View {
                 if (_workoutSourceText.equals("SYNC...")) {
                     _workoutSourceText = _workoutSourceBeforeSync;
                 }
+            } else if (!isValidWorkoutData(data)) {
+                System.println("GarminWOD web decode failed; existing workout preserved title=" + incomingTitle);
+                _workoutSourceText = _workout.hasWorkout() ? _workoutSourceBeforeSync + " WEB FAIL" : "NO WOD";
+            } else if (isIncomingWorkoutUnchanged(data)) {
+                System.println("GarminWOD web unchanged; current workout preserved identity=" + incomingIdentity);
+                _workoutSourceText = _workoutSourceBeforeSync;
             } else if (isIncomingWorkoutOlder(data)) {
-                _workoutSourceText = "WEB OLD";
+                _workoutSourceText = _workout.hasWorkout() ? _workoutSourceBeforeSync + " WEB OLD" : "NO WOD";
             } else {
                 loadSucceeded = loadWorkoutData(data);
 
@@ -386,10 +407,10 @@ class GarminWODView extends WatchUi.View {
 
         System.println("GarminWOD web loadSucceeded=" + loadSucceeded +
             " stored=" + storedWorkout +
-            " header=" + _workout.getHeader(_manualRoundNumber));
+            " header=" + (_workout.hasWorkout() ? _workout.getHeader(_manualRoundNumber) : "NO WORKOUT"));
 
         if (responseCode != 200 && _workoutSourceText.equals("SYNC...")) {
-            _workoutSourceText = "WEB FAIL";
+            _workoutSourceText = _workout.hasWorkout() ? _workoutSourceBeforeSync + " WEB FAIL" : "NO WOD";
         } else if (!loadSucceeded && _workoutSourceText.equals("SYNC...")) {
             _workoutSourceText = _workoutSourceBeforeSync;
         }
@@ -423,15 +444,50 @@ class GarminWODView extends WatchUi.View {
         return false;
     }
 
+    function isIncomingWorkoutUnchanged(data) {
+        if (!_workout.hasWorkout() || _currentWorkoutIdentity == null) {
+            return false;
+        }
+
+        return _currentWorkoutIdentity.equals(getWorkoutIdentity(data));
+    }
+
+    function isValidWorkoutData(data) {
+        var stations = getDictionaryValue(data, "stations");
+
+        if (!(stations instanceof Array) || stations.size() == 0) {
+            return false;
+        }
+
+        var candidate = new GarminWODWorkout();
+        return candidate.loadFromContract(data);
+    }
+
     function isIncomingWorkoutOlder(data) {
         var incomingVersion = getWorkoutVersion(data);
 
-        if (incomingVersion != null && _currentWorkoutVersion != null && incomingVersion < _currentWorkoutVersion) {
+        if (isVersionOlder(incomingVersion, _currentWorkoutVersion)) {
             System.println("GarminWOD web ignored older workout incomingVersion=" +
                 incomingVersion + " currentVersion=" + _currentWorkoutVersion +
                 " incomingIdentity=" + getWorkoutIdentity(data) +
                 " currentIdentity=" + _currentWorkoutIdentity);
             return true;
+        }
+
+        return false;
+    }
+
+    function isVersionOlder(incomingVersion, currentVersion) {
+        if (incomingVersion == null || currentVersion == null) {
+            return false;
+        }
+
+        if (incomingVersion instanceof Number && currentVersion instanceof Number) {
+            return incomingVersion < currentVersion;
+        }
+
+        if (incomingVersion instanceof String && currentVersion instanceof String) {
+            return incomingVersion.compareTo(currentVersion) < 0;
         }
 
         return false;
@@ -472,14 +528,23 @@ class GarminWODView extends WatchUi.View {
         if (updatedAt instanceof Number) {
             return updatedAt;
         }
+        if (updatedAt instanceof String) {
+            return updatedAt;
+        }
 
         var generatedAt = getDictionaryValue(data, "generatedAt");
         if (generatedAt instanceof Number) {
             return generatedAt;
         }
+        if (generatedAt instanceof String) {
+            return generatedAt;
+        }
 
         var timestamp = getDictionaryValue(data, "timestamp");
         if (timestamp instanceof Number) {
+            return timestamp;
+        }
+        if (timestamp instanceof String) {
             return timestamp;
         }
 
@@ -568,6 +633,10 @@ class GarminWODView extends WatchUi.View {
     }
 
     function nextStation() as Void {
+        if (!_workout.hasWorkout()) {
+            return;
+        }
+
         if (!_workout.isManualStationWorkout()) {
             return;
         }
@@ -589,6 +658,10 @@ class GarminWODView extends WatchUi.View {
     }
 
     function previousStation() as Void {
+        if (!_workout.hasWorkout()) {
+            return;
+        }
+
         if (!_workout.isManualStationWorkout()) {
             return;
         }
@@ -1078,6 +1151,31 @@ class GarminWODView extends WatchUi.View {
         }
 
         return "START start";
+    }
+
+    function drawWorkoutUnavailableState(dc, width, height) as Void {
+        var sourceY = height * 8 / 100;
+        var titleY = height * 32 / 100;
+        var detailY = height * 49 / 100;
+        var actionY = height * 72 / 100;
+
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(width / 2, sourceY, Graphics.FONT_XTINY, getWorkoutSourceText(), Graphics.TEXT_JUSTIFY_CENTER);
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+
+        if (_isFetchingWorkout || _workoutSourceText.equals("SYNC...") || _workoutSourceText.equals("LOADING")) {
+            dc.drawText(width / 2, titleY, Graphics.FONT_XTINY, "LOADING WORKOUT", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(width / 2, detailY, Graphics.FONT_XTINY, "Checking web WOD", Graphics.TEXT_JUSTIFY_CENTER);
+        } else {
+            dc.drawText(width / 2, titleY, Graphics.FONT_XTINY, "NO WORKOUT LOADED", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(width / 2, detailY, Graphics.FONT_XTINY, "Refresh to load WOD", Graphics.TEXT_JUSTIFY_CENTER);
+        }
+
+        dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(width / 2, actionY, Graphics.FONT_XTINY, "START refresh  BACK exit", Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     function shouldWaitForGpsBeforeStart() {

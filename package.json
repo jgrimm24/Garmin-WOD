@@ -4,6 +4,7 @@
     "sync:watch": "node scripts/generate-watch-workout.js",
     "build:watch": "npm run sync:watch && node scripts/build-watch.js",
     "test:parser": "node scripts/validate-importer-parser.js",
+    "test:watch-cache": "node tests/watch-startup-cache.test.js",
     "test:session": "node tests/workout-session.test.js"
   },
   "dependencies": {}
