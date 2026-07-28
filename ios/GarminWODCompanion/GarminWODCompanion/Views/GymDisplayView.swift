@@ -992,26 +992,45 @@ private struct WODMovementBlock: View {
 
     var body: some View {
         GeometryReader { geometry in
-            ViewThatFits(in: .vertical) {
-                movementTitle(size: titleSize)
-                movementTitle(size: titleSize * 0.86)
-                movementTitle(size: titleSize * 0.72)
-                movementTitle(size: titleSize * 0.58)
+            let title = MovementDisplayFormatter.heroTitle(for: station?.displayName)
+            let lines = titleLines(from: title)
+            let fittedSize = fittedTitleSize(for: lines, in: geometry.size)
+
+            VStack(spacing: max(fittedSize * 0.02, 0)) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    movementTitleLine(line, size: fittedSize)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                }
             }
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .center)
         }
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private func movementTitle(size: CGFloat) -> some View {
-        Text(MovementDisplayFormatter.heroTitle(for: station?.displayName))
+    private func movementTitleLine(_ line: String, size: CGFloat) -> some View {
+        Text(line)
             .font(.system(size: size, weight: .black, design: .rounded))
             .foregroundStyle(.white)
-            .lineLimit(maxTitleLines)
+            .lineLimit(1)
             .multilineTextAlignment(.center)
-            .minimumScaleFactor(isPrimary ? 0.36 : 0.42)
+            .minimumScaleFactor(0.2)
             .allowsTightening(true)
             .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func fittedTitleSize(for lines: [String], in size: CGSize) -> CGFloat {
+        let lineCount = CGFloat(max(min(lines.count, maxTitleLines), 1))
+        let longestLineCount = CGFloat(max(lines.map(\.count).max() ?? 1, 1))
+        let widthLimitedSize = size.width / max(longestLineCount * 0.64, 1)
+        let heightLimitedSize = size.height / max(lineCount * 1.14, 1)
+        let lowerBound: CGFloat = isPrimary ? 12 : 10
+
+        return max(min(titleSize, widthLimitedSize, heightLimitedSize), lowerBound)
+    }
+
+    private func titleLines(from title: String) -> [String] {
+        let lines = title.components(separatedBy: "\n").filter { !$0.isEmpty }
+        return Array(lines.prefix(maxTitleLines))
     }
 }
 
