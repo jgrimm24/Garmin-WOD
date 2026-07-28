@@ -64,6 +64,11 @@ class GarminWODView extends WatchUi.View {
     var _hrDiagnosticCount;
     var _lastHrDiagnosticLogMs;
     var _lastHrDisagreementLogMs;
+    var _workoutStartPressedMs;
+    var _heartRateMonitoringStartedMs;
+    var _firstValidSensorHeartRateMs;
+    var _firstValidHeartRateMs;
+    var _activityRecordingStartedMs;
     var _finalActiveCalories;
     var _finalNativeDistanceMeters;
     var _exitConfirmPending;
@@ -121,6 +126,11 @@ class GarminWODView extends WatchUi.View {
         _hrDiagnosticCount = 0;
         _lastHrDiagnosticLogMs = null;
         _lastHrDisagreementLogMs = null;
+        _workoutStartPressedMs = null;
+        _heartRateMonitoringStartedMs = null;
+        _firstValidSensorHeartRateMs = null;
+        _firstValidHeartRateMs = null;
+        _activityRecordingStartedMs = null;
         _finalActiveCalories = null;
         _finalNativeDistanceMeters = null;
         _exitConfirmPending = false;
@@ -261,6 +271,17 @@ class GarminWODView extends WatchUi.View {
             _isRunning = false;
             publishWorkoutSessionState("paused");
         } else {
+            if (_workoutStartPressedMs == null) {
+                _workoutStartPressedMs = System.getTimer();
+                System.println("GarminWOD startup startPressedMs=" + _workoutStartPressedMs +
+                    " source=" + getStartupWorkoutSourceText() +
+                    " header=" + _workout.getHeader(_manualRoundNumber));
+            } else {
+                System.println("GarminWOD startup resumePressedMs=" + System.getTimer() +
+                    " source=" + getStartupWorkoutSourceText() +
+                    " originalStartPressedMs=" + _workoutStartPressedMs);
+            }
+
             if (shouldWaitForGpsBeforeStart()) {
                 startLocationEvents();
                 WatchUi.requestUpdate();
@@ -279,6 +300,13 @@ class GarminWODView extends WatchUi.View {
             }
 
             _startMs = System.getTimer();
+            if (_activityRecordingStartedMs == null) {
+                _activityRecordingStartedMs = _startMs;
+            }
+            System.println("GarminWOD startup recordingStartedMs=" + _startMs +
+                " source=" + getStartupWorkoutSourceText() +
+                " startPressedMs=" + getLogValue(_workoutStartPressedMs) +
+                " hrMonitoringStartedMs=" + getLogValue(_heartRateMonitoringStartedMs));
             _lastLocation = null;
             _isRunning = true;
             startLocationEvents();
@@ -667,6 +695,14 @@ class GarminWODView extends WatchUi.View {
         return _workoutSourceText;
     }
 
+    function getStartupWorkoutSourceText() {
+        if (_workoutSourceText.equals("SYNC...")) {
+            return _workoutSourceBeforeSync;
+        }
+
+        return _workoutSourceText;
+    }
+
     function nextStation() as Void {
         if (!_workout.hasWorkout()) {
             return;
@@ -928,10 +964,16 @@ class GarminWODView extends WatchUi.View {
         try {
             var enabledSensors = Sensor.setEnabledSensors([Sensor.SENSOR_HEARTRATE]);
             Sensor.enableSensorEvents(method(:onSensor));
+            if (_heartRateMonitoringStartedMs == null) {
+                _heartRateMonitoringStartedMs = System.getTimer();
+            }
             System.println("GarminWOD: heart rate sensor enabled requested=" +
                 Sensor.SENSOR_HEARTRATE +
                 " enabled=" + getLogValue(enabledSensors) +
-                " onboardSupported=" + (Sensor has :SENSOR_ONBOARD_HEARTRATE));
+                " onboardSupported=" + (Sensor has :SENSOR_ONBOARD_HEARTRATE) +
+                " hrMonitoringStartedMs=" + _heartRateMonitoringStartedMs +
+                " source=" + getStartupWorkoutSourceText() +
+                " startPressedMs=" + getLogValue(_workoutStartPressedMs));
         } catch (e) {
             System.println("GarminWOD: heart rate sensor enable failed: " + getExceptionText(e));
         }
@@ -964,6 +1006,17 @@ class GarminWODView extends WatchUi.View {
             _latestSensorHeartRate = heartRate;
             _latestSensorHeartRateMs = _lastSensorCallbackMs;
             _hrValidSensorSampleCount++;
+
+            if (_firstValidSensorHeartRateMs == null) {
+                _firstValidSensorHeartRateMs = _lastSensorCallbackMs;
+                System.println("GarminWOD startup firstValidSensorHrMs=" + _firstValidSensorHeartRateMs +
+                    " hr=" + heartRate +
+                    " source=" + getStartupWorkoutSourceText() +
+                    " startPressedMs=" + getLogValue(_workoutStartPressedMs) +
+                    " hrMonitoringStartedMs=" + getLogValue(_heartRateMonitoringStartedMs) +
+                    " recordingStartedMs=" + getLogValue(_activityRecordingStartedMs));
+            }
+
             updateHeartRateDiagnosticStats(heartRate);
         } else {
             _hrInvalidSensorSampleCount++;
@@ -993,6 +1046,11 @@ class GarminWODView extends WatchUi.View {
         _hrDiagnosticCount = 0;
         _lastHrDiagnosticLogMs = null;
         _lastHrDisagreementLogMs = null;
+        _workoutStartPressedMs = null;
+        _heartRateMonitoringStartedMs = null;
+        _firstValidSensorHeartRateMs = null;
+        _firstValidHeartRateMs = null;
+        _activityRecordingStartedMs = null;
     }
 
     function getLatestSensorHeartRateAgeMs(now) {
@@ -1083,6 +1141,12 @@ class GarminWODView extends WatchUi.View {
             " activity=" + getLogValue(_lastActivityInfoHeartRate) +
             " selected=" + getLogValue(_lastSelectedHeartRate) +
             " source=" + _lastSelectedHeartRateSource +
+            " workoutSource=" + getStartupWorkoutSourceText() +
+            " startPressedMs=" + getLogValue(_workoutStartPressedMs) +
+            " hrMonitoringStartedMs=" + getLogValue(_heartRateMonitoringStartedMs) +
+            " firstValidSensorHrMs=" + getLogValue(_firstValidSensorHeartRateMs) +
+            " firstValidSelectedHrMs=" + getLogValue(_firstValidHeartRateMs) +
+            " recordingStartedMs=" + getLogValue(_activityRecordingStartedMs) +
             " recording=" + _activityRecorder.isRecordingSessionActive() +
             " min=" + getLogValue(_hrDiagnosticMin) +
             " max=" + getLogValue(_hrDiagnosticMax) +
@@ -1698,7 +1762,15 @@ class GarminWODView extends WatchUi.View {
 
         if (!_firstValidHeartRateLogged) {
             _firstValidHeartRateLogged = true;
-            System.println("GarminWOD: first valid HR " + heartRate);
+            _firstValidHeartRateMs = now;
+            System.println("GarminWOD: first valid HR " + heartRate +
+                " firstValidSelectedHrMs=" + _firstValidHeartRateMs +
+                " selectedSource=" + _lastSelectedHeartRateSource +
+                " workoutSource=" + getStartupWorkoutSourceText() +
+                " startPressedMs=" + getLogValue(_workoutStartPressedMs) +
+                " hrMonitoringStartedMs=" + getLogValue(_heartRateMonitoringStartedMs) +
+                " firstValidSensorHrMs=" + getLogValue(_firstValidSensorHeartRateMs) +
+                " recordingStartedMs=" + getLogValue(_activityRecordingStartedMs));
         }
 
         _heartRateSum += heartRate;
