@@ -1,0 +1,96 @@
+const assert = require("assert");
+
+function movementWords(text) {
+  return String(text)
+    .toUpperCase()
+    .split(/\s+|@/)
+    .filter(Boolean)
+    .map((word) => {
+      if (word === "CALORIE" || word === "CALORIES") return "CAL";
+      if (word === "DUMBBELL" || word === "DUMBBELLS") return "DB";
+      if (word === "KETTLEBELL" || word === "KETTLEBELLS") return "KB";
+      return word;
+    });
+}
+
+function joinWords(words, start, end) {
+  return words.slice(start, end).join(" ");
+}
+
+function movementLines(text) {
+  const words = movementWords(text);
+  const formatted = joinWords(words, 0, words.length);
+
+  if (words.length <= 1) return [formatted];
+  if (words.length === 2) return [words[0], words[1]];
+
+  let bestIndex = 1;
+  let bestBalance = formatted.length;
+
+  for (let i = 1; i < words.length; i += 1) {
+    const before = joinWords(words, 0, i);
+    const after = joinWords(words, i, words.length);
+    const balance = Math.abs(before.length - after.length);
+
+    if (balance < bestBalance) {
+      bestBalance = balance;
+      bestIndex = i;
+    }
+  }
+
+  return [joinWords(words, 0, bestIndex), joinWords(words, bestIndex, words.length)];
+}
+
+function usefulDetail({ stationText, reps, calories, meters, weight, seconds }) {
+  const lower = stationText.toLowerCase();
+  const details = [];
+
+  if (reps != null && !lower.includes(String(reps))) details.push(`${reps} REPS`);
+  if (calories != null && !lower.includes(String(calories))) details.push(`${calories} CAL`);
+  if (meters != null && !lower.includes(String(meters))) details.push(`${meters} M`);
+  if (weight != null && !lower.includes(String(weight))) details.push(`${weight} LB`);
+  if (seconds != null) details.push(`${seconds} SEC`);
+
+  return details.length === 0 ? null : details.join(" / ");
+}
+
+function controlHint({ running, elapsedBeforePause }) {
+  if (running) return null;
+  if (elapsedBeforePause > 0) return "START resume";
+  return "START start";
+}
+
+function sourceVisible({ running, elapsedBeforePause }) {
+  return !running && elapsedBeforePause === 0;
+}
+
+function run() {
+  assert.deepStrictEqual(movementLines("20 Cal Row"), ["20 CAL", "ROW"]);
+  assert.deepStrictEqual(movementLines("30 Wall Balls"), ["30 WALL", "BALLS"]);
+  assert.deepStrictEqual(movementLines("Toes To Bar"), ["TOES", "TO BAR"]);
+  assert.strictEqual(
+    movementLines("Double Dumbbell Hang Power Clean").join(" "),
+    "DOUBLE DB HANG POWER CLEAN",
+    "long movement should remain complete and understandable"
+  );
+
+  assert.strictEqual(
+    usefulDetail({ stationText: "20 cal Row", calories: 20 }),
+    null,
+    "redundant calorie detail should be suppressed"
+  );
+
+  assert.strictEqual(
+    usefulDetail({ stationText: "Front Squats", reps: 8, weight: 135 }),
+    "8 REPS / 135 LB",
+    "useful rep and weight detail should be retained"
+  );
+
+  assert.strictEqual(sourceVisible({ running: true, elapsedBeforePause: 0 }), false);
+  assert.strictEqual(controlHint({ running: true, elapsedBeforePause: 0 }), null);
+  assert.strictEqual(controlHint({ running: false, elapsedBeforePause: 12 }), "START resume");
+  assert.strictEqual(controlHint({ running: false, elapsedBeforePause: 0 }), "START start");
+}
+
+run();
+console.log("watch display formatting tests passed");

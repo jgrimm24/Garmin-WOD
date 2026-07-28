@@ -189,41 +189,7 @@ class GarminWODView extends WatchUi.View {
         updateStationDistanceStart(stationIndex);
         var roundNumber = getRoundNumber(elapsed);
         var secondInStation = getSecondInStation(elapsed);
-        var stationRemaining = getStationRemaining(stationIndex, secondInStation);
-        var stationLabel = getStationLabel(stationIndex, secondInStation);
-
-        var sourceY = height * 4 / 100;
-        var headerY = height * 10 / 100;
-        var heartRateY = height * 20 / 100;
-        var stationY = height * 32 / 100;
-        var contextY = height * 44 / 100;
-        var timerY = height * 58 / 100;
-        var stationLabelY = height * 75 / 100;
-        var controlsY = height * 84 / 100;
-
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width / 2, sourceY, Graphics.FONT_XTINY, getWorkoutSourceText(), Graphics.TEXT_JUSTIFY_CENTER);
-
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width / 2, headerY, Graphics.FONT_XTINY, _workout.getHeader(roundNumber), Graphics.TEXT_JUSTIFY_CENTER);
-
-        dc.setColor(getHeartRateColor(), Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width / 2, heartRateY, Graphics.FONT_XTINY, getHeartRateText(), Graphics.TEXT_JUSTIFY_CENTER);
-
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width / 2, stationY, Graphics.FONT_XTINY, _workout.getStationText(stationIndex), Graphics.TEXT_JUSTIFY_CENTER);
-
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width / 2, contextY, Graphics.FONT_XTINY, getContextText(stationIndex, elapsed, remaining), Graphics.TEXT_JUSTIFY_CENTER);
-
-        dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width / 2, timerY, Graphics.FONT_MEDIUM, stationRemaining, Graphics.TEXT_JUSTIFY_CENTER);
-
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width / 2, stationLabelY, Graphics.FONT_XTINY, stationLabel, Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(width / 2, controlsY, Graphics.FONT_XTINY, getControlHintText(), Graphics.TEXT_JUSTIFY_CENTER);
+        drawActiveWorkoutScoreboard(dc, width, height, stationIndex, roundNumber, elapsed, remaining, secondInStation);
     }
 
     // Called when this View is removed from the screen. Save the
@@ -695,12 +661,361 @@ class GarminWODView extends WatchUi.View {
         return _workoutSourceText;
     }
 
+    function drawActiveWorkoutScoreboard(dc, width, height, stationIndex, roundNumber, elapsed, remaining, secondInStation) as Void {
+        var currentText = _workout.getStationText(stationIndex);
+        var currentLines = getMovementDisplayLines(currentText);
+        var nextText = getNextMovementText(stationIndex);
+        var nextLines = getMovementDisplayLines(nextText);
+        var currentDetail = getCurrentMovementDetail(stationIndex);
+        var nextDetail = getNextMovementDetail(stationIndex);
+        var topY = height * 7 / 100;
+        var currentLabelY = height * 18 / 100;
+        var currentLineOneY = height * 31 / 100;
+        var currentLineTwoY = height * 43 / 100;
+        var currentDetailY = height * 53 / 100;
+        var nextLabelY = height * 62 / 100;
+        var nextLineOneY = height * 70 / 100;
+        var nextLineTwoY = height * 77 / 100;
+        var nextDetailY = height * 84 / 100;
+        var bottomY = height * 93 / 100;
+        var centerX = width / 2;
+
+        if (!_isRunning && _elapsedBeforePause == 0) {
+            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(centerX, height * 4 / 100, Graphics.FONT_XTINY, getWorkoutSourceText(), Graphics.TEXT_JUSTIFY_CENTER);
+        }
+
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(width * 28 / 100, topY, Graphics.FONT_XTINY, getCompactRoundText(roundNumber), Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(width * 72 / 100, topY, Graphics.FONT_XTINY, getCompactWorkoutTimeText(elapsed, remaining, stationIndex, secondInStation), Graphics.TEXT_JUSTIFY_CENTER);
+
+        if (!_isRunning && _elapsedBeforePause > 0) {
+            dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(centerX, height * 14 / 100, Graphics.FONT_XTINY, "PAUSED", Graphics.TEXT_JUSTIFY_CENTER);
+        }
+
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(centerX, currentLabelY, Graphics.FONT_XTINY, "CURRENT", Graphics.TEXT_JUSTIFY_CENTER);
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        drawMovementLines(dc, centerX, currentLineOneY, currentLineTwoY, currentLines, getCurrentMovementFont(currentLines), Graphics.COLOR_WHITE);
+
+        if (currentDetail != null) {
+            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(centerX, currentDetailY, Graphics.FONT_XTINY, currentDetail, Graphics.TEXT_JUSTIFY_CENTER);
+        }
+
+        dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawLine(width * 18 / 100, height * 58 / 100, width * 82 / 100, height * 58 / 100);
+
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(centerX, nextLabelY, Graphics.FONT_XTINY, "NEXT", Graphics.TEXT_JUSTIFY_CENTER);
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        drawMovementLines(dc, centerX, nextLineOneY, nextLineTwoY, nextLines, getNextMovementFont(nextLines), Graphics.COLOR_WHITE);
+
+        if (nextDetail != null) {
+            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(centerX, nextDetailY, Graphics.FONT_XTINY, nextDetail, Graphics.TEXT_JUSTIFY_CENTER);
+        }
+
+        dc.setColor(getHeartRateColor(), Graphics.COLOR_TRANSPARENT);
+        dc.drawText(width * 28 / 100, bottomY, Graphics.FONT_XTINY, getCompactHeartRateText(), Graphics.TEXT_JUSTIFY_CENTER);
+
+        var hint = getActiveControlHintText();
+        if (hint != null) {
+            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(width * 72 / 100, bottomY, Graphics.FONT_XTINY, hint, Graphics.TEXT_JUSTIFY_CENTER);
+        }
+    }
+
     function getStartupWorkoutSourceText() {
         if (_workoutSourceText.equals("SYNC...")) {
             return _workoutSourceBeforeSync;
         }
 
         return _workoutSourceText;
+    }
+
+    function getCompactRoundText(roundNumber) {
+        if (_workout.rounds != null) {
+            return "R" + roundNumber + "/" + _workout.rounds;
+        }
+
+        if (_workout.isAmrap()) {
+            return "R" + roundNumber;
+        }
+
+        if (_workout.isManualStationWorkout()) {
+            return "S" + (_manualStationIndex + 1) + "/" + _workout.getStationCount();
+        }
+
+        return _workout.getHeader(roundNumber);
+    }
+
+    function getCompactWorkoutTimeText(elapsed, remaining, stationIndex, secondInStation) {
+        if (_workout.isManualStationWorkout() && !_workout.isAmrap()) {
+            return formatTime(elapsed);
+        }
+
+        if (_workout.isAmrap()) {
+            return remaining == null ? formatTime(elapsed) : formatTime(remaining);
+        }
+
+        return getStationRemaining(stationIndex, secondInStation);
+    }
+
+    function getCompactHeartRateText() {
+        var heartRate = getCurrentHeartRate();
+
+        if (heartRate == null) {
+            return "HR --";
+        }
+
+        return "HR " + heartRate;
+    }
+
+    function getActiveControlHintText() {
+        if (_isRunning) {
+            return null;
+        }
+
+        if (_elapsedBeforePause > 0) {
+            return "START resume";
+        }
+
+        return "START start";
+    }
+
+    function getNextMovementText(stationIndex) {
+        if (stationIndex >= _workout.getStationCount() - 1) {
+            if (shouldContinueManualRoundFlow()) {
+                return _workout.getStationText(0);
+            }
+
+            return "Last station";
+        }
+
+        return _workout.getStationText(stationIndex + 1);
+    }
+
+    function getMovementDisplayLines(text) {
+        var words = getMovementDisplayWords(text);
+        var formatted = joinWords(words, 0, words.size());
+        var firstLine = "";
+        var secondLine = "";
+
+        if (words.size() <= 1) {
+            return [formatted];
+        }
+
+        if (words.size() == 2) {
+            return [words[0], words[1]];
+        }
+
+        var totalLength = formatted.length();
+        var bestIndex = 1;
+        var bestBalance = totalLength;
+
+        for (var i = 1; i < words.size(); i++) {
+            var before = joinWords(words, 0, i);
+            var after = joinWords(words, i, words.size());
+            var balance = before.length() - after.length();
+
+            if (balance < 0) {
+                balance = -balance;
+            }
+
+            if (balance < bestBalance) {
+                bestBalance = balance;
+                bestIndex = i;
+            }
+        }
+
+        firstLine = joinWords(words, 0, bestIndex);
+        secondLine = joinWords(words, bestIndex, words.size());
+
+        return [firstLine, secondLine];
+    }
+
+    function getMovementDisplayWords(text) {
+        var source = ("" + text).toUpper();
+        var words = [];
+        var current = "";
+
+        for (var i = 0; i < source.length(); i++) {
+            var character = source.substring(i, i + 1);
+
+            if (character.equals(" ") || character.equals("@")) {
+                addMovementDisplayWord(words, current);
+                current = "";
+            } else {
+                current += character;
+            }
+        }
+
+        addMovementDisplayWord(words, current);
+
+        if (words.size() == 0) {
+            words.add("NO WORKOUT");
+        }
+
+        return words;
+    }
+
+    function addMovementDisplayWord(words, word) as Void {
+        if (word == null || word.length() == 0) {
+            return;
+        }
+
+        if (word.equals("CALORIE") || word.equals("CALORIES")) {
+            words.add("CAL");
+            return;
+        }
+
+        if (word.equals("DUMBBELL") || word.equals("DUMBBELLS")) {
+            words.add("DB");
+            return;
+        }
+
+        if (word.equals("KETTLEBELL") || word.equals("KETTLEBELLS")) {
+            words.add("KB");
+            return;
+        }
+
+        words.add(word);
+    }
+
+    function joinWords(words, startIndex, endIndex) {
+        var result = "";
+
+        for (var i = startIndex; i < endIndex; i++) {
+            if (result.length() > 0) {
+                result += " ";
+            }
+
+            result += words[i];
+        }
+
+        return result;
+    }
+
+    function drawMovementLines(dc, x, firstY, secondY, lines, font, color) as Void {
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+
+        if (lines.size() == 1) {
+            dc.drawText(x, (firstY + secondY) / 2, font, lines[0], Graphics.TEXT_JUSTIFY_CENTER);
+            return;
+        }
+
+        dc.drawText(x, firstY, font, lines[0], Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(x, secondY, font, lines[1], Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    function getCurrentMovementFont(lines) {
+        var longest = getLongestLineLength(lines);
+
+        if (longest <= 12) {
+            return Graphics.FONT_MEDIUM;
+        }
+
+        return Graphics.FONT_SMALL;
+    }
+
+    function getNextMovementFont(lines) {
+        var longest = getLongestLineLength(lines);
+
+        if (longest <= 16) {
+            return Graphics.FONT_SMALL;
+        }
+
+        return Graphics.FONT_XTINY;
+    }
+
+    function getLongestLineLength(lines) {
+        var longest = 0;
+
+        for (var i = 0; i < lines.size(); i++) {
+            if (lines[i].length() > longest) {
+                longest = lines[i].length();
+            }
+        }
+
+        return longest;
+    }
+
+    function getCurrentMovementDetail(stationIndex) {
+        var distanceText = getDistanceProgressText(stationIndex);
+
+        if (distanceText != null) {
+            return distanceText;
+        }
+
+        return getUsefulStationDetail(stationIndex);
+    }
+
+    function getNextMovementDetail(stationIndex) {
+        if (stationIndex >= _workout.getStationCount() - 1 && !shouldContinueManualRoundFlow()) {
+            return null;
+        }
+
+        var nextIndex = stationIndex >= _workout.getStationCount() - 1 ? 0 : stationIndex + 1;
+        return getUsefulStationDetail(nextIndex);
+    }
+
+    function getUsefulStationDetail(stationIndex) {
+        var details = [];
+        var stationText = _workout.getStationText(stationIndex).toLower();
+        var reps = _workout.stationReps[stationIndex];
+        var calories = _workout.stationCalories[stationIndex];
+        var meters = _workout.stationMeters[stationIndex];
+        var weight = _workout.stationWeights[stationIndex];
+        var seconds = _workout.stationSeconds[stationIndex];
+
+        if (reps != null && !containsText(stationText, "" + reps)) {
+            details.add(reps + " REPS");
+        }
+
+        if (calories != null && !containsText(stationText, "" + calories)) {
+            details.add(calories + " CAL");
+        }
+
+        if (meters != null && !containsText(stationText, "" + meters)) {
+            details.add(meters + " M");
+        }
+
+        if (weight != null && !containsText(stationText, "" + weight)) {
+            details.add(weight + " LB");
+        }
+
+        if (seconds != null) {
+            details.add(seconds + " SEC");
+        }
+
+        if (details.size() == 0) {
+            return null;
+        }
+
+        return joinWordsWithSeparator(details, " / ");
+    }
+
+    function containsText(text, needle) {
+        var index = text.find(needle);
+        return index != null && index >= 0;
+    }
+
+    function joinWordsWithSeparator(words, separator) {
+        var result = "";
+
+        for (var i = 0; i < words.size(); i++) {
+            if (result.length() > 0) {
+                result += separator;
+            }
+
+            result += words[i];
+        }
+
+        return result;
     }
 
     function nextStation() as Void {
