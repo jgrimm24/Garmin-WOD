@@ -13,8 +13,7 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
     }
 
     function onSelect() as Boolean {
-        logInput("onSelect", -1);
-        handleStartInput();
+        handleStartInput("onSelect", -1);
         return true;
     }
 
@@ -22,8 +21,8 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
         var key = keyEvent.getKey();
         logInput("onKey", key);
 
-        if (key == WatchUi.KEY_START || key == WatchUi.KEY_ENTER) {
-            handleStartInput();
+        if (key == WatchUi.KEY_START || key == WatchUi.KEY_ENTER || key == WatchUi.KEY_UP_RIGHT) {
+            handleStartInput("onKey", key);
             return true;
         }
 
@@ -45,20 +44,50 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
         return false;
     }
 
-    function handleStartInput() as Void {
+    function handleStartInput(callbackName, keyCode) as Void {
         var now = System.getTimer();
+        var beforeState = _view.getInputStateText();
 
         if (now - _lastStartInputMs < 300) {
-            System.println("GarminWOD input ignored duplicate START state=" + _view.getInputStateText());
+            System.println("GarminWOD START callback=" + callbackName +
+                " key=" + keyCode +
+                " state=" + beforeState +
+                " accepted=false action=duplicate");
             return;
         }
 
-        _lastStartInputMs = now;
-        _view.toggleRunning();
+        System.println("GarminWOD START callback=" + callbackName +
+            " key=" + keyCode +
+            " state=" + beforeState +
+            " accepted=true action=toggleRunning");
+
+        try {
+            _view.toggleRunning();
+            _lastStartInputMs = now;
+            System.println("GarminWOD START action=toggleRunning before=" +
+                beforeState + " result=" + _view.getInputStateText());
+        } catch (e) {
+            System.println("GarminWOD START action=toggleRunning failed state=" +
+                beforeState + " error=" + getExceptionText(e));
+        }
     }
 
     function logInput(callbackName, keyCode) as Void {
         System.println("GarminWOD input " + callbackName + " key=" + keyCode + " state=" + _view.getInputStateText());
+    }
+
+    function getExceptionText(exception) {
+        if (exception == null) {
+            return "Unknown exception";
+        }
+
+        var message = exception.getErrorMessage();
+
+        if (message == null) {
+            message = exception.toString();
+        }
+
+        return message;
     }
 
     function onTap(clickEvent) as Boolean {
