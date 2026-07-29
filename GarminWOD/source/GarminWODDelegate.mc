@@ -5,17 +5,19 @@ import Toybox.WatchUi;
 class GarminWODDelegate extends WatchUi.BehaviorDelegate {
     var _view;
     var _lastStartInputMs;
+    var _isHandlingStartInput;
 
     function initialize(view) {
         BehaviorDelegate.initialize();
         _view = view;
         _lastStartInputMs = -1000;
+        _isHandlingStartInput = false;
     }
 
     function onSelect() as Boolean {
         System.println("GarminWOD DEBUG START callback entered source=onSelect state=" + safeInputStateText());
         handleStartInput("onSelect", -1);
-        return false;
+        return true;
     }
 
     function onKey(keyEvent as KeyEvent) as Boolean {
@@ -77,14 +79,20 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
         try {
             System.println("GarminWOD DEBUG START handleStartInput entered source=" + callbackName +
                 " key=" + keyCode + " state=" + safeInputStateText());
-            System.println("GarminWOD DEBUG START before showStartPressedDebug");
-            _view.showStartPressedDebug();
-            System.println("GarminWOD DEBUG START after showStartPressedDebug");
 
             var now = System.getTimer();
             var beforeState = safeInputStateText();
 
-            if (now - _lastStartInputMs < 300) {
+            if (_isHandlingStartInput) {
+                System.println("GarminWOD START callback=" + callbackName +
+                    " key=" + keyCode +
+                    " timer=" + now +
+                    " state=" + beforeState +
+                    " accepted=false action=in-progress");
+                return;
+            }
+
+            if (now - _lastStartInputMs < 900) {
                 System.println("GarminWOD START callback=" + callbackName +
                     " key=" + keyCode +
                     " timer=" + now +
@@ -93,19 +101,27 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
                 return;
             }
 
+            _lastStartInputMs = now;
+            _isHandlingStartInput = true;
+
             System.println("GarminWOD START callback=" + callbackName +
                 " key=" + keyCode +
                 " timer=" + now +
                 " state=" + beforeState +
                 " accepted=true action=toggleRunning");
 
+            System.println("GarminWOD DEBUG START before showStartPressedDebug");
+            _view.showStartPressedDebug();
+            System.println("GarminWOD DEBUG START after showStartPressedDebug");
+
             System.println("GarminWOD DEBUG START Before toggleRunning()");
             _view.toggleRunning();
             System.println("GarminWOD DEBUG START After toggleRunning()");
-            _lastStartInputMs = now;
+            _isHandlingStartInput = false;
             System.println("GarminWOD START action=toggleRunning before=" +
                 beforeState + " result=" + _view.getInputStateText());
         } catch (e) {
+            _isHandlingStartInput = false;
             System.println("GarminWOD START exception type=" + getExceptionType(e) +
                 " message=" + getExceptionText(e) +
                 " stack=" + getExceptionStack(e));
