@@ -13,6 +13,7 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
     }
 
     function onSelect() as Boolean {
+        System.println("GarminWOD DEBUG START callback entered source=onSelect state=" + safeInputStateText());
         handleStartInput("onSelect", -1);
         return false;
     }
@@ -23,11 +24,13 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
         logRawInput("onKey", key, type);
 
         if (isStartKey(key)) {
+            System.println("GarminWOD DEBUG START callback entered source=onKey key=" + key + " state=" + safeInputStateText());
             handleStartInput("onKey", key);
             return true;
         }
 
         if (key == WatchUi.KEY_LAP || key == WatchUi.KEY_ESC || key == WatchUi.KEY_DOWN_RIGHT) {
+            System.println("GarminWOD DEBUG BACK callback entered source=onKey key=" + key + " state=" + safeInputStateText());
             _view.handleBackButton();
             return true;
         }
@@ -51,6 +54,7 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
         logRawInput("onKeyPressed", key, type);
 
         if (isStartKey(key)) {
+            System.println("GarminWOD DEBUG START callback entered source=onKeyPressed key=" + key + " state=" + safeInputStateText());
             handleStartInput("onKeyPressed", key);
             return true;
         }
@@ -62,36 +66,49 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
         var key = getEventKey(keyEvent);
         var type = getEventType(keyEvent);
         logRawInput("onKeyReleased", key, type);
+        if (isStartKey(key)) {
+            System.println("GarminWOD DEBUG START callback entered source=onKeyReleased key=" + key +
+                " state=" + safeInputStateText() + " action=log-only");
+        }
         return false;
     }
 
     function handleStartInput(callbackName, keyCode) as Void {
-        var now = System.getTimer();
-        var beforeState = safeInputStateText();
+        try {
+            System.println("GarminWOD DEBUG START handleStartInput entered source=" + callbackName +
+                " key=" + keyCode + " state=" + safeInputStateText());
+            System.println("GarminWOD DEBUG START before showStartPressedDebug");
+            _view.showStartPressedDebug();
+            System.println("GarminWOD DEBUG START after showStartPressedDebug");
 
-        if (now - _lastStartInputMs < 300) {
+            var now = System.getTimer();
+            var beforeState = safeInputStateText();
+
+            if (now - _lastStartInputMs < 300) {
+                System.println("GarminWOD START callback=" + callbackName +
+                    " key=" + keyCode +
+                    " timer=" + now +
+                    " state=" + beforeState +
+                    " accepted=false action=duplicate");
+                return;
+            }
+
             System.println("GarminWOD START callback=" + callbackName +
                 " key=" + keyCode +
                 " timer=" + now +
                 " state=" + beforeState +
-                " accepted=false action=duplicate");
-            return;
-        }
+                " accepted=true action=toggleRunning");
 
-        System.println("GarminWOD START callback=" + callbackName +
-            " key=" + keyCode +
-            " timer=" + now +
-            " state=" + beforeState +
-            " accepted=true action=toggleRunning");
-
-        try {
+            System.println("GarminWOD DEBUG START Before toggleRunning()");
             _view.toggleRunning();
+            System.println("GarminWOD DEBUG START After toggleRunning()");
             _lastStartInputMs = now;
             System.println("GarminWOD START action=toggleRunning before=" +
                 beforeState + " result=" + _view.getInputStateText());
         } catch (e) {
-            System.println("GarminWOD START action=toggleRunning failed state=" +
-                beforeState + " error=" + getExceptionText(e));
+            System.println("GarminWOD START exception type=" + getExceptionType(e) +
+                " message=" + getExceptionText(e) +
+                " stack=" + getExceptionStack(e));
         }
     }
 
@@ -159,6 +176,18 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
         return message;
     }
 
+    function getExceptionType(exception) {
+        if (exception == null) {
+            return "Unknown";
+        }
+
+        return exception.toString();
+    }
+
+    function getExceptionStack(exception) {
+        return "unavailable";
+    }
+
     function onTap(clickEvent) as Boolean {
         // Ignore touch taps during workouts; buttons are safer with sweat and chalk.
         logInput("onTap", -1);
@@ -172,6 +201,7 @@ class GarminWODDelegate extends WatchUi.BehaviorDelegate {
     }
 
     function onBack() as Boolean {
+        System.println("GarminWOD DEBUG BACK callback entered source=onBack state=" + safeInputStateText());
         logInput("onBack", -1);
         _view.handleBackButton();
         return true;

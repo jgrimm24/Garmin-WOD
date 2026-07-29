@@ -73,6 +73,8 @@ class GarminWODView extends WatchUi.View {
     var _finalNativeDistanceMeters;
     var _exitConfirmPending;
     var _sessionSync;
+    var _debugBannerText;
+    var _debugBannerUntilMs;
 
     function initialize() {
         View.initialize();
@@ -135,6 +137,8 @@ class GarminWODView extends WatchUi.View {
         _finalNativeDistanceMeters = null;
         _exitConfirmPending = false;
         _sessionSync = new GarminWODSessionSync();
+        _debugBannerText = null;
+        _debugBannerUntilMs = null;
     }
 
     // Load your resources here
@@ -172,16 +176,19 @@ class GarminWODView extends WatchUi.View {
 
         if (!_workout.hasWorkout()) {
             drawWorkoutUnavailableState(dc, width, height);
+            drawDebugBanner(dc, width, height);
             return;
         }
 
         if (_isFinished) {
             drawWorkoutSummary(dc, width, height);
+            drawDebugBanner(dc, width, height);
             return;
         }
 
         if (_exitConfirmPending) {
             drawExitConfirmation(dc, width, height);
+            drawDebugBanner(dc, width, height);
             return;
         }
 
@@ -190,6 +197,7 @@ class GarminWODView extends WatchUi.View {
         var roundNumber = getRoundNumber(elapsed);
         var secondInStation = getSecondInStation(elapsed);
         drawActiveWorkoutScoreboard(dc, width, height, stationIndex, roundNumber, elapsed, remaining, secondInStation);
+        drawDebugBanner(dc, width, height);
     }
 
     // Called when this View is removed from the screen. Save the
@@ -205,37 +213,53 @@ class GarminWODView extends WatchUi.View {
     }
 
     function toggleRunning() as Void {
+        System.println("GarminWOD DEBUG toggleRunning entered state=" + getInputStateText() +
+            " timer=" + System.getTimer());
+
         if (_exitConfirmPending) {
+            System.println("GarminWOD DEBUG toggleRunning before cancelExitConfirmation");
             cancelExitConfirmation();
+            System.println("GarminWOD DEBUG toggleRunning after cancelExitConfirmation state=" + getInputStateText());
             return;
         }
 
         if (_isFinished) {
             if (_activityRecorder.hasSaveFailed()) {
+                System.println("GarminWOD DEBUG toggleRunning before retrySaveRecordingSession");
                 retrySaveRecordingSession();
+                System.println("GarminWOD DEBUG toggleRunning after retrySaveRecordingSession state=" + getInputStateText());
             } else {
+                System.println("GarminWOD DEBUG toggleRunning before resetWorkout");
                 resetWorkout();
+                System.println("GarminWOD DEBUG toggleRunning after resetWorkout state=" + getInputStateText());
             }
             return;
         }
 
         if (!_workout.hasWorkout()) {
+            System.println("GarminWOD DEBUG toggleRunning before fetchLatestWorkout no-workout");
             fetchLatestWorkout();
             WatchUi.requestUpdate();
+            System.println("GarminWOD DEBUG toggleRunning after fetchLatestWorkout no-workout state=" + getInputStateText());
             return;
         }
 
         if (_isRunning) {
             var elapsed = getElapsedSeconds();
 
+            System.println("GarminWOD DEBUG toggleRunning before pauseRecordingSession elapsed=" + elapsed);
             if (!_activityRecorder.pauseRecordingSession()) {
                 WatchUi.requestUpdate();
+                System.println("GarminWOD DEBUG toggleRunning pauseRecordingSession failed state=" + getInputStateText());
                 return;
             }
+            System.println("GarminWOD DEBUG toggleRunning after pauseRecordingSession");
 
             _elapsedBeforePause = elapsed;
             _isRunning = false;
+            System.println("GarminWOD DEBUG toggleRunning before publish paused");
             publishWorkoutSessionState("paused");
+            System.println("GarminWOD DEBUG toggleRunning after publish paused state=" + getInputStateText());
         } else {
             if (_workoutStartPressedMs == null) {
                 _workoutStartPressedMs = System.getTimer();
@@ -249,21 +273,28 @@ class GarminWODView extends WatchUi.View {
             }
 
             if (shouldWaitForGpsBeforeStart()) {
+                System.println("GarminWOD DEBUG toggleRunning before startLocationEvents gps-wait");
                 startLocationEvents();
                 WatchUi.requestUpdate();
+                System.println("GarminWOD DEBUG toggleRunning after startLocationEvents gps-wait state=" + getInputStateText());
                 return;
             }
 
+            System.println("GarminWOD DEBUG toggleRunning before enableHeartRateSensor");
             enableHeartRateSensor();
+            System.println("GarminWOD DEBUG toggleRunning after enableHeartRateSensor");
 
+            System.println("GarminWOD DEBUG toggleRunning before recording start/resume elapsedBeforePause=" + _elapsedBeforePause);
             var recordingStarted = _elapsedBeforePause > 0 ?
                 _activityRecorder.resumeRecordingSession() :
                 _activityRecorder.startRecordingSession();
 
             if (!recordingStarted) {
                 WatchUi.requestUpdate();
+                System.println("GarminWOD DEBUG toggleRunning recording start/resume failed state=" + getInputStateText());
                 return;
             }
+            System.println("GarminWOD DEBUG toggleRunning after recording start/resume");
 
             _startMs = System.getTimer();
             if (_activityRecordingStartedMs == null) {
@@ -275,12 +306,40 @@ class GarminWODView extends WatchUi.View {
                 " hrMonitoringStartedMs=" + getLogValue(_heartRateMonitoringStartedMs));
             _lastLocation = null;
             _isRunning = true;
+            System.println("GarminWOD DEBUG toggleRunning before startLocationEvents running");
             startLocationEvents();
+            System.println("GarminWOD DEBUG toggleRunning after startLocationEvents running");
+            System.println("GarminWOD DEBUG toggleRunning before ensureWorkoutSessionSync");
             ensureWorkoutSessionSync();
+            System.println("GarminWOD DEBUG toggleRunning after ensureWorkoutSessionSync");
+            System.println("GarminWOD DEBUG toggleRunning before publish running");
             publishWorkoutSessionState("running");
+            System.println("GarminWOD DEBUG toggleRunning after publish running state=" + getInputStateText());
         }
 
         WatchUi.requestUpdate();
+        System.println("GarminWOD DEBUG toggleRunning exit state=" + getInputStateText());
+    }
+
+    function showStartPressedDebug() as Void {
+        _debugBannerText = "START PRESSED";
+        _debugBannerUntilMs = System.getTimer() + 2500;
+        WatchUi.requestUpdate();
+    }
+
+    function drawDebugBanner(dc, width, height) as Void {
+        if (_debugBannerText == null || _debugBannerUntilMs == null) {
+            return;
+        }
+
+        if (System.getTimer() > _debugBannerUntilMs) {
+            _debugBannerText = null;
+            _debugBannerUntilMs = null;
+            return;
+        }
+
+        dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_BLACK);
+        dc.drawText(width / 2, height * 7 / 100, Graphics.FONT_XTINY, _debugBannerText, Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     function resetWorkout() as Void {
@@ -1084,11 +1143,18 @@ class GarminWODView extends WatchUi.View {
     }
 
     function nextStation() as Void {
+        System.println("GarminWOD DEBUG NEXT callback entered state=" + getInputStateText() +
+            " station=" + _manualStationIndex +
+            " round=" + _manualRoundNumber +
+            " timer=" + System.getTimer());
+
         if (!_workout.hasWorkout()) {
+            System.println("GarminWOD DEBUG NEXT ignored no-workout");
             return;
         }
 
         if (!_workout.isManualStationWorkout()) {
+            System.println("GarminWOD DEBUG NEXT ignored non-manual-workout");
             return;
         }
 
@@ -1102,12 +1168,16 @@ class GarminWODView extends WatchUi.View {
             resetStationDistanceStart();
             vibrateRoundComplete();
         } else {
+            System.println("GarminWOD DEBUG FINISH callback entered source=nextStation state=" + getInputStateText());
             finishWorkout();
             return;
         }
 
         WatchUi.requestUpdate();
         publishWorkoutSessionState("running");
+        System.println("GarminWOD DEBUG NEXT completed state=" + getInputStateText() +
+            " station=" + _manualStationIndex +
+            " round=" + _manualRoundNumber);
     }
 
     function previousStation() as Void {
@@ -1153,6 +1223,11 @@ class GarminWODView extends WatchUi.View {
     }
 
     function handleBackButton() as Void {
+        System.println("GarminWOD DEBUG BACK handleBackButton entered state=" + getInputStateText() +
+            " station=" + _manualStationIndex +
+            " round=" + _manualRoundNumber +
+            " timer=" + System.getTimer());
+
         if (_exitConfirmPending) {
             confirmDiscardAndExit();
             return;
@@ -1254,6 +1329,10 @@ class GarminWODView extends WatchUi.View {
     }
 
     function finishWorkout() as Void {
+        System.println("GarminWOD DEBUG FINISH callback entered source=finishWorkout state=" + getInputStateText() +
+            " station=" + _manualStationIndex +
+            " round=" + _manualRoundNumber +
+            " timer=" + System.getTimer());
         updateHeartRateStats();
         _elapsedBeforePause = getElapsedSeconds();
         _isRunning = false;
