@@ -86,6 +86,10 @@ function controlHint({ running, elapsedBeforePause }) {
   return "START start";
 }
 
+function liveHeartRateText(heartRate) {
+  return heartRate == null ? "-- ♥" : `${heartRate} ♥`;
+}
+
 function sourceVisible({ running, elapsedBeforePause }) {
   return !running && elapsedBeforePause === 0;
 }
@@ -146,6 +150,8 @@ function run() {
   assert.strictEqual(controlHint({ running: true, elapsedBeforePause: 0 }), null);
   assert.strictEqual(controlHint({ running: false, elapsedBeforePause: 12 }), "START resume");
   assert.strictEqual(controlHint({ running: false, elapsedBeforePause: 0 }), "START start");
+  assert.strictEqual(liveHeartRateText(156), "156 ♥");
+  assert.strictEqual(liveHeartRateText(null), "-- ♥");
 }
 
 run();

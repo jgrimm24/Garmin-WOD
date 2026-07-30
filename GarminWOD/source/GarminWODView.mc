@@ -807,8 +807,9 @@ class GarminWODView extends WatchUi.View {
         }
 
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width * 28 / 100, topY, Graphics.FONT_XTINY, getCompactRoundText(roundNumber), Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(width * 72 / 100, topY, Graphics.FONT_XTINY, getCompactWorkoutTimeText(elapsed, remaining, stationIndex, secondInStation), Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(width * 20 / 100, topY, Graphics.FONT_XTINY, getCompactRoundText(roundNumber), Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(width * 50 / 100, topY, Graphics.FONT_XTINY, getCompactWorkoutTimeText(elapsed, remaining, stationIndex, secondInStation), Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(width * 82 / 100, topY, Graphics.FONT_XTINY, getLiveHeartRateText(), Graphics.TEXT_JUSTIFY_CENTER);
 
         if (!_isRunning && _elapsedBeforePause > 0) {
             dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
@@ -835,13 +836,10 @@ class GarminWODView extends WatchUi.View {
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         drawMovementLines(dc, centerX, nextLineOneY, nextLineTwoY, nextLines, getNextMovementFont(nextLines), Graphics.COLOR_WHITE);
 
-        dc.setColor(getHeartRateColor(), Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width * 28 / 100, bottomY, Graphics.FONT_XTINY, getCompactHeartRateText(), Graphics.TEXT_JUSTIFY_CENTER);
-
         var hint = getActiveControlHintText();
         if (hint != null) {
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(width * 72 / 100, bottomY, Graphics.FONT_XTINY, hint, Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(centerX, bottomY, Graphics.FONT_XTINY, hint, Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
 
@@ -881,14 +879,14 @@ class GarminWODView extends WatchUi.View {
         return getStationRemaining(stationIndex, secondInStation);
     }
 
-    function getCompactHeartRateText() {
+    function getLiveHeartRateText() {
         var heartRate = getCurrentHeartRate();
 
         if (heartRate == null) {
-            return "HR --";
+            return "-- ♥";
         }
 
-        return "HR " + heartRate;
+        return heartRate + " ♥";
     }
 
     function getActiveControlHintText() {
