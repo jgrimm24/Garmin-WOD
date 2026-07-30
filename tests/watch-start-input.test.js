@@ -24,18 +24,17 @@ function run() {
     "onSelect should consume the physical START callback"
   );
 
-  const duplicateCheck = indexOfRequired(delegateSource, "accepted=false action=duplicate");
-  const bannerCall = indexOfRequired(delegateSource, "_view.showStartPressedDebug();");
-  assert(
-    duplicateCheck < bannerCall,
-    "duplicate START callbacks should be rejected before the START PRESSED banner is shown"
-  );
-
   const timestampReserve = indexOfRequired(delegateSource, "_lastStartInputMs = now;");
   const toggleCall = indexOfRequired(delegateSource, "_view.toggleRunning();");
   assert(
     timestampReserve < toggleCall,
     "START debounce timestamp should be reserved before slow startup work begins"
+  );
+
+  const duplicateCheck = indexOfRequired(delegateSource, "accepted=false action=duplicate");
+  assert(
+    duplicateCheck < toggleCall,
+    "duplicate START callbacks should be rejected before the workout action runs"
   );
 
   assert(

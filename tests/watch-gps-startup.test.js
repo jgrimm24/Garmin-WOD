@@ -71,8 +71,8 @@ function run() {
   );
 
   assert(
-    viewSource.includes("skip startLocationEvents no-gps-workout"),
-    "non-GPS workouts should skip location event startup"
+    viewSource.includes("if (workoutNeedsGps()) {\n                    startLocationEvents();"),
+    "location event startup should be guarded by workoutNeedsGps"
   );
 }
 
