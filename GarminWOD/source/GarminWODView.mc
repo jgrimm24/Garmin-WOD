@@ -66,6 +66,10 @@ class GarminWODView extends WatchUi.View {
     var _hrDiagnosticCount;
     var _lastHrDiagnosticLogMs;
     var _lastHrDisagreementLogMs;
+    var _lastHrRawLogMs;
+    var _lastHrSelectLogMs;
+    var _lastHrFitLogMs;
+    var _heartRateSensorRequestText;
     var _workoutStartPressedMs;
     var _heartRateMonitoringStartedMs;
     var _firstValidSensorHeartRateMs;
@@ -130,6 +134,10 @@ class GarminWODView extends WatchUi.View {
         _hrDiagnosticCount = 0;
         _lastHrDiagnosticLogMs = null;
         _lastHrDisagreementLogMs = null;
+        _lastHrRawLogMs = null;
+        _lastHrSelectLogMs = null;
+        _lastHrFitLogMs = null;
+        _heartRateSensorRequestText = "none";
         _workoutStartPressedMs = null;
         _heartRateMonitoringStartedMs = null;
         _firstValidSensorHeartRateMs = null;
@@ -1456,13 +1464,15 @@ class GarminWODView extends WatchUi.View {
 
     function enableHeartRateSensor() as Void {
         try {
-            var enabledSensors = Sensor.setEnabledSensors([Sensor.SENSOR_HEARTRATE]);
+            var requestedSensors = getHeartRateSensorTypes();
+            _heartRateSensorRequestText = getHeartRateSensorRequestText(requestedSensors);
+            var enabledSensors = Sensor.setEnabledSensors(requestedSensors);
             Sensor.enableSensorEvents(method(:onSensor));
             if (_heartRateMonitoringStartedMs == null) {
                 _heartRateMonitoringStartedMs = System.getTimer();
             }
             System.println("GarminWOD: heart rate sensor enabled requested=" +
-                Sensor.SENSOR_HEARTRATE +
+                _heartRateSensorRequestText +
                 " enabled=" + getLogValue(enabledSensors) +
                 " onboardSupported=" + (Sensor has :SENSOR_ONBOARD_HEARTRATE) +
                 " hrMonitoringStartedMs=" + _heartRateMonitoringStartedMs +
@@ -1471,6 +1481,36 @@ class GarminWODView extends WatchUi.View {
         } catch (e) {
             System.println("GarminWOD: heart rate sensor enable failed: " + getExceptionText(e));
         }
+    }
+
+    function getHeartRateSensorTypes() {
+        var sensors = [Sensor.SENSOR_HEARTRATE];
+
+        if (Sensor has :SENSOR_ONBOARD_HEARTRATE) {
+            sensors.add(Sensor.SENSOR_ONBOARD_HEARTRATE);
+        }
+
+        return sensors;
+    }
+
+    function getHeartRateSensorRequestText(sensors) {
+        var text = "";
+
+        for (var i = 0; i < sensors.size(); i++) {
+            if (text.length() > 0) {
+                text += ",";
+            }
+
+            if ((Sensor has :SENSOR_ONBOARD_HEARTRATE) && sensors[i] == Sensor.SENSOR_ONBOARD_HEARTRATE) {
+                text += "onboard";
+            } else if (sensors[i] == Sensor.SENSOR_HEARTRATE) {
+                text += "remote";
+            } else {
+                text += "" + sensors[i];
+            }
+        }
+
+        return text;
     }
 
     function disableHeartRateSensor() as Void {
@@ -1490,6 +1530,7 @@ class GarminWODView extends WatchUi.View {
         if (sensorInfo == null || !(sensorInfo has :heartRate) || sensorInfo.heartRate == null) {
             _hrMissingSensorSampleCount++;
             _lastSensorCallbackHeartRate = null;
+            maybeLogHeartRateRaw(_lastSensorCallbackMs, null, "missing");
             return;
         }
 
@@ -1512,8 +1553,10 @@ class GarminWODView extends WatchUi.View {
             }
 
             updateHeartRateDiagnosticStats(heartRate);
+            maybeLogHeartRateRaw(_lastSensorCallbackMs, heartRate, "valid");
         } else {
             _hrInvalidSensorSampleCount++;
+            maybeLogHeartRateRaw(_lastSensorCallbackMs, heartRate, "invalid");
         }
     }
 
@@ -1540,6 +1583,10 @@ class GarminWODView extends WatchUi.View {
         _hrDiagnosticCount = 0;
         _lastHrDiagnosticLogMs = null;
         _lastHrDisagreementLogMs = null;
+        _lastHrRawLogMs = null;
+        _lastHrSelectLogMs = null;
+        _lastHrFitLogMs = null;
+        _heartRateSensorRequestText = "none";
         _workoutStartPressedMs = null;
         _heartRateMonitoringStartedMs = null;
         _firstValidSensorHeartRateMs = null;
@@ -1606,6 +1653,53 @@ class GarminWODView extends WatchUi.View {
             " source=" + _lastSelectedHeartRateSource);
     }
 
+    function maybeLogHeartRateRaw(now, heartRate, status) as Void {
+        if (_lastHrRawLogMs != null && now - _lastHrRawLogMs < 15000 && status.equals("valid")) {
+            return;
+        }
+
+        _lastHrRawLogMs = now;
+        System.println("GarminWOD HR RAW t=" + now +
+            " bpm=" + getLogValue(heartRate) +
+            " source=Sensor.Info.heartRate" +
+            " validity=" + status +
+            " requested=" + _heartRateSensorRequestText +
+            " recording=" + _activityRecorder.isRecordingSessionActive());
+    }
+
+    function maybeLogHeartRateSelect(now, selection) as Void {
+        var status = selection[:status];
+
+        if (_lastHrSelectLogMs != null && now - _lastHrSelectLogMs < 15000 && status.equals("fresh")) {
+            return;
+        }
+
+        _lastHrSelectLogMs = now;
+        System.println("GarminWOD HR SELECT t=" + now +
+            " bpm=" + getLogValue(selection[:heartRate]) +
+            " ageMs=" + getLogValue(selection[:ageMs]) +
+            " status=" + status +
+            " source=" + selection[:source] +
+            " activity=" + getLogValue(selection[:activityHeartRate]) +
+            " recording=" + _activityRecorder.isRecordingSessionActive());
+    }
+
+    function maybeLogHeartRateFit(now, selection) as Void {
+        var status = selection[:status];
+
+        if (_lastHrFitLogMs != null && now - _lastHrFitLogMs < 15000 && status.equals("fresh")) {
+            return;
+        }
+
+        _lastHrFitLogMs = now;
+        System.println("GarminWOD HR FIT t=" + now +
+            " appBpm=" + getLogValue(selection[:heartRate]) +
+            " mode=garmin-native" +
+            " manual=false" +
+            " appStatus=" + status +
+            " requested=" + _heartRateSensorRequestText);
+    }
+
     function maybeLogHeartRateDiagnostics(now) as Void {
         if (_lastHrDiagnosticLogMs != null && now - _lastHrDiagnosticLogMs < 15000) {
             return;
@@ -1635,6 +1729,7 @@ class GarminWODView extends WatchUi.View {
             " activity=" + getLogValue(_lastActivityInfoHeartRate) +
             " selected=" + getLogValue(_lastSelectedHeartRate) +
             " source=" + _lastSelectedHeartRateSource +
+            " requested=" + _heartRateSensorRequestText +
             " workoutSource=" + getStartupWorkoutSourceText() +
             " startPressedMs=" + getLogValue(_workoutStartPressedMs) +
             " hrMonitoringStartedMs=" + getLogValue(_heartRateMonitoringStartedMs) +
@@ -2117,31 +2212,51 @@ class GarminWODView extends WatchUi.View {
 
     function getCurrentHeartRate() {
         var now = System.getTimer();
+        var selection = selectCurrentHeartRate(now);
+
+        return selection[:heartRate];
+    }
+
+    function selectCurrentHeartRate(now) {
         var sensorAgeMs = getLatestSensorHeartRateAgeMs(now);
         var activityHeartRate = getActivityInfoHeartRate();
+        var selection = {
+            :heartRate => null,
+            :source => "none",
+            :ageMs => sensorAgeMs,
+            :status => "missing",
+            :activityHeartRate => activityHeartRate
+        };
 
         if (_latestSensorHeartRate != null && sensorAgeMs != null && sensorAgeMs <= 3000) {
+            selection[:heartRate] = _latestSensorHeartRate;
+            selection[:source] = "sensor";
+            selection[:status] = "fresh";
             _lastSelectedHeartRate = _latestSensorHeartRate;
             _lastSelectedHeartRateSource = "sensor";
             maybeLogHeartRateComparison(now, sensorAgeMs, activityHeartRate);
-            return _latestSensorHeartRate;
+            return selection;
         }
 
         if (_latestSensorHeartRate != null && sensorAgeMs != null && sensorAgeMs > 3000) {
+            selection[:status] = "stale-rejected";
             maybeLogStaleSensorHeartRate(now, sensorAgeMs, activityHeartRate);
         }
 
         if (activityHeartRate != null) {
+            selection[:heartRate] = activityHeartRate;
+            selection[:source] = "activity";
+            selection[:status] = "activity-fallback";
             _lastSelectedHeartRate = activityHeartRate;
             _lastSelectedHeartRateSource = "activity";
             maybeLogHeartRateComparison(now, sensorAgeMs, activityHeartRate);
-            return activityHeartRate;
+            return selection;
         }
 
         _lastSelectedHeartRate = null;
         _lastSelectedHeartRateSource = "none";
         maybeLogHeartRateComparison(now, sensorAgeMs, activityHeartRate);
-        return null;
+        return selection;
     }
 
     function getActivityInfoHeartRate() {
@@ -2247,8 +2362,11 @@ class GarminWODView extends WatchUi.View {
             return;
         }
 
-        var heartRate = getCurrentHeartRate();
+        var selection = selectCurrentHeartRate(now);
+        var heartRate = selection[:heartRate];
         _lastHeartRateStatsMs = now;
+        maybeLogHeartRateSelect(now, selection);
+        maybeLogHeartRateFit(now, selection);
 
         if (heartRate == null) {
             _heartRateMissingSeconds++;
