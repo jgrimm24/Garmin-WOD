@@ -5,6 +5,7 @@ const loadSampleButton = document.querySelector("#loadSampleButton");
 const copyButton = document.querySelector("#copyButton");
 const copyWatchButton = document.querySelector("#copyWatchButton");
 const addStationButton = document.querySelector("#addStationButton");
+const loadLatestButton = document.querySelector("#loadLatestButton");
 const saveLatestButton = document.querySelector("#saveLatestButton");
 const importPanel = document.querySelector(".import-panel");
 const uploadDropzone = document.querySelector("#uploadDropzone");
@@ -16,6 +17,8 @@ const summaryGrid = document.querySelector("#summaryGrid");
 const notesList = document.querySelector("#notesList");
 const stationsList = document.querySelector("#stationsList");
 const jsonOutput = document.querySelector("#jsonOutput");
+const draftStatus = document.querySelector("#draftStatus");
+const DraftState = window.GarminWodDraftState || null;
 
 const sampleWod = `40 minute EMOM x10
 1. Row 45 sec
@@ -25,10 +28,190 @@ const sampleWod = `40 minute EMOM x10
 
 let currentWorkout = {};
 let draggedStationIndex = null;
+let draftSaveTimer = null;
+let hasUnsavedChanges = false;
+let lastServerWorkoutId = null;
+let lastServerUpdatedAt = null;
 
 if (window.location.protocol === "file:") {
   imageStatus.textContent = "Opening the local importer server...";
   window.location.href = "http://127.0.0.1:4175/importer/";
+}
+
+function setPersistenceStatus(message, tone) {
+  draftStatus.textContent = message;
+  draftStatus.className = `draft-status${tone ? ` ${tone}` : ""}`;
+}
+
+function markUnsaved(message) {
+  if (!DraftState) return;
+  hasUnsavedChanges = true;
+  scheduleDraftSave(message || "Draft saved locally");
+}
+
+function scheduleDraftSave(message) {
+  if (!DraftState) return;
+  window.clearTimeout(draftSaveTimer);
+  draftSaveTimer = window.setTimeout(() => {
+    saveLocalDraft(message || (hasUnsavedChanges ? "Draft saved locally" : "Loaded saved draft"));
+  }, 350);
+}
+
+function saveLocalDraft(message, tone) {
+  if (!DraftState || !window.localStorage) return;
+
+  try {
+    const draft = DraftState.createDraft({
+      rawInput: wodInput.value,
+      workout: currentWorkout,
+      hasUnsavedChanges,
+      lastServerWorkoutId,
+      lastServerUpdatedAt,
+    });
+
+    window.localStorage.setItem(DraftState.DRAFT_STORAGE_KEY, DraftState.serializeDraft(draft));
+    setPersistenceStatus(message || (hasUnsavedChanges ? "Draft saved locally" : "Loaded saved draft"), tone || (hasUnsavedChanges ? "strong" : ""));
+  } catch (error) {
+    setPersistenceStatus("Could not save local draft", "warning");
+  }
+}
+
+function clearLocalDraft() {
+  window.clearTimeout(draftSaveTimer);
+  if (!DraftState || !window.localStorage) return;
+
+  try {
+    window.localStorage.removeItem(DraftState.DRAFT_STORAGE_KEY);
+  } catch (error) {
+    setPersistenceStatus("Could not clear local draft", "warning");
+  }
+}
+
+function loadLocalDraft() {
+  if (!DraftState || !window.localStorage) return null;
+
+  try {
+    const parsed = DraftState.parseStoredDraft(window.localStorage.getItem(DraftState.DRAFT_STORAGE_KEY));
+
+    if (!parsed.ok) {
+      if (window.localStorage.getItem(DraftState.DRAFT_STORAGE_KEY)) {
+        window.localStorage.removeItem(DraftState.DRAFT_STORAGE_KEY);
+        setPersistenceStatus("Corrupt local draft removed", "warning");
+      }
+
+      return null;
+    }
+
+    return parsed.draft;
+  } catch (error) {
+    setPersistenceStatus("Could not read local draft", "warning");
+    return null;
+  }
+}
+
+async function fetchLatestWorkout() {
+  if (!DraftState) {
+    throw new Error("Draft persistence is not available.");
+  }
+
+  if (window.location.protocol === "file:") {
+    throw new Error("Open the importer at http://127.0.0.1:4175/importer/ before loading the latest WOD.");
+  }
+
+  const response = await fetch("/api/latest-workout");
+  const result = await response.json().catch(() => ({
+    error: "The server returned an unreadable response.",
+  }));
+
+  if (!response.ok) {
+    throw new Error(result.error || "No saved WOD found.");
+  }
+
+  return result.workout || result;
+}
+
+function applyRestoredWorkout(choice) {
+  if (choice.source === "empty") {
+    renderEmptyState();
+    setPersistenceStatus(choice.message);
+    return;
+  }
+
+  wodInput.value = choice.rawInput || choice.workout.sourceText || "";
+  renderWorkout(choice.workout);
+
+  hasUnsavedChanges = !!choice.hasUnsavedChanges;
+  lastServerWorkoutId = choice.workout && !choice.hasUnsavedChanges ? DraftState.workoutIdentity(choice.workout) : null;
+  lastServerUpdatedAt = choice.workout && !choice.hasUnsavedChanges ? choice.workout.updatedAt || null : null;
+
+  saveLocalDraft(choice.message, choice.hasUnsavedChanges ? "strong" : "");
+}
+
+async function restoreInitialState() {
+  if (!DraftState) return;
+
+  const localDraft = loadLocalDraft();
+
+  if (localDraft) {
+    applyRestoredWorkout(DraftState.chooseRestoreState({
+      draft: localDraft,
+      serverWorkout: null,
+    }));
+  }
+
+  let serverWorkout = null;
+
+  try {
+    serverWorkout = await fetchLatestWorkout();
+  } catch (error) {
+    if (localDraft) {
+      setPersistenceStatus("Could not reach server - local draft preserved", localDraft.hasUnsavedChanges ? "strong" : "");
+    } else {
+      applyRestoredWorkout(DraftState.chooseRestoreState({
+        draft: null,
+        serverWorkout: null,
+      }));
+      setPersistenceStatus("No saved WOD found", "warning");
+    }
+    return;
+  }
+
+  if (localDraft && localDraft.hasUnsavedChanges) {
+    setPersistenceStatus("Restored local draft", "strong");
+    return;
+  }
+
+  if (
+    localDraft &&
+    DraftState.workoutIdentity(localDraft.workout) === DraftState.workoutIdentity(serverWorkout) &&
+    !DraftState.isServerNewerThanDraft(serverWorkout, localDraft)
+  ) {
+    setPersistenceStatus("Loaded saved draft");
+    return;
+  }
+
+  applyRestoredWorkout(DraftState.chooseRestoreState({
+    draft: null,
+    serverWorkout,
+  }));
+}
+
+function renderEmptyState() {
+  wodInput.value = "";
+  imageInput.value = "";
+  imagePreview.className = "image-preview empty-preview";
+  imagePreview.textContent = "No image selected";
+  imageStatus.textContent = "Choose an image to extract workout text, or paste text below.";
+  previewTitle.textContent = "No workout parsed";
+  summaryGrid.innerHTML = "";
+  notesList.innerHTML = "";
+  stationsList.className = "stations-list empty-state";
+  stationsList.textContent = "Paste a WOD, then parse it.";
+  jsonOutput.textContent = "{}";
+  currentWorkout = {};
+  hasUnsavedChanges = false;
+  lastServerWorkoutId = null;
+  lastServerUpdatedAt = null;
 }
 
 function parseWorkout(text) {
@@ -429,6 +612,7 @@ summaryGrid.addEventListener("input", (event) => {
 
   currentWorkout[field] = field === "type" ? event.target.value : numberOrNull(event.target.value);
   updateJsonOutput();
+  markUnsaved("Draft saved locally");
 });
 
 summaryGrid.addEventListener("change", (event) => {
@@ -437,6 +621,7 @@ summaryGrid.addEventListener("change", (event) => {
 
   currentWorkout[field] = field === "type" ? event.target.value : numberOrNull(event.target.value);
   renderWorkout(currentWorkout);
+  markUnsaved("Draft saved locally");
 });
 
 stationsList.addEventListener("input", (event) => {
@@ -453,6 +638,7 @@ stationsList.addEventListener("input", (event) => {
   }
 
   updateJsonOutput();
+  markUnsaved("Draft saved locally");
 });
 
 stationsList.addEventListener("click", (event) => {
@@ -461,6 +647,7 @@ stationsList.addEventListener("click", (event) => {
 
   currentWorkout.stations.splice(Number(index), 1);
   renderWorkout(currentWorkout);
+  markUnsaved("Draft saved locally");
 });
 
 stationsList.addEventListener("dragstart", (event) => {
@@ -525,25 +712,19 @@ stationsList.addEventListener("drop", (event) => {
 
 parseButton.addEventListener("click", () => {
   renderWorkout(parseWorkout(wodInput.value));
+  markUnsaved("Unsaved changes");
 });
 
 clearButton.addEventListener("click", () => {
-  wodInput.value = "";
-  imageInput.value = "";
-  imagePreview.className = "image-preview empty-preview";
-  imagePreview.textContent = "No image selected";
-  imageStatus.textContent = "Choose an image to extract workout text, or paste text below.";
-  renderWorkout({});
-  previewTitle.textContent = "No workout parsed";
-  summaryGrid.innerHTML = "";
-  notesList.innerHTML = "";
-  stationsList.className = "stations-list empty-state";
-  stationsList.textContent = "Paste a WOD, then parse it.";
+  renderEmptyState();
+  clearLocalDraft();
+  setPersistenceStatus("Local draft cleared; latest saved WOD is unchanged");
 });
 
 loadSampleButton.addEventListener("click", () => {
   wodInput.value = sampleWod;
   renderWorkout(parseWorkout(sampleWod));
+  markUnsaved("Unsaved changes");
 });
 
 addStationButton.addEventListener("click", () => {
@@ -560,6 +741,11 @@ addStationButton.addEventListener("click", () => {
     notes: "",
   });
   renderWorkout(currentWorkout);
+  markUnsaved("Draft saved locally");
+});
+
+wodInput.addEventListener("input", () => {
+  markUnsaved("Draft saved locally");
 });
 
 function moveStation(fromIndex, toIndex) {
@@ -578,6 +764,7 @@ function moveStation(fromIndex, toIndex) {
 
   currentWorkout.stations.splice(boundedToIndex, 0, station);
   renderWorkout(currentWorkout);
+  markUnsaved("Draft saved locally");
 }
 
 function setStationDropTarget(card, pointerY) {
@@ -686,6 +873,7 @@ async function handleImageFile(file) {
     wodInput.value = text;
     imageStatus.textContent = "Workout text extracted. Review it, make any quick edits, then parse again if needed.";
     renderWorkout(parseWorkout(text));
+    markUnsaved("Unsaved changes");
   } catch (error) {
     imageStatus.textContent = error.message || "Extraction failed. Paste the workout text below for now.";
   }
@@ -725,16 +913,47 @@ copyButton.addEventListener("click", async () => {
 
 saveLatestButton.addEventListener("click", async () => {
   try {
-    await saveLatestWorkout(currentWorkout);
+    const savedWorkout = await saveLatestWorkout(currentWorkout);
+    currentWorkout = normalizeWorkout(savedWorkout);
+    renderWorkout(currentWorkout);
+    hasUnsavedChanges = false;
+    lastServerWorkoutId = DraftState.workoutIdentity(currentWorkout);
+    lastServerUpdatedAt = currentWorkout.updatedAt || null;
+    saveLocalDraft("Saved for watch");
     saveLatestButton.textContent = "Saved";
   } catch (error) {
     saveLatestButton.textContent = "Save Failed";
     imageStatus.textContent = error.message || "Could not save latest WOD.";
+    setPersistenceStatus("Could not reach server - local draft preserved", "warning");
+    saveLocalDraft("Draft saved locally", "strong");
   }
 
   setTimeout(() => {
     saveLatestButton.textContent = "Save Latest WOD";
   }, 1400);
+});
+
+loadLatestButton.addEventListener("click", async () => {
+  if (
+    DraftState.shouldConfirmBeforeLoadLatest(hasUnsavedChanges) &&
+    !window.confirm("Replace your unsaved local draft with the latest saved WOD?")
+  ) {
+    return;
+  }
+
+  try {
+    const latestWorkout = await fetchLatestWorkout();
+    const choice = {
+      source: "server",
+      rawInput: latestWorkout.sourceText || "",
+      workout: latestWorkout,
+      hasUnsavedChanges: false,
+      message: "Loaded latest saved WOD",
+    };
+    applyRestoredWorkout(choice);
+  } catch (error) {
+    setPersistenceStatus(error.message || "Could not reach server - local draft preserved", "warning");
+  }
 });
 
 copyWatchButton.addEventListener("click", async () => {
@@ -885,8 +1104,6 @@ async function saveLatestWorkout(workout) {
     throw new Error(result.error || "Could not save latest WOD.");
   }
 
-  currentWorkout = normalizeWorkout(result.workout || result);
-  updateJsonOutput();
   return result.workout || result;
 }
 
@@ -992,3 +1209,5 @@ function readFileAsDataUrl(file) {
     reader.readAsDataURL(file);
   });
 }
+
+restoreInitialState();

@@ -57,6 +57,7 @@ input {
 
 .preview-actions {
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .eyebrow {
@@ -154,6 +155,20 @@ label {
   margin: 10px 0 0;
   color: var(--muted);
   font-size: 13px;
+}
+
+.draft-status {
+  margin: 12px 0 -10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.draft-status.strong {
+  color: var(--accent);
+}
+
+.draft-status.warning {
+  color: var(--red);
 }
 
 textarea {

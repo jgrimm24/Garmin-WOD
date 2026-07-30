@@ -45,11 +45,13 @@
           </div>
           <div class="preview-actions">
             <button id="addStationButton" class="ghost-button" type="button">Add Station</button>
+            <button id="loadLatestButton" class="ghost-button" type="button">Load Latest WOD</button>
             <button id="saveLatestButton" class="ghost-button" type="button">Save Latest WOD</button>
             <button id="copyWatchButton" class="ghost-button" type="button">Copy Watch Data</button>
             <button id="copyButton" class="ghost-button" type="button">Copy JSON</button>
           </div>
         </div>
+        <p id="draftStatus" class="draft-status">Empty/new state</p>
 
         <div id="summaryGrid" class="summary-grid"></div>
         <div id="notesList" class="notes-list"></div>
@@ -62,6 +64,7 @@
       </section>
     </main>
 
-    <script src="./app.js?v=amrap-duration-2"></script>
+    <script src="./draft-state.js?v=importer-draft-1"></script>
+    <script src="./app.js?v=importer-draft-1"></script>
   </body>
 </html>
