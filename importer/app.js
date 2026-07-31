@@ -221,10 +221,11 @@ function parseWorkout(text) {
     .filter(Boolean);
 
   const joined = lines.join(" ");
-  const rounds = findRounds(joined);
-  const type = inferWorkoutType(detectType(joined), rounds);
+  const classification = classifyWorkout(lines);
+  const type = classification.type;
   const durationMinutes = findWorkoutDuration(type, joined);
-  const stationLines = findStationLines(lines);
+  const durationSeconds = durationMinutes == null ? null : durationMinutes * 60;
+  const stationLines = findStationLines(lines, classification).concat(findRepSchemeInlineStationLines(lines));
   const stations = stationLines.map((line) => parseStation(line, type)).filter((station) => station.name);
   const notes = findWorkoutNotes(lines);
 
@@ -233,16 +234,80 @@ function parseWorkout(text) {
     id: makeWorkoutId(lines[0] || "today-wod", text),
     title: lines[0] || "Today's WOD",
     type,
+    workoutType: classification.workoutType,
+    structureType: classification.structureType,
     durationMinutes,
-    rounds,
+    durationSeconds,
+    rounds: classification.rounds,
+    repScheme: classification.repScheme,
+    intervalSeconds: classification.intervalSeconds,
+    parserWarnings: classification.warnings,
     stations,
     notes,
     sourceText: text.trim(),
   };
 }
 
+function classifyWorkout(lines) {
+  const joined = lines.join(" ");
+  const detectedType = detectType(joined);
+  const repScheme = detectRepScheme(lines);
+  const explicitRounds = findExplicitRounds(joined);
+  const intervalSeconds = findIntervalSeconds(joined);
+  const durationMinutes = findWorkoutDuration(detectedType, joined);
+  const warnings = [];
+  let workoutType = normalizeWorkoutTypeLabel(detectedType);
+  let structureType = "UNKNOWN";
+  let rounds = explicitRounds;
+
+  if (repScheme.length) {
+    structureType = isMonotonicRepScheme(repScheme) ? "REP_SCHEME" : "LADDER";
+    if (rounds != null && rounds !== repScheme.length) {
+      warnings.push(`Rep scheme has ${repScheme.length} rounds but workout says ${rounds} rounds.`);
+    } else {
+      rounds = repScheme.length;
+    }
+  }
+
+  if (intervalSeconds != null) {
+    workoutType = intervalSeconds === 60 ? "EMOM" : "INTERVAL";
+    structureType = "TIMED_INTERVAL";
+  } else if (/\b(?:chipper)\b/i.test(joined)) {
+    workoutType = "CHIPPER";
+    structureType = "CHIPPER";
+  } else if (workoutType === "UNKNOWN" && looksLikeStrengthWorkout(joined)) {
+    workoutType = "STRENGTH";
+    structureType = "FIXED_STATIONS";
+  } else if (structureType === "UNKNOWN" && workoutType !== "UNKNOWN") {
+    structureType = "FIXED_STATIONS";
+  }
+
+  if (workoutType === "UNKNOWN" && repScheme.length) {
+    workoutType = "FOR_TIME";
+  }
+
+  if (workoutType === "UNKNOWN" && rounds != null) {
+    workoutType = "FOR_TIME";
+    structureType = structureType === "UNKNOWN" ? "FIXED_STATIONS" : structureType;
+  }
+
+  if (intervalSeconds != null && rounds == null) {
+    rounds = findIntervalRounds(joined);
+  }
+
+  return {
+    type: displayWorkoutType(workoutType),
+    workoutType,
+    structureType,
+    rounds,
+    repScheme,
+    intervalSeconds,
+    warnings,
+  };
+}
+
 function detectType(text) {
-  if (/\bemom\b/i.test(text)) return "EMOM";
+  if (/\b(?:e\d+mom|emom|every\s+\d+\s+minutes?|every\s+minute\s+on\s+the\s+minute)\b/i.test(text)) return "EMOM";
   if (/\bamrap\b/i.test(text)) return "AMRAP";
   if (/\bfor time\b/i.test(text)) return "For Time";
   if (/\btabata\b/i.test(text)) return "Tabata";
@@ -289,6 +354,10 @@ function findWorkoutDuration(type, text) {
 }
 
 function findRounds(text) {
+  return findExplicitRounds(text);
+}
+
+function findExplicitRounds(text) {
   const cycleMatch = text.match(/x\s*(\d+)|(\d+)\s*(?:rounds|cycles)/i);
   if (cycleMatch) return Number(cycleMatch[1] || cycleMatch[2]);
 
@@ -301,14 +370,191 @@ function findRounds(text) {
   return null;
 }
 
-function findStationLines(lines) {
+function findStationLines(lines, classification = null) {
   return lines.filter((line) => {
     const normalizedLine = stripListPrefix(line);
     if (/\b(?:emom|amrap|for time|tabata)\b/i.test(normalizedLine)) return false;
     if (/^\d+\s*(?:rounds?|rds?)\b/i.test(normalizedLine)) return false;
+    if (classification && parseRepSchemeFromLine(normalizedLine).length) return false;
     if (isGenderWeightLine(normalizedLine)) return false;
     return /(^\d+[\).:-]\s*)|(^\d+\s+\D)|(\d+\s*(?:reps?|cal|cals|m|meter|meters|sec|seconds|min|minute|minutes|lb|#|@))|row|run|bike|pull|push|squat|bench|sit|clean|snatch|deadlift|burpee|wall ball|toes|thruster|double\s+unders?|box\s+jumps?|rest/i.test(normalizedLine);
   });
+}
+
+function detectRepScheme(lines) {
+  for (const line of lines) {
+    const scheme = parseRepSchemeFromLine(line);
+
+    if (scheme.length) {
+      return scheme;
+    }
+  }
+
+  return [];
+}
+
+function parseRepSchemeFromLine(line) {
+  const cleaned = stripListPrefix(line)
+    .trim();
+
+  if (/\d+\s*x\s*\d+/i.test(cleaned) || /\d+\s*:\s*\d+/.test(cleaned)) {
+    return [];
+  }
+
+  const match = cleaned.match(/^\s*(\d+(?:\s*(?:-|–|—|,|\/)\s*\d+){1,})(?:\s+(?:reps?|of|for\s+time)\b|$)/i);
+  if (!match) return [];
+
+  const normalized = match[1].replace(/[–—]/g, "-");
+  const numbers = normalized.match(/\d+/g) || [];
+  const values = numbers.map(Number);
+
+  if (values.length < 2 || values.some((value) => value <= 0 || value > 100)) {
+    return [];
+  }
+
+  return values;
+}
+
+function isRepSchemeLine(line) {
+  const trimmed = line.trim();
+
+  if (!trimmed) return false;
+  if (/\d+\s*x\s*\d+/i.test(trimmed)) return false;
+  if (/\d+\s*:\s*\d+/.test(trimmed)) return false;
+  if (/\b(?:lb|lbs|#|m|meter|meters|cal|cals|sec|secs|second|seconds|min|minute|minutes)\b/i.test(trimmed)) return false;
+  if (/^\d+\s+(?:rounds?|rds?|cycles?)\b/i.test(trimmed)) return false;
+  if (/^\d{4}\b/.test(trimmed)) return false;
+
+  const candidate = trimmed.replace(/\b(?:for\s+time|reps?|of)\b/gi, " ").trim();
+  if (!/^\d+(?:\s*(?:-|–|—|,|\/)\s*\d+){1,}(?:\s*)$/.test(candidate)) return false;
+
+  return true;
+}
+
+function findRepSchemeInlineStationLines(lines) {
+  const stationLines = [];
+
+  for (const line of lines) {
+    const cleaned = stripListPrefix(line);
+    const match = cleaned.match(/^\s*\d+(?:\s*(?:-|–|—|,|\/)\s*\d+){1,}\s+(?:reps?\s+)?(?:of\s+)?(.+)$/i);
+    if (!match) continue;
+
+    const movementText = match[1].replace(/\bfor\s+time\b/gi, "").trim();
+    if (!movementText || isRepSchemeLine(movementText)) continue;
+
+    movementText
+      .split(/\s+(?:and|then)\s+|[,/]/i)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((part) => stationLines.push(part));
+  }
+
+  return stationLines;
+}
+
+function isMonotonicRepScheme(values) {
+  let ascending = true;
+  let descending = true;
+
+  for (let i = 1; i < values.length; i += 1) {
+    if (values[i] <= values[i - 1]) ascending = false;
+    if (values[i] >= values[i - 1]) descending = false;
+  }
+
+  return ascending || descending;
+}
+
+function findIntervalSeconds(text) {
+  const eMomMatch = text.match(/\be\s*(\d+)\s*mom\b/i);
+  if (eMomMatch) return Number(eMomMatch[1]) * 60;
+
+  if (/\bevery\s+minute\s+on\s+the\s+minute\b/i.test(text) || /\bemom\b/i.test(text)) {
+    return 60;
+  }
+
+  const everyMinutesMatch = text.match(/\bevery\s+(\d+)\s+(?:min|minute|minutes)\b/i);
+  if (everyMinutesMatch) return Number(everyMinutesMatch[1]) * 60;
+
+  return null;
+}
+
+function findIntervalRounds(text) {
+  const match = text.match(/\bx\s*(\d+)\b/i) || text.match(/\bfor\s+(\d+)\s+rounds?\b/i);
+  return match ? Number(match[1]) : null;
+}
+
+function looksLikeStrengthWorkout(text) {
+  return /\b\d+\s*x\s*\d+\b/i.test(text) || /\b(?:strength|heavy|build\s+to|sets?)\b/i.test(text);
+}
+
+function normalizeWorkoutTypeLabel(type) {
+  const normalized = String(type || "Unknown").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  const values = {
+    FOR_TIME: true,
+    AMRAP: true,
+    EMOM: true,
+    INTERVAL: true,
+    STRENGTH: true,
+    CHIPPER: true,
+    UNKNOWN: true,
+  };
+
+  return values[normalized] ? normalized : "UNKNOWN";
+}
+
+function normalizeStructureType(type) {
+  const normalized = String(type || "Unknown").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  const values = {
+    FIXED_STATIONS: true,
+    REP_SCHEME: true,
+    TIMED_INTERVAL: true,
+    LADDER: true,
+    CHIPPER: true,
+    UNKNOWN: true,
+  };
+
+  return values[normalized] ? normalized : "UNKNOWN";
+}
+
+function displayWorkoutType(workoutType) {
+  const labels = {
+    FOR_TIME: "For Time",
+    AMRAP: "AMRAP",
+    EMOM: "EMOM",
+    INTERVAL: "Interval",
+    STRENGTH: "Strength",
+    CHIPPER: "Chipper",
+    UNKNOWN: "Unknown",
+  };
+
+  return labels[workoutType] || "Unknown";
+}
+
+function normalizeRepScheme(value) {
+  if (Array.isArray(value)) {
+    return value.map(Number).filter((number) => Number.isInteger(number) && number > 0);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(/[,\-/–—\s]+/)
+      .map((part) => Number(part.trim()))
+      .filter((number) => Number.isInteger(number) && number > 0);
+  }
+
+  return [];
+}
+
+function formatRepSchemeInput(repScheme) {
+  return normalizeRepScheme(repScheme).join(", ");
+}
+
+function normalizeSummaryField(field, value) {
+  if (field === "type") return value;
+  if (field === "workoutType") return normalizeWorkoutTypeLabel(value);
+  if (field === "structureType") return normalizeStructureType(value);
+  if (field === "repScheme") return normalizeRepScheme(value);
+  return numberOrNull(value);
 }
 
 function findWorkoutNotes(lines) {
@@ -442,7 +688,19 @@ function renderWorkout(workout) {
     <label class="summary-item">
       <span>Type</span>
       <select data-summary-field="type">
-        ${["Unknown", "EMOM", "AMRAP", "For Time", "Tabata"].map((type) => `<option value="${type}" ${type === currentWorkout.type ? "selected" : ""}>${type}</option>`).join("")}
+        ${["Unknown", "EMOM", "AMRAP", "For Time", "Interval", "Strength", "Chipper", "Tabata"].map((type) => `<option value="${type}" ${type === currentWorkout.type ? "selected" : ""}>${type}</option>`).join("")}
+      </select>
+    </label>
+    <label class="summary-item">
+      <span>Workout Type</span>
+      <select data-summary-field="workoutType">
+        ${["UNKNOWN", "FOR_TIME", "AMRAP", "EMOM", "INTERVAL", "STRENGTH", "CHIPPER"].map((type) => `<option value="${type}" ${type === currentWorkout.workoutType ? "selected" : ""}>${type.replace("_", " ")}</option>`).join("")}
+      </select>
+    </label>
+    <label class="summary-item">
+      <span>Structure</span>
+      <select data-summary-field="structureType">
+        ${["UNKNOWN", "FIXED_STATIONS", "REP_SCHEME", "TIMED_INTERVAL", "LADDER", "CHIPPER"].map((type) => `<option value="${type}" ${type === currentWorkout.structureType ? "selected" : ""}>${type.replace("_", " ")}</option>`).join("")}
       </select>
     </label>
     <label class="summary-item">
@@ -450,8 +708,16 @@ function renderWorkout(workout) {
       <input data-summary-field="durationMinutes" type="number" min="0" placeholder="${currentWorkout.type === "For Time" ? "None" : "Minutes"}" value="${numberValue(currentWorkout.durationMinutes)}" />
     </label>
     <label class="summary-item">
+      <span>Interval Seconds</span>
+      <input data-summary-field="intervalSeconds" type="number" min="0" placeholder="None" value="${numberValue(currentWorkout.intervalSeconds)}" />
+    </label>
+    <label class="summary-item">
       <span>Rounds</span>
       <input data-summary-field="rounds" type="number" min="0" placeholder="Unknown" value="${numberValue(currentWorkout.rounds)}" />
+    </label>
+    <label class="summary-item">
+      <span>Rep Scheme</span>
+      <input data-summary-field="repScheme" type="text" placeholder="21, 15, 9" value="${escapeAttr(formatRepSchemeInput(currentWorkout.repScheme))}" />
     </label>
     <div class="summary-item">
       <span>Stations</span>
@@ -525,14 +791,23 @@ function formatStationPrimary(type, station) {
 function normalizeWorkout(workout) {
   const sourceText = workout.sourceText || "";
   const title = workout.title || "Today's WOD";
+  const workoutType = normalizeWorkoutTypeLabel(workout.workoutType || workout.type || "Unknown");
+  const structureType = normalizeStructureType(workout.structureType);
+  const durationMinutes = numberOrNull(workout.durationMinutes);
 
   return {
     schemaVersion: 1,
     id: workout.id || makeWorkoutId(title, sourceText),
     title,
-    type: workout.type || "Unknown",
-    durationMinutes: workout.durationMinutes || null,
-    rounds: workout.rounds || null,
+    type: workout.type || displayWorkoutType(workoutType),
+    workoutType,
+    structureType,
+    durationMinutes,
+    durationSeconds: numberOrNull(workout.durationSeconds) || (durationMinutes == null ? null : durationMinutes * 60),
+    rounds: numberOrNull(workout.rounds),
+    repScheme: normalizeRepScheme(workout.repScheme),
+    intervalSeconds: numberOrNull(workout.intervalSeconds),
+    parserWarnings: Array.isArray(workout.parserWarnings) ? workout.parserWarnings.map(String) : [],
     stations: Array.isArray(workout.stations) ? workout.stations.map(normalizeStation) : [],
     notes: Array.isArray(workout.notes) ? workout.notes : [],
     sourceText,
@@ -592,16 +867,17 @@ function updateJsonOutput() {
 
 function renderNotes() {
   const notes = currentWorkout.notes || [];
+  const warnings = currentWorkout.parserWarnings || [];
 
-  if (!notes.length) {
+  if (!notes.length && !warnings.length) {
     notesList.innerHTML = "";
     return;
   }
 
   notesList.innerHTML = `
     <div class="notes-card">
-      <span>Notes</span>
-      <strong>${notes.map(escapeHtml).join(" · ")}</strong>
+      <span>${warnings.length ? "Warnings" : "Notes"}</span>
+      <strong>${[...warnings, ...notes].map(escapeHtml).join(" · ")}</strong>
     </div>
   `;
 }
@@ -610,7 +886,10 @@ summaryGrid.addEventListener("input", (event) => {
   const field = event.target.dataset.summaryField;
   if (!field) return;
 
-  currentWorkout[field] = field === "type" ? event.target.value : numberOrNull(event.target.value);
+  currentWorkout[field] = normalizeSummaryField(field, event.target.value);
+  if (field === "workoutType") {
+    currentWorkout.type = displayWorkoutType(currentWorkout.workoutType);
+  }
   updateJsonOutput();
   markUnsaved("Draft saved locally");
 });
@@ -619,7 +898,12 @@ summaryGrid.addEventListener("change", (event) => {
   const field = event.target.dataset.summaryField;
   if (!field) return;
 
-  currentWorkout[field] = field === "type" ? event.target.value : numberOrNull(event.target.value);
+  currentWorkout[field] = normalizeSummaryField(field, event.target.value);
+  if (field === "workoutType") {
+    currentWorkout.type = displayWorkoutType(currentWorkout.workoutType);
+  } else if (field === "type") {
+    currentWorkout.workoutType = normalizeWorkoutTypeLabel(event.target.value);
+  }
   renderWorkout(currentWorkout);
   markUnsaved("Draft saved locally");
 });
@@ -971,8 +1255,13 @@ function toMonkeyCWorkout(workout) {
   return `class GarminWODWorkout {
     var title;
     var workoutType;
+    var workoutTypeCode;
+    var structureType;
     var durationMinutes;
+    var durationSeconds;
     var rounds;
+    var repScheme;
+    var intervalSeconds;
     var stationNames;
     var stationReps;
     var stationSeconds;
@@ -983,8 +1272,13 @@ function toMonkeyCWorkout(workout) {
     function initialize() {
         title = ${toMonkeyCString(normalized.title)};
         workoutType = ${toMonkeyCString(normalized.type)};
+        workoutTypeCode = ${toMonkeyCString(normalized.workoutType)};
+        structureType = ${toMonkeyCString(normalized.structureType)};
         durationMinutes = ${toMonkeyCValue(normalized.durationMinutes)};
+        durationSeconds = ${toMonkeyCValue(normalized.durationSeconds)};
         rounds = ${toMonkeyCValue(normalized.rounds)};
+        repScheme = ${toMonkeyCArray(normalized.repScheme)};
+        intervalSeconds = ${toMonkeyCValue(normalized.intervalSeconds)};
         stationNames = ${toMonkeyCArray(stations.map((station) => station.name))};
         stationReps = ${toMonkeyCArray(stations.map((station) => station.reps))};
         stationSeconds = ${toMonkeyCArray(stations.map((station) => station.workSeconds))};
@@ -998,6 +1292,10 @@ function toMonkeyCWorkout(workout) {
     }
 
     function getTotalSeconds() {
+        if (durationSeconds != null) {
+            return durationSeconds;
+        }
+
         if (durationMinutes == null) {
             return null;
         }
@@ -1005,13 +1303,45 @@ function toMonkeyCWorkout(workout) {
         return durationMinutes * 60;
     }
 
+    function isForTime() {
+        return workoutTypeCode.equals("FOR_TIME") || workoutType.equals("For Time") || workoutType.equals("FOR TIME");
+    }
+
+    function isEmom() {
+        return workoutTypeCode.equals("EMOM") || workoutType.equals("EMOM") || workoutType.equals("Emom");
+    }
+
+    function isAmrap() {
+        return workoutTypeCode.equals("AMRAP") || workoutType.equals("AMRAP") || workoutType.equals("Amrap");
+    }
+
+    function isInterval() {
+        return workoutTypeCode.equals("INTERVAL") || structureType.equals("TIMED_INTERVAL");
+    }
+
+    function isManualStationWorkout() {
+        return !isEmom();
+    }
+
     function getHeader(roundNumber) {
-        if (workoutType == "For Time") {
+        if (isForTime()) {
             if (rounds == null) {
                 return "FOR TIME";
             }
 
             return rounds + " RFT";
+        }
+
+        if (isAmrap()) {
+            return durationMinutes == null ? "AMRAP" : "AMRAP " + durationMinutes;
+        }
+
+        if (isInterval()) {
+            if (rounds == null) {
+                return "INTERVAL";
+            }
+
+            return "R" + roundNumber + "/" + rounds;
         }
 
         if (rounds == null) {
@@ -1047,6 +1377,64 @@ function toMonkeyCWorkout(workout) {
         return name;
     }
 
+    function getScoreboardMovementText(index, roundNumber) {
+        var prefix = getEssentialPrescription(index, roundNumber);
+        var name = stationNames[index];
+
+        if (prefix == null || startsWithNormalizedPrescription(name, prefix)) {
+            return name;
+        }
+
+        return prefix + " " + name;
+    }
+
+    function getEssentialPrescription(index, roundNumber) {
+        if (repScheme != null && repScheme.size() > 0 && roundNumber != null) {
+            var schemeIndex = roundNumber - 1;
+
+            if (schemeIndex >= 0 && schemeIndex < repScheme.size()) {
+                return "" + repScheme[schemeIndex];
+            }
+        }
+
+        if (stationReps[index] != null) {
+            return "" + stationReps[index];
+        }
+
+        if (stationMeters[index] != null) {
+            return "" + stationMeters[index] + "M";
+        }
+
+        if (stationCalories[index] != null) {
+            return "" + stationCalories[index] + " CAL";
+        }
+
+        if (stationSeconds[index] != null) {
+            return "" + stationSeconds[index] + " SEC";
+        }
+
+        return null;
+    }
+
+    function startsWithNormalizedPrescription(name, prefix) {
+        var normalizedName = ("" + name).toUpper();
+        var normalizedPrefix = ("" + prefix).toUpper();
+
+        return normalizedName.find(normalizedPrefix) == 0;
+    }
+
+    function getWorkoutLayoutMode() {
+        if (isInterval() || isEmom()) {
+            return "INTERVAL";
+        }
+
+        if (workoutTypeCode.equals("STRENGTH")) {
+            return "STRENGTH";
+        }
+
+        return "STANDARD";
+    }
+
     function getStationWorkSeconds(index) {
         return stationSeconds[index];
     }
@@ -1062,8 +1450,14 @@ function toWorkoutContract(workout) {
     id: normalized.id,
     title: normalized.title,
     type: normalized.type,
+    workoutType: normalized.workoutType,
+    structureType: normalized.structureType,
     durationMinutes: normalized.durationMinutes,
+    durationSeconds: normalized.durationSeconds,
     rounds: normalized.rounds,
+    repScheme: normalized.repScheme,
+    intervalSeconds: normalized.intervalSeconds,
+    parserWarnings: normalized.parserWarnings,
     notes: normalized.notes,
     sourceText: normalized.sourceText,
     createdAt: normalized.createdAt || updatedAt,

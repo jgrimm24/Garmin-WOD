@@ -456,6 +456,76 @@ expect(decodedLatest.stations[1].femaleWeightLb == 95, "latest fixture should pr
 expect(decodedLatest.stations[1].weightLb == 135, "latest fixture should preserve compatibility weight")
 expect(decodedLatest.stations[0].distanceMeters == 200, "latest fixture should decode meters into distanceMeters")
 
+let extendedWorkoutData = """
+{
+  "schemaVersion": 1,
+  "id": "extended",
+  "title": "E9MOM",
+  "type": "Interval",
+  "workoutType": "INTERVAL",
+  "structureType": "TIMED_INTERVAL",
+  "durationMinutes": null,
+  "durationSeconds": null,
+  "rounds": 5,
+  "repScheme": [21, 15, 9],
+  "intervalSeconds": 540,
+  "parserWarnings": [],
+  "notes": [],
+  "sourceText": "E9MOM x5",
+  "stations": [
+    {
+      "id": "station-1",
+      "name": "Run",
+      "reps": null,
+      "calories": null,
+      "meters": 1000,
+      "weightLb": null,
+      "maleWeightLb": null,
+      "femaleWeightLb": null,
+      "workSeconds": null,
+      "notes": "1000 m Run"
+    }
+  ]
+}
+""".data(using: .utf8)!
+let extendedWorkout = try JSONDecoder().decode(WorkoutContract.self, from: extendedWorkoutData)
+expect(extendedWorkout.workoutType == .interval, "optional workoutType should decode")
+expect(extendedWorkout.structureType == .timedInterval, "optional structureType should decode")
+expect(extendedWorkout.repScheme == [21, 15, 9], "optional repScheme should decode")
+expect(extendedWorkout.intervalSeconds == 540, "optional intervalSeconds should decode")
+
+let unknownClassificationData = """
+{
+  "schemaVersion": 1,
+  "id": "unknown-classification",
+  "title": "Future",
+  "type": "Future Type",
+  "workoutType": "FUTURE_TYPE",
+  "structureType": "FUTURE_STRUCTURE",
+  "durationMinutes": null,
+  "rounds": null,
+  "notes": [],
+  "sourceText": "Future",
+  "stations": [
+    {
+      "id": "station-1",
+      "name": "Burpees",
+      "reps": 10,
+      "calories": null,
+      "meters": null,
+      "weightLb": null,
+      "maleWeightLb": null,
+      "femaleWeightLb": null,
+      "workSeconds": null
+    }
+  ]
+}
+""".data(using: .utf8)!
+let unknownClassificationWorkout = try JSONDecoder().decode(WorkoutContract.self, from: unknownClassificationData)
+expect(unknownClassificationWorkout.type == .unknown, "unknown display type should decode safely")
+expect(unknownClassificationWorkout.workoutType == .unknown, "unknown workoutType should decode safely")
+expect(unknownClassificationWorkout.structureType == .unknown, "unknown structureType should decode safely")
+
 do {
     _ = try WorkoutAPIClient.decodeLatestWorkoutResponse(data: Data("{".utf8), statusCode: 200)
     expect(false, "malformed JSON should be rejected")

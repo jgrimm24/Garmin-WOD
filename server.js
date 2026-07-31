@@ -327,8 +327,14 @@ function normalizeWorkoutContract(workout) {
     id: String(workout.id || makeWorkoutId(title, sourceText)),
     title,
     type: normalizeWorkoutType(workout.type),
+    workoutType: normalizeWorkoutTypeCode(workout.workoutType || workout.type),
+    structureType: normalizeStructureType(workout.structureType),
     durationMinutes: numberOrNull(workout.durationMinutes),
+    durationSeconds: numberOrNull(workout.durationSeconds),
     rounds: numberOrNull(workout.rounds),
+    repScheme: normalizeRepScheme(workout.repScheme),
+    intervalSeconds: numberOrNull(workout.intervalSeconds),
+    parserWarnings: Array.isArray(workout.parserWarnings) ? workout.parserWarnings.map(String) : [],
     notes: Array.isArray(workout.notes) ? workout.notes.map(String) : [],
     sourceText,
     createdAt: String(workout.createdAt || now),
@@ -359,9 +365,49 @@ function normalizeWorkoutType(type) {
     AMRAP: true,
     "For Time": true,
     Tabata: true,
+    Interval: true,
+    Strength: true,
+    Chipper: true,
   };
 
   return allowedTypes[type] ? type : "Unknown";
+}
+
+function normalizeWorkoutTypeCode(type) {
+  const normalized = String(type || "Unknown").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  const allowedTypes = {
+    UNKNOWN: true,
+    EMOM: true,
+    AMRAP: true,
+    FOR_TIME: true,
+    INTERVAL: true,
+    STRENGTH: true,
+    CHIPPER: true,
+  };
+
+  return allowedTypes[normalized] ? normalized : "UNKNOWN";
+}
+
+function normalizeStructureType(type) {
+  const normalized = String(type || "Unknown").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  const allowedTypes = {
+    UNKNOWN: true,
+    FIXED_STATIONS: true,
+    REP_SCHEME: true,
+    TIMED_INTERVAL: true,
+    LADDER: true,
+    CHIPPER: true,
+  };
+
+  return allowedTypes[normalized] ? normalized : "UNKNOWN";
+}
+
+function normalizeRepScheme(value) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map(Number)
+    .filter((number) => Number.isInteger(number) && number > 0);
 }
 
 function normalizeWorkoutSessionState(input, nowMs = Date.now()) {

@@ -7,6 +7,45 @@ enum WorkoutType: String, Codable, CaseIterable {
     case emom = "EMOM"
     case tabata = "Tabata"
     case interval = "Interval"
+    case strength = "Strength"
+    case chipper = "Chipper"
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        self = WorkoutType(rawValue: value) ?? .unknown
+    }
+}
+
+enum WorkoutTypeCode: String, Codable {
+    case unknown = "UNKNOWN"
+    case forTime = "FOR_TIME"
+    case amrap = "AMRAP"
+    case emom = "EMOM"
+    case interval = "INTERVAL"
+    case strength = "STRENGTH"
+    case chipper = "CHIPPER"
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        self = WorkoutTypeCode(rawValue: value) ?? .unknown
+    }
+}
+
+enum WorkoutStructureType: String, Codable {
+    case unknown = "UNKNOWN"
+    case fixedStations = "FIXED_STATIONS"
+    case repScheme = "REP_SCHEME"
+    case timedInterval = "TIMED_INTERVAL"
+    case ladder = "LADDER"
+    case chipper = "CHIPPER"
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        self = WorkoutStructureType(rawValue: value) ?? .unknown
+    }
 }
 
 enum WorkoutStatus: String {
@@ -71,11 +110,17 @@ struct WorkoutContract: Codable, Identifiable {
     var id: String
     var title: String
     var type: WorkoutType
+    var workoutType: WorkoutTypeCode? = nil
+    var structureType: WorkoutStructureType? = nil
     var durationMinutes: Int?
+    var durationSeconds: Int? = nil
     var rounds: Int?
+    var repScheme: [Int]? = nil
+    var intervalSeconds: Int? = nil
     var stations: [WorkoutStation]
     var notes: [String]
     var sourceText: String
+    var parserWarnings: [String]? = nil
     var createdAt: String? = nil
     var updatedAt: String? = nil
 }
@@ -224,7 +269,8 @@ extension WorkoutContract {
     }
 
     private var syncFingerprint: String {
-        var fingerprint = "\(type.rawValue)|\(syncValue(durationMinutes))|\(syncValue(rounds))"
+        var fingerprint = "\(type.rawValue)|\(syncValue(workoutType?.rawValue))|\(syncValue(structureType?.rawValue))|\(syncValue(durationMinutes))|\(syncValue(durationSeconds))|\(syncValue(rounds))|\(syncValue(intervalSeconds))"
+        fingerprint += "|scheme:\((repScheme ?? []).map(String.init).joined(separator: ","))"
         fingerprint += "|count:\(stations.count)"
 
         for station in stations {

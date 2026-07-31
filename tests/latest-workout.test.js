@@ -15,6 +15,12 @@ function latestWorkout(overrides = {}) {
     rounds: 4,
     notes: [],
     sourceText: "Roney\n4 rounds for time",
+    workoutType: "FOR_TIME",
+    structureType: "FIXED_STATIONS",
+    durationSeconds: null,
+    repScheme: [],
+    intervalSeconds: null,
+    parserWarnings: [],
     createdAt: "2026-07-30T12:00:00.000Z",
     updatedAt: "2026-07-30T12:00:00.000Z",
     stations: [
@@ -120,14 +126,18 @@ async function run() {
       });
       assert.equal(response.status, 200, "latest WOD save should succeed");
       assert.equal(response.body.workout.title, "Roney");
+      assert.equal(response.body.workout.workoutType, "FOR_TIME");
+      assert.equal(response.body.workout.structureType, "FIXED_STATIONS");
 
       response = await requestJson(baseUrl, "/api/latest-workout");
       assert.equal(response.status, 200, "first latest WOD GET should succeed");
       assert.equal(response.body.title, "Roney");
+      assert.equal(response.body.workoutType, "FOR_TIME");
 
       response = await requestJson(baseUrl, "/api/latest-workout");
       assert.equal(response.status, 200, "second latest WOD GET should still succeed");
       assert.equal(response.body.title, "Roney");
+      assert.deepStrictEqual(response.body.repScheme, [], "repeated GET should preserve optional schema fields");
 
       const savedFile = JSON.parse(await fs.promises.readFile(LATEST_WORKOUT_PATH, "utf8"));
       assert.equal(savedFile.title, "Roney", "latest-workout.json should remain on disk after repeated GETs");
