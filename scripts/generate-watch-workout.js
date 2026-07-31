@@ -234,6 +234,14 @@ function renderWorkoutClass(workout) {
         return name;
     }
 
+    function getScoreboardMovementName(index) {
+        if (!hasValidStationIndex(index)) {
+            return "NO WORKOUT";
+        }
+
+        return stationNames[index];
+    }
+
     function getStationWorkSeconds(index) {
         if (!hasValidStationIndex(index)) {
             return null;

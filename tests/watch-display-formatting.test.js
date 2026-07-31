@@ -58,13 +58,22 @@ function isUnitDisplayWord(word) {
 }
 
 function previewStationText({ name, reps, calories, meters }) {
-  let preview = name;
+  return scoreboardMovementName({ name, reps, calories, meters });
+}
 
-  if (meters != null) preview = `${meters}m ${preview}`;
-  if (calories != null) preview = `${calories} cal ${preview}`;
-  if (reps != null) preview = `${reps} ${preview}`;
+function stationText({ name, reps, calories, meters, weight }) {
+  let text = name;
 
-  return preview;
+  if (meters != null) text = `${meters}m ${text}`;
+  if (calories != null) text = `${calories} cal ${text}`;
+  if (reps != null) text = `${reps} ${text}`;
+  if (weight != null) text = `${text} @${weight}`;
+
+  return text;
+}
+
+function scoreboardMovementName({ name }) {
+  return name;
 }
 
 function usefulDetail({ stationText, reps, calories, meters, weight, seconds }) {
@@ -87,7 +96,7 @@ function controlHint({ running, elapsedBeforePause }) {
 }
 
 function liveHeartRateText(heartRate) {
-  return heartRate == null ? "-- ♥" : `${heartRate} ♥`;
+  return heartRate == null ? "--" : `${heartRate}`;
 }
 
 function sourceVisible({ running, elapsedBeforePause }) {
@@ -141,17 +150,57 @@ function run() {
   assert.strictEqual(currentFont(movementLines("20 Cal Row")), "medium");
   assert.strictEqual(nextFont(movementLines("20 Cal Row")), "xtiny");
   assert.strictEqual(
-    previewStationText({ name: "Thruster", reps: 15, weight: 95 }),
-    "15 Thruster",
-    "next preview should omit programmed weight"
+    stationText({ name: "Bench Press", reps: 10, weight: 135 }),
+    "10 Bench Press @135",
+    "fully composed station text should remain available outside the scoreboard"
+  );
+
+  assert.strictEqual(
+    scoreboardMovementName({ name: "BENCH PRESS", reps: 10 }),
+    "BENCH PRESS",
+    "scoreboard current should omit reps"
+  );
+
+  assert.strictEqual(
+    scoreboardMovementName({ name: "BENCH PRESS", weight: 135 }),
+    "BENCH PRESS",
+    "scoreboard current should omit weight"
+  );
+
+  assert.strictEqual(
+    previewStationText({ name: "BOX JUMPS", reps: 12 }),
+    "BOX JUMPS",
+    "scoreboard next should omit reps"
+  );
+
+  assert.strictEqual(
+    scoreboardMovementName({ name: "ROW", meters: 500 }),
+    "ROW",
+    "scoreboard current should omit meters"
+  );
+
+  assert.strictEqual(
+    previewStationText({ name: "BIKE", calories: 20 }),
+    "BIKE",
+    "scoreboard next should omit calories"
   );
 
   assert.strictEqual(sourceVisible({ running: true, elapsedBeforePause: 0 }), false);
   assert.strictEqual(controlHint({ running: true, elapsedBeforePause: 0 }), null);
   assert.strictEqual(controlHint({ running: false, elapsedBeforePause: 12 }), "START resume");
   assert.strictEqual(controlHint({ running: false, elapsedBeforePause: 0 }), "START start");
-  assert.strictEqual(liveHeartRateText(156), "156 ♥");
-  assert.strictEqual(liveHeartRateText(null), "-- ♥");
+  assert.strictEqual(liveHeartRateText(156), "156");
+  assert.strictEqual(liveHeartRateText(null), "--");
+
+  const station = {
+    name: "BENCH PRESS",
+    reps: 10,
+    calories: null,
+    meters: null,
+    weight: 135,
+  };
+  assert.strictEqual(station.reps, 10, "reps should remain in the underlying station data");
+  assert.strictEqual(station.weight, 135, "weight should remain in the underlying station data");
 }
 
 run();

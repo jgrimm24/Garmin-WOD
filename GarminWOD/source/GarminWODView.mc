@@ -784,7 +784,7 @@ class GarminWODView extends WatchUi.View {
     }
 
     function drawActiveWorkoutScoreboard(dc, width, height, stationIndex, roundNumber, elapsed, remaining, secondInStation) as Void {
-        var currentText = _workout.getStationText(stationIndex);
+        var currentText = _workout.getScoreboardMovementName(stationIndex);
         var currentLines = getMovementDisplayLines(currentText);
         var nextText = getNextMovementText(stationIndex);
         var nextLines = getMovementDisplayLines(nextText);
@@ -809,7 +809,7 @@ class GarminWODView extends WatchUi.View {
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawText(width * 20 / 100, topY, Graphics.FONT_XTINY, getCompactRoundText(roundNumber), Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(width * 50 / 100, topY, Graphics.FONT_XTINY, getCompactWorkoutTimeText(elapsed, remaining, stationIndex, secondInStation), Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(width * 82 / 100, topY, Graphics.FONT_XTINY, getLiveHeartRateText(), Graphics.TEXT_JUSTIFY_CENTER);
+        drawLiveHeartRate(dc, width, topY);
 
         if (!_isRunning && _elapsedBeforePause > 0) {
             dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
@@ -883,10 +883,38 @@ class GarminWODView extends WatchUi.View {
         var heartRate = getCurrentHeartRate();
 
         if (heartRate == null) {
-            return "-- ♥";
+            return "--";
         }
 
-        return heartRate + " ♥";
+        return "" + heartRate;
+    }
+
+    function drawLiveHeartRate(dc, width, y) as Void {
+        var unit = width / 140;
+        if (unit < 1) {
+            unit = 1;
+        }
+
+        var heartWidth = unit * 7;
+        var gap = width / 100;
+        if (gap < 2) {
+            gap = 2;
+        }
+
+        var rightEdge = width * 75 / 100;
+        var textRight = rightEdge - heartWidth - gap;
+        dc.drawText(textRight, y, Graphics.FONT_XTINY, getLiveHeartRateText(), Graphics.TEXT_JUSTIFY_RIGHT);
+        drawPixelHeart(dc, rightEdge - heartWidth, y + unit, unit);
+    }
+
+    function drawPixelHeart(dc, left, top, unit) as Void {
+        dc.fillRectangle(left + unit, top, unit * 2, unit);
+        dc.fillRectangle(left + (unit * 4), top, unit * 2, unit);
+        dc.fillRectangle(left, top + unit, unit * 7, unit);
+        dc.fillRectangle(left, top + (unit * 2), unit * 7, unit);
+        dc.fillRectangle(left + unit, top + (unit * 3), unit * 5, unit);
+        dc.fillRectangle(left + (unit * 2), top + (unit * 4), unit * 3, unit);
+        dc.fillRectangle(left + (unit * 3), top + (unit * 5), unit, unit);
     }
 
     function getActiveControlHintText() {
@@ -918,24 +946,7 @@ class GarminWODView extends WatchUi.View {
             return "NO WORKOUT";
         }
 
-        var name = _workout.stationNames[stationIndex];
-        var reps = _workout.stationReps[stationIndex];
-        var calories = _workout.stationCalories[stationIndex];
-        var meters = _workout.stationMeters[stationIndex];
-
-        if (meters != null) {
-            name = "" + meters + "m " + name;
-        }
-
-        if (calories != null) {
-            name = calories + " cal " + name;
-        }
-
-        if (reps != null) {
-            name = "" + reps + " " + name;
-        }
-
-        return name;
+        return _workout.getScoreboardMovementName(stationIndex);
     }
 
     function getMovementDisplayLines(text) {
@@ -1122,13 +1133,7 @@ class GarminWODView extends WatchUi.View {
     }
 
     function getCurrentMovementDetail(stationIndex) {
-        var distanceText = getDistanceProgressText(stationIndex);
-
-        if (distanceText != null) {
-            return distanceText;
-        }
-
-        return getUsefulStationDetail(stationIndex);
+        return null;
     }
 
     function getUsefulStationDetail(stationIndex) {
