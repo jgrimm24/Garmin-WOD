@@ -15,11 +15,17 @@ fs.writeFileSync(outputPath, source, "utf8");
 console.log(`Generated ${path.relative(ROOT, outputPath)} from ${path.relative(ROOT, inputPath)}`);
 
 function normalizeWorkout(workout) {
+  const durationMinutes = numberOrNull(workout.durationMinutes);
   return {
     title: stringOrDefault(workout.title, "Today's WOD"),
     type: stringOrDefault(workout.type, "Unknown"),
-    durationMinutes: numberOrNull(workout.durationMinutes),
+    workoutType: normalizeWorkoutTypeCode(workout.workoutType || workout.type),
+    structureType: normalizeStructureType(workout.structureType),
+    durationMinutes,
+    durationSeconds: numberOrNull(workout.durationSeconds) || (durationMinutes == null ? null : durationMinutes * 60),
     rounds: numberOrNull(workout.rounds),
+    repScheme: normalizeRepScheme(workout.repScheme),
+    intervalSeconds: numberOrNull(workout.intervalSeconds),
     stations: Array.isArray(workout.stations) ? workout.stations.map(normalizeStation) : [],
   };
 }
@@ -46,8 +52,13 @@ function renderWorkoutClass(workout) {
   return `class GarminWODWorkout {
     var title;
     var workoutType;
+    var workoutTypeCode;
+    var structureType;
     var durationMinutes;
+    var durationSeconds;
     var rounds;
+    var repScheme;
+    var intervalSeconds;
     var stationNames;
     var stationReps;
     var stationSeconds;
@@ -59,8 +70,13 @@ function renderWorkoutClass(workout) {
     function initialize() {
         title = "NO WORKOUT LOADED";
         workoutType = "Unknown";
+        workoutTypeCode = "UNKNOWN";
+        structureType = "UNKNOWN";
         durationMinutes = null;
+        durationSeconds = null;
         rounds = null;
+        repScheme = [];
+        intervalSeconds = null;
         stationNames = [];
         stationReps = [];
         stationSeconds = [];
@@ -107,8 +123,13 @@ function renderWorkoutClass(workout) {
 
         title = getContractString(data, "title", "Workout");
         workoutType = getContractString(data, "type", "Unknown");
+        workoutTypeCode = getContractString(data, "workoutType", normalizeWorkoutTypeCode(workoutType));
+        structureType = getContractString(data, "structureType", "UNKNOWN");
         durationMinutes = getContractValue(data, "durationMinutes", null);
+        durationSeconds = getContractValue(data, "durationSeconds", null);
         rounds = getContractValue(data, "rounds", null);
+        repScheme = getContractArray(data, "repScheme");
+        intervalSeconds = getContractValue(data, "intervalSeconds", null);
         stationNames = parsedNames;
         stationReps = parsedReps;
         stationSeconds = parsedSeconds;
@@ -140,6 +161,30 @@ function renderWorkoutClass(workout) {
         return "" + value;
     }
 
+    function getContractArray(data, key) {
+        var value = data[key];
+
+        if (value == null) {
+            return [];
+        }
+
+        return value;
+    }
+
+    function normalizeWorkoutTypeCode(value) {
+        var normalized = ("" + value).toUpper();
+
+        if (normalized.equals("FOR TIME")) {
+            return "FOR_TIME";
+        }
+
+        if (normalized.equals("AMRAP") || normalized.equals("EMOM") || normalized.equals("INTERVAL") || normalized.equals("STRENGTH") || normalized.equals("CHIPPER")) {
+            return normalized;
+        }
+
+        return "UNKNOWN";
+    }
+
     function getStationCount() {
         return stationNames.size();
     }
@@ -149,7 +194,15 @@ function renderWorkoutClass(workout) {
     }
 
     function getTotalSeconds() {
-        if (!hasWorkout() || durationMinutes == null) {
+        if (!hasWorkout()) {
+            return null;
+        }
+
+        if (durationSeconds != null) {
+            return durationSeconds;
+        }
+
+        if (durationMinutes == null) {
             return null;
         }
 
@@ -157,19 +210,23 @@ function renderWorkoutClass(workout) {
     }
 
     function isForTime() {
-        return hasWorkout() && (workoutType.equals("For Time") || workoutType.equals("FOR TIME"));
+        return hasWorkout() && (workoutTypeCode.equals("FOR_TIME") || workoutType.equals("For Time") || workoutType.equals("FOR TIME"));
     }
 
     function isEmom() {
-        return hasWorkout() && (workoutType.equals("EMOM") || workoutType.equals("Emom"));
+        return hasWorkout() && (workoutTypeCode.equals("EMOM") || workoutType.equals("EMOM") || workoutType.equals("Emom"));
     }
 
     function isAmrap() {
-        return hasWorkout() && (workoutType.equals("AMRAP") || workoutType.equals("Amrap"));
+        return hasWorkout() && (workoutTypeCode.equals("AMRAP") || workoutType.equals("AMRAP") || workoutType.equals("Amrap"));
+    }
+
+    function isInterval() {
+        return hasWorkout() && (workoutTypeCode.equals("INTERVAL") || structureType.equals("TIMED_INTERVAL"));
     }
 
     function isTimedPriority() {
-        return isAmrap();
+        return isAmrap() || isInterval() || isEmom();
     }
 
     function isManualStationWorkout() {
@@ -195,6 +252,14 @@ function renderWorkoutClass(workout) {
 
         if (isManualStationWorkout() && rounds != null) {
             return "" + rounds + " RFT";
+        }
+
+        if (isInterval()) {
+            if (rounds == null) {
+                return "INTERVAL";
+            }
+
+            return "R" + roundNumber + "/" + rounds;
         }
 
         if (rounds == null) {
@@ -242,6 +307,72 @@ function renderWorkoutClass(workout) {
         return stationNames[index];
     }
 
+    function getScoreboardMovementText(index, roundNumber) {
+        if (!hasValidStationIndex(index)) {
+            return "NO WORKOUT";
+        }
+
+        var prefix = getEssentialPrescription(index, roundNumber);
+        var name = stationNames[index];
+
+        if (prefix == null || startsWithNormalizedPrescription(name, prefix)) {
+            return name;
+        }
+
+        return prefix + " " + name;
+    }
+
+    function getEssentialPrescription(index, roundNumber) {
+        if (!hasValidStationIndex(index)) {
+            return null;
+        }
+
+        if (repScheme != null && repScheme.size() > 0 && roundNumber != null) {
+            var schemeIndex = roundNumber - 1;
+
+            if (schemeIndex >= 0 && schemeIndex < repScheme.size()) {
+                return "" + repScheme[schemeIndex];
+            }
+        }
+
+        if (stationReps[index] != null) {
+            return "" + stationReps[index];
+        }
+
+        if (stationMeters[index] != null) {
+            return "" + stationMeters[index] + "M";
+        }
+
+        if (stationCalories[index] != null) {
+            return "" + stationCalories[index] + " CAL";
+        }
+
+        if (stationSeconds[index] != null) {
+            return "" + stationSeconds[index] + " SEC";
+        }
+
+        return null;
+    }
+
+    function startsWithNormalizedPrescription(name, prefix) {
+        var normalizedName = ("" + name).toUpper();
+        var normalizedPrefix = ("" + prefix).toUpper();
+
+        return normalizedName.find(normalizedPrefix) == 0;
+    }
+
+    function getWorkoutLayoutMode() {
+        if (isInterval() || isEmom()) {
+            return "INTERVAL";
+        }
+
+        if (workoutTypeCode.equals("STRENGTH")) {
+            return "STRENGTH";
+        }
+
+        return "STANDARD";
+    }
+
     function getStationWorkSeconds(index) {
         if (!hasValidStationIndex(index)) {
             return null;
@@ -287,6 +418,43 @@ function toMonkeyCValue(value) {
   if (value === null || value === undefined || value === "") return "null";
   if (typeof value === "number") return String(value);
   return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function normalizeWorkoutTypeCode(type) {
+  const normalized = String(type || "Unknown").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  const allowedTypes = {
+    UNKNOWN: true,
+    EMOM: true,
+    AMRAP: true,
+    FOR_TIME: true,
+    INTERVAL: true,
+    STRENGTH: true,
+    CHIPPER: true,
+  };
+
+  return allowedTypes[normalized] ? normalized : "UNKNOWN";
+}
+
+function normalizeStructureType(type) {
+  const normalized = String(type || "Unknown").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  const allowedTypes = {
+    UNKNOWN: true,
+    FIXED_STATIONS: true,
+    REP_SCHEME: true,
+    TIMED_INTERVAL: true,
+    LADDER: true,
+    CHIPPER: true,
+  };
+
+  return allowedTypes[normalized] ? normalized : "UNKNOWN";
+}
+
+function normalizeRepScheme(value) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map(Number)
+    .filter((number) => Number.isInteger(number) && number > 0);
 }
 
 function stringOrDefault(value, fallback) {

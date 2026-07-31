@@ -784,20 +784,21 @@ class GarminWODView extends WatchUi.View {
     }
 
     function drawActiveWorkoutScoreboard(dc, width, height, stationIndex, roundNumber, elapsed, remaining, secondInStation) as Void {
-        var currentText = _workout.getScoreboardMovementName(stationIndex);
+        var currentText = _workout.getScoreboardMovementText(stationIndex, roundNumber);
         var currentLines = getMovementDisplayLines(currentText);
-        var nextText = getNextMovementText(stationIndex);
+        var nextText = getNextMovementText(stationIndex, roundNumber);
         var nextLines = getMovementDisplayLines(nextText);
         var currentDetail = getCurrentMovementDetail(stationIndex);
+        var layoutMode = _workout.getWorkoutLayoutMode();
         var topY = height * 7 / 100;
-        var currentLabelY = height * 16 / 100;
-        var currentLineOneY = height * 35 / 100;
-        var currentLineTwoY = height * 53 / 100;
+        var currentLabelY = layoutMode.equals("INTERVAL") ? height * 14 / 100 : height * 16 / 100;
+        var currentLineOneY = layoutMode.equals("INTERVAL") ? height * 33 / 100 : height * 35 / 100;
+        var currentLineTwoY = layoutMode.equals("INTERVAL") ? height * 51 / 100 : height * 53 / 100;
         var currentDetailY = height * 66 / 100;
-        var dividerY = height * 76 / 100;
-        var nextLabelY = height * 80 / 100;
-        var nextLineOneY = height * 86 / 100;
-        var nextLineTwoY = height * 90 / 100;
+        var dividerY = layoutMode.equals("INTERVAL") ? height * 74 / 100 : height * 76 / 100;
+        var nextLabelY = layoutMode.equals("INTERVAL") ? height * 78 / 100 : height * 80 / 100;
+        var nextLineOneY = layoutMode.equals("INTERVAL") ? height * 85 / 100 : height * 86 / 100;
+        var nextLineTwoY = layoutMode.equals("INTERVAL") ? height * 90 / 100 : height * 90 / 100;
         var bottomY = height * 96 / 100;
         var centerX = width / 2;
 
@@ -929,24 +930,24 @@ class GarminWODView extends WatchUi.View {
         return "START start";
     }
 
-    function getNextMovementText(stationIndex) {
+    function getNextMovementText(stationIndex, roundNumber) {
         if (stationIndex >= _workout.getStationCount() - 1) {
             if (shouldContinueManualRoundFlow()) {
-                return getPreviewStationText(0);
+                return getPreviewStationText(0, roundNumber + 1);
             }
 
             return "Last station";
         }
 
-        return getPreviewStationText(stationIndex + 1);
+        return getPreviewStationText(stationIndex + 1, roundNumber);
     }
 
-    function getPreviewStationText(stationIndex) {
+    function getPreviewStationText(stationIndex, roundNumber) {
         if (!_workout.hasValidStationIndex(stationIndex)) {
             return "NO WORKOUT";
         }
 
-        return _workout.getScoreboardMovementName(stationIndex);
+        return _workout.getScoreboardMovementText(stationIndex, roundNumber);
     }
 
     function getMovementDisplayLines(text) {

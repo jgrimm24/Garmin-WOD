@@ -57,8 +57,8 @@ function isUnitDisplayWord(word) {
   return ["CAL", "LB", "LBS", "M", "SEC"].includes(word);
 }
 
-function previewStationText({ name, reps, calories, meters }) {
-  return scoreboardMovementName({ name, reps, calories, meters });
+function previewStationText(station, roundNumber, repScheme = []) {
+  return scoreboardMovementText(station, roundNumber, repScheme);
 }
 
 function stationText({ name, reps, calories, meters, weight }) {
@@ -72,8 +72,47 @@ function stationText({ name, reps, calories, meters, weight }) {
   return text;
 }
 
-function scoreboardMovementName({ name }) {
-  return name;
+function scoreboardMovementText(station, roundNumber, repScheme = []) {
+  const prefix = essentialPrescription(station, roundNumber, repScheme);
+
+  if (!prefix || String(station.name).toUpperCase().startsWith(String(prefix).toUpperCase())) {
+    return station.name;
+  }
+
+  return `${prefix} ${station.name}`;
+}
+
+function essentialPrescription({ reps, calories, meters, seconds }, roundNumber, repScheme = []) {
+  if (repScheme.length && roundNumber != null && repScheme[roundNumber - 1] != null) {
+    return `${repScheme[roundNumber - 1]}`;
+  }
+
+  if (reps != null) return `${reps}`;
+  if (meters != null) return `${meters}M`;
+  if (calories != null) return `${calories} CAL`;
+  if (seconds != null) return `${seconds} SEC`;
+  return null;
+}
+
+function nextMovementText({ stationIndex, roundNumber, stations, rounds, repScheme = [] }) {
+  if (stationIndex >= stations.length - 1) {
+    if (rounds != null && roundNumber < rounds) {
+      return previewStationText(stations[0], roundNumber + 1, repScheme);
+    }
+
+    return "Last station";
+  }
+
+  return previewStationText(stations[stationIndex + 1], roundNumber, repScheme);
+}
+
+function layoutMode({ workoutType, structureType }) {
+  if (workoutType === "INTERVAL" || workoutType === "EMOM" || structureType === "TIMED_INTERVAL") {
+    return "INTERVAL";
+  }
+
+  if (workoutType === "STRENGTH") return "STRENGTH";
+  return "STANDARD";
 }
 
 function usefulDetail({ stationText, reps, calories, meters, weight, seconds }) {
@@ -156,34 +195,69 @@ function run() {
   );
 
   assert.strictEqual(
-    scoreboardMovementName({ name: "BENCH PRESS", reps: 10 }),
+    scoreboardMovementText({ name: "BENCH PRESS", reps: 10 }, 1),
+    "10 BENCH PRESS",
+    "scoreboard current should include essential fixed reps"
+  );
+
+  assert.strictEqual(
+    scoreboardMovementText({ name: "BENCH PRESS", weight: 135 }, 1),
     "BENCH PRESS",
-    "scoreboard current should omit reps"
+    "scoreboard current should omit weight-only prescriptions"
   );
 
   assert.strictEqual(
-    scoreboardMovementName({ name: "BENCH PRESS", weight: 135 }),
-    "BENCH PRESS",
-    "scoreboard current should omit weight"
+    previewStationText({ name: "BOX JUMPS", reps: 12 }, 1),
+    "12 BOX JUMPS",
+    "scoreboard next should include essential fixed reps"
   );
 
   assert.strictEqual(
-    previewStationText({ name: "BOX JUMPS", reps: 12 }),
-    "BOX JUMPS",
-    "scoreboard next should omit reps"
+    scoreboardMovementText({ name: "RUN", meters: 1000 }, 1),
+    "1000M RUN",
+    "scoreboard current should include meters"
   );
 
   assert.strictEqual(
-    scoreboardMovementName({ name: "ROW", meters: 500 }),
-    "ROW",
-    "scoreboard current should omit meters"
+    scoreboardMovementText({ name: "SLED PUSH", meters: 60 }, 1),
+    "60M SLED PUSH",
+    "scoreboard current should include indoor meters"
   );
 
   assert.strictEqual(
-    previewStationText({ name: "BIKE", calories: 20 }),
-    "BIKE",
-    "scoreboard next should omit calories"
+    previewStationText({ name: "ROW", calories: 20 }, 1),
+    "20 CAL ROW",
+    "scoreboard next should include calories"
   );
+
+  assert.strictEqual(
+    scoreboardMovementText({ name: "PLANK", seconds: 30 }, 1),
+    "30 SEC PLANK",
+    "scoreboard current should include time targets"
+  );
+
+  const repScheme = [21, 15, 9];
+  const schemeStations = [{ name: "THRUSTERS" }, { name: "PULL-UPS" }];
+  assert.strictEqual(scoreboardMovementText(schemeStations[0], 1, repScheme), "21 THRUSTERS");
+  assert.strictEqual(scoreboardMovementText(schemeStations[0], 2, repScheme), "15 THRUSTERS");
+  assert.strictEqual(scoreboardMovementText(schemeStations[0], 3, repScheme), "9 THRUSTERS");
+  assert.strictEqual(
+    nextMovementText({ stationIndex: 0, roundNumber: 1, stations: schemeStations, rounds: 3, repScheme }),
+    "21 PULL-UPS",
+    "next should cross station boundaries within the same rep-scheme round"
+  );
+  assert.strictEqual(
+    nextMovementText({ stationIndex: 1, roundNumber: 1, stations: schemeStations, rounds: 3, repScheme }),
+    "15 THRUSTERS",
+    "next should cross round boundaries with the next rep-scheme value"
+  );
+  assert.strictEqual(
+    nextMovementText({ stationIndex: 1, roundNumber: 3, stations: schemeStations, rounds: 3, repScheme }),
+    "Last station",
+    "final rep-scheme station should not wrap"
+  );
+  assert.strictEqual(layoutMode({ workoutType: "INTERVAL", structureType: "TIMED_INTERVAL" }), "INTERVAL");
+  assert.strictEqual(layoutMode({ workoutType: "UNKNOWN", structureType: "UNKNOWN" }), "STANDARD");
 
   assert.strictEqual(sourceVisible({ running: true, elapsedBeforePause: 0 }), false);
   assert.strictEqual(controlHint({ running: true, elapsedBeforePause: 0 }), null);
