@@ -101,7 +101,13 @@ func latestWorkoutFixture(title: String = "Roney") -> Data {
     """.data(using: .utf8)!
 }
 
-func makeWorkout(id: String, title: String, type: WorkoutType = .amrap, rounds: Int? = nil) -> WorkoutContract {
+func makeWorkout(
+    id: String,
+    title: String,
+    type: WorkoutType = .amrap,
+    rounds: Int? = nil,
+    updatedAt: String? = nil
+) -> WorkoutContract {
     WorkoutContract(
         schemaVersion: 1,
         id: id,
@@ -114,7 +120,8 @@ func makeWorkout(id: String, title: String, type: WorkoutType = .amrap, rounds: 
             WorkoutStation(id: "\(id)-cleans", name: "Power Cleans", reps: 8, weightLb: 135, maleWeightLb: 135, femaleWeightLb: 95)
         ],
         notes: [],
-        sourceText: title
+        sourceText: title,
+        updatedAt: updatedAt
     )
 }
 
@@ -522,6 +529,44 @@ repeatedViewModel.loadLatestWorkoutIfNeeded()
 expect(repeatedClient.fetchCount == 1, "repeated lifecycle callbacks should not duplicate startup requests")
 repeatedClient.complete(.failure(.invalidStatus(404)))
 
+let foregroundClient = StubLatestWorkoutClient(result: .success(webWorkout))
+let foregroundViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: cachedWorkout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: foregroundClient,
+    workoutCache: MemoryWorkoutCache(cachedWorkout: cachedWorkout)
+)
+foregroundViewModel.refreshLatestWorkoutAfterForeground()
+expect(foregroundClient.fetchCount == 1, "foreground activation should check the backend once")
+expect(foregroundViewModel.workoutManager.workout.id == "web", "foreground refresh should apply a different backend workout")
+
+let unchangedWorkout = makeWorkout(id: "same", title: "Same", updatedAt: "2026-07-01T00:00:00.000Z")
+let unchangedClient = StubLatestWorkoutClient(result: .success(unchangedWorkout))
+let unchangedCache = MemoryWorkoutCache(cachedWorkout: unchangedWorkout)
+let unchangedViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: unchangedWorkout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: unchangedClient,
+    workoutCache: unchangedCache
+)
+unchangedViewModel.refreshLatestWorkout()
+expect(unchangedCache.saveCount == 0, "unchanged backend workout should not be re-cached or reset")
+
+let timestampCurrent = makeWorkout(id: "same-version", title: "Same Version", updatedAt: "2026-07-01T00:00:00.000Z")
+let timestampNewer = makeWorkout(id: "same-version", title: "Same Version", updatedAt: "2026-07-02T00:00:00.000Z")
+let timestampClient = StubLatestWorkoutClient(result: .success(timestampNewer))
+let timestampViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: timestampCurrent),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: timestampClient,
+    workoutCache: MemoryWorkoutCache(cachedWorkout: timestampCurrent)
+)
+timestampViewModel.refreshLatestWorkout()
+expect(timestampViewModel.workoutManager.workout.updatedAt == "2026-07-02T00:00:00.000Z", "updatedAt differences should be treated as a newer backend workout")
+
 print("[TEST] Latest workout file cache behavior")
 let cacheDirectory = FileManager.default.temporaryDirectory
     .appendingPathComponent("garmin-wod-cache-tests-\(UUID().uuidString)", isDirectory: true)
@@ -688,5 +733,26 @@ failureFollower.startFollowingWatch()
 expect(failureFollower.isFollowingWatch, "failed watch fetch should keep follow mode enabled")
 expect(!failureFollower.isMirroringWatchSession, "failed watch fetch should not start mirroring")
 expect(failureFollower.workoutManager.status == .idle, "failed watch fetch should not change workout status")
+
+let oldPhoneWorkout = makeWorkout(id: "old-phone", title: "Old Phone WOD")
+let latestWatchWorkout = makeWorkout(id: "latest-watch", title: "Latest Watch WOD", updatedAt: "2026-07-03T00:00:00.000Z")
+let latestBeforeFollowClient = StubLatestWorkoutClient(result: .success(latestWatchWorkout))
+let latestSessionClient = StubWorkoutSessionClient(result: .success(makeSessionState(workout: latestWatchWorkout, revision: 1, status: .running, round: 1, stationIndex: 0, elapsedSeconds: 8)))
+let latestBeforeFollowCache = MemoryWorkoutCache(cachedWorkout: oldPhoneWorkout)
+let latestBeforeFollowViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: oldPhoneWorkout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: latestBeforeFollowClient,
+    workoutSessionClient: latestSessionClient,
+    workoutCache: latestBeforeFollowCache
+)
+latestBeforeFollowViewModel.startFollowingWatch()
+expect(latestBeforeFollowClient.fetchCount == 1, "Follow Watch should check latest backend workout before mirroring")
+expect(latestSessionClient.fetchCount == 1, "Follow Watch should poll the watch session after latest workout sync")
+expect(latestBeforeFollowViewModel.workoutManager.workout.id == "latest-watch", "Follow Watch latest sync should replace a stale local workout")
+expect(latestBeforeFollowViewModel.isMirroringWatchSession, "Follow Watch should mirror once the refreshed workout identity matches the watch")
+expect(latestBeforeFollowViewModel.workoutManager.status == .running, "refreshed Follow Watch session should apply running state")
+expect(latestBeforeFollowCache.cachedWorkout?.id == "latest-watch", "Follow Watch latest sync should update the local cache")
 
 print("[TEST] PASS: DisplayViewModel state transitions")

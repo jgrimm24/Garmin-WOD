@@ -1,6 +1,13 @@
 import Foundation
 
 final class DisplayViewModel: ObservableObject {
+    private enum LatestWorkoutRefreshReason: String {
+        case startup
+        case manual
+        case foreground
+        case followWatch
+    }
+
     let workoutManager: WorkoutManager
     let timerManager: TimerManager
     let heartRateManager: MockHeartRateManager
@@ -22,6 +29,7 @@ final class DisplayViewModel: ObservableObject {
     private let workoutCache: WorkoutCaching
     private var hasLoadedStartupWorkout = false
     private var isPollingWatchSession = false
+    private var latestWorkoutRefreshCompletions: [(Bool) -> Void] = []
     private var lastAppliedWatchSessionId: String?
     private var lastAppliedWatchRevision = 0
     private let watchSessionFreshnessSeconds = 30
@@ -104,27 +112,50 @@ final class DisplayViewModel: ObservableObject {
             latestWorkoutStatusText = "Roney sample"
         }
 
-        refreshLatestWorkout()
+        refreshLatestWorkout(reason: .startup)
     }
 
     func refreshLatestWorkout() {
+        refreshLatestWorkout(reason: .manual)
+    }
+
+    func refreshLatestWorkoutAfterForeground() {
+        guard displayMode == .workout else {
+            return
+        }
+
+        refreshLatestWorkout(reason: .foreground)
+    }
+
+    private func refreshLatestWorkout(
+        reason: LatestWorkoutRefreshReason,
+        completion: ((Bool) -> Void)? = nil
+    ) {
         guard workoutManager.status == .idle else {
-            print("[LATEST WOD] refresh skipped; status=\(workoutManager.status.rawValue)")
+            print("[LATEST WOD] \(reason.rawValue) refresh skipped; status=\(workoutManager.status.rawValue)")
+            completion?(false)
             return
         }
 
         guard !isRefreshingLatestWorkout else {
-            print("[LATEST WOD] refresh skipped; request already running")
+            print("[LATEST WOD] \(reason.rawValue) refresh joined; request already running")
+            if let completion {
+                latestWorkoutRefreshCompletions.append(completion)
+            }
             return
         }
 
-        print("[LATEST WOD] refresh started")
+        if let completion {
+            latestWorkoutRefreshCompletions.append(completion)
+        }
+
+        print("[LATEST WOD] \(reason.rawValue) refresh started")
         isRefreshingLatestWorkout = true
         latestWorkoutStatusText = "Refreshing…"
 
         latestWorkoutClient.fetchLatestWorkout { [weak self] result in
             self?.performOnMain {
-                self?.handleLatestWorkoutResult(result)
+                self?.handleLatestWorkoutResult(result, reason: reason)
             }
         }
     }
@@ -271,9 +302,10 @@ final class DisplayViewModel: ObservableObject {
 
         print("[WATCH SYNC] follow enabled")
         isFollowingWatch = true
-        watchSyncStatusText = "Waiting for Watch"
-        pollWatchSession()
-        scheduleWatchSessionPolling()
+        watchSyncStatusText = "Syncing WOD"
+        refreshLatestWorkout(reason: .followWatch) { [weak self] _ in
+            self?.beginWatchSessionFollowing()
+        }
     }
 
     func stopFollowingWatch() {
@@ -292,6 +324,16 @@ final class DisplayViewModel: ObservableObject {
 
     func refreshWatchSession() {
         pollWatchSession()
+    }
+
+    private func beginWatchSessionFollowing() {
+        guard isFollowingWatch else {
+            return
+        }
+
+        watchSyncStatusText = "Waiting for Watch"
+        pollWatchSession()
+        scheduleWatchSessionPolling()
     }
 
     var activeHeartRate: Int? {
@@ -557,28 +599,59 @@ final class DisplayViewModel: ObservableObject {
         print("[SUMMARY] captured elapsed=\(summary.elapsedSeconds) avgHR=\(summary.averageHeartRate) maxHR=\(summary.maximumHeartRate) movement=\(summary.finalMovementName)")
     }
 
-    private func handleLatestWorkoutResult(_ result: Result<WorkoutContract, LatestWorkoutError>) {
+    private func handleLatestWorkoutResult(
+        _ result: Result<WorkoutContract, LatestWorkoutError>,
+        reason: LatestWorkoutRefreshReason
+    ) {
         isRefreshingLatestWorkout = false
+        let completions = latestWorkoutRefreshCompletions
+        latestWorkoutRefreshCompletions = []
+        var didApplyWorkout = false
+        defer {
+            completions.forEach { $0(didApplyWorkout) }
+        }
 
         guard workoutManager.status == .idle else {
-            print("[LATEST WOD] response ignored; status=\(workoutManager.status.rawValue)")
+            print("[LATEST WOD] \(reason.rawValue) response ignored; status=\(workoutManager.status.rawValue)")
             latestWorkoutStatusText = "Current workout locked"
             return
         }
 
         switch result {
         case .success(let workout):
-            print("[LATEST WOD] web response applied id=\(workout.id) title=\(workout.title) type=\(workout.type.rawValue) stations=\(workout.stations.count)")
+            guard shouldApplyLatestWorkout(workout) else {
+                print("[LATEST WOD] \(reason.rawValue) unchanged remote=\(workout.latestVersionDescription) current=\(workoutManager.workout.latestVersionDescription)")
+                latestWorkoutStatusText = "WEB WOD"
+                return
+            }
+
+            print("[LATEST WOD] \(reason.rawValue) web response applied remote=\(workout.latestVersionDescription) previous=\(workoutManager.workout.latestVersionDescription) title=\(workout.title) type=\(workout.type.rawValue) stations=\(workout.stations.count)")
             workoutManager.load(workout)
             if workoutCache.saveCachedWorkout(workout) {
                 print("[LATEST WOD] cache saved id=\(workout.id)")
             }
             latestWorkoutStatusText = "WEB WOD"
+            didApplyWorkout = true
 
         case .failure(let error):
-            print("[LATEST WOD] refresh failed: \(error)")
+            print("[LATEST WOD] \(reason.rawValue) refresh failed: \(error)")
             latestWorkoutStatusText = "Refresh failed"
         }
+    }
+
+    private func shouldApplyLatestWorkout(_ incomingWorkout: WorkoutContract) -> Bool {
+        let currentWorkout = workoutManager.workout
+        if incomingWorkout.syncIdentity != currentWorkout.syncIdentity {
+            return true
+        }
+
+        return normalizedWorkoutTimestamp(incomingWorkout.updatedAt) != normalizedWorkoutTimestamp(currentWorkout.updatedAt)
+    }
+
+    private func normalizedWorkoutTimestamp(_ timestamp: String?) -> String {
+        timestamp?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
     }
 
     private func performOnMain(_ action: @escaping () -> Void) {

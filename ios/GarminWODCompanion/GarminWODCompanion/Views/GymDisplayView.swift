@@ -91,6 +91,9 @@ struct GymDisplayView: View {
             }
             .onChange(of: scenePhase) { _, newPhase in
                 updateIdleTimer(for: newPhase)
+                if newPhase == .active {
+                    viewModel.refreshLatestWorkoutAfterForeground()
+                }
             }
             .onChange(of: viewModel.isFollowingWatch) { _, _ in
                 updateIdleTimer(for: scenePhase)

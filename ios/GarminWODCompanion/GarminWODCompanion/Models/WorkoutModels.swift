@@ -76,6 +76,8 @@ struct WorkoutContract: Codable, Identifiable {
     var stations: [WorkoutStation]
     var notes: [String]
     var sourceText: String
+    var createdAt: String? = nil
+    var updatedAt: String? = nil
 }
 
 struct WorkoutSummary: Equatable {
@@ -214,6 +216,11 @@ struct WorkoutStation: Codable, Identifiable {
 extension WorkoutContract {
     var syncIdentity: String {
         "id:\(id)|fp:\(syncFingerprint)"
+    }
+
+    var latestVersionDescription: String {
+        let timestamp = updatedAt?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "id=\(id) updatedAt=\(timestamp?.isEmpty == false ? timestamp! : "none") identity=\(syncIdentity)"
     }
 
     private var syncFingerprint: String {
