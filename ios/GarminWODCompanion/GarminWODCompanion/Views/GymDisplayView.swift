@@ -8,6 +8,7 @@ struct GymDisplayView: View {
     @State private var isBluetoothSheetPresented = false
     @State private var isAnalyticsSheetPresented = false
     @State private var isHistorySheetPresented = false
+    @State private var isManualControlsSheetPresented = false
 
     private var displayMode: GymDisplayMode {
         GymDisplayMode(storedValue: displayModeRawValue)
@@ -63,14 +64,22 @@ struct GymDisplayView: View {
                                     portraitLayout(metrics: metrics)
                                 }
 
-                                ControlBar(
+                                CompanionControlDock(
                                     viewModel: viewModel,
-                                    workoutManager: viewModel.workoutManager,
+                                    bluetoothManager: viewModel.bluetoothHeartRateManager,
                                     metrics: metrics,
-                                    isLandscape: isLandscape,
-                                    displayMode: displayMode
+                                    displayMode: displayModeBinding,
+                                    onHeartRateSettings: {
+                                        isBluetoothSheetPresented = true
+                                    },
+                                    onHistory: {
+                                        isHistorySheetPresented = true
+                                    },
+                                    onManualControls: {
+                                        isManualControlsSheetPresented = true
+                                    }
                                 )
-                                .frame(height: metrics.activeControlHeight)
+                                .frame(height: metrics.companionDockHeight)
                             }
                         }
                     }
@@ -124,6 +133,15 @@ struct GymDisplayView: View {
             WorkoutHistoryView(viewModel: viewModel)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isManualControlsSheetPresented) {
+            ManualControlsSheet(
+                viewModel: viewModel,
+                workoutManager: viewModel.workoutManager,
+                displayMode: displayMode
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -180,12 +198,8 @@ struct GymDisplayView: View {
             HeaderView(
                 workoutManager: viewModel.workoutManager,
                 viewModel: viewModel,
-                bluetoothManager: viewModel.bluetoothHeartRateManager,
                 metrics: metrics,
-                displayMode: displayModeBinding,
-                onHeartRateSettings: {
-                    isBluetoothSheetPresented = true
-                }
+                displayMode: displayMode
             )
 
             RunDashboardPanel(
@@ -204,12 +218,8 @@ struct GymDisplayView: View {
             HeaderView(
                 workoutManager: viewModel.workoutManager,
                 viewModel: viewModel,
-                bluetoothManager: viewModel.bluetoothHeartRateManager,
                 metrics: metrics,
-                displayMode: displayModeBinding,
-                onHeartRateSettings: {
-                    isBluetoothSheetPresented = true
-                }
+                displayMode: displayMode
             )
             .frame(height: metrics.activeHeaderHeight)
 
@@ -229,15 +239,8 @@ struct GymDisplayView: View {
             WODScoreboardHeader(
                 workoutManager: viewModel.workoutManager,
                 viewModel: viewModel,
-                bluetoothManager: viewModel.bluetoothHeartRateManager,
                 metrics: metrics,
-                displayMode: displayModeBinding,
-                onHeartRateSettings: {
-                    isBluetoothSheetPresented = true
-                },
-                onHistory: {
-                    isHistorySheetPresented = true
-                }
+                displayMode: displayMode
             )
             .frame(height: metrics.wodScoreboardHeaderHeight)
 
@@ -249,24 +252,7 @@ struct GymDisplayView: View {
             )
             .frame(width: metrics.availableWidth, height: metrics.wodScoreboardHeroHeight)
 
-            WODCompactControlStrip(
-                controls: WODCompactControlStrip.controls(
-                    for: viewModel.workoutManager.status,
-                    isFollowingWatch: viewModel.isFollowingWatch,
-                    isMirroringWatchSession: viewModel.isMirroringWatchSession
-                ),
-                viewModel: viewModel,
-                metrics: metrics
-            )
-            .frame(height: metrics.wodScoreboardControlHeight)
-        }
-        .frame(width: metrics.availableWidth, height: metrics.availableHeight)
-    }
-
-    private func wodLandscapeLayout(metrics: DashboardMetrics) -> some View {
-        VStack(spacing: metrics.wodScoreboardSpacing) {
-            WODScoreboardHeader(
-                workoutManager: viewModel.workoutManager,
+            CompanionControlDock(
                 viewModel: viewModel,
                 bluetoothManager: viewModel.bluetoothHeartRateManager,
                 metrics: metrics,
@@ -276,7 +262,23 @@ struct GymDisplayView: View {
                 },
                 onHistory: {
                     isHistorySheetPresented = true
+                },
+                onManualControls: {
+                    isManualControlsSheetPresented = true
                 }
+            )
+            .frame(height: metrics.companionDockHeight)
+        }
+        .frame(width: metrics.availableWidth, height: metrics.availableHeight)
+    }
+
+    private func wodLandscapeLayout(metrics: DashboardMetrics) -> some View {
+        VStack(spacing: metrics.wodScoreboardSpacing) {
+            WODScoreboardHeader(
+                workoutManager: viewModel.workoutManager,
+                viewModel: viewModel,
+                metrics: metrics,
+                displayMode: displayMode
             )
             .frame(height: metrics.wodScoreboardHeaderHeight)
 
@@ -288,16 +290,22 @@ struct GymDisplayView: View {
             )
             .frame(width: metrics.availableWidth, height: metrics.wodScoreboardHeroHeight)
 
-            WODCompactControlStrip(
-                controls: WODCompactControlStrip.controls(
-                    for: viewModel.workoutManager.status,
-                    isFollowingWatch: viewModel.isFollowingWatch,
-                    isMirroringWatchSession: viewModel.isMirroringWatchSession
-                ),
+            CompanionControlDock(
                 viewModel: viewModel,
-                metrics: metrics
+                bluetoothManager: viewModel.bluetoothHeartRateManager,
+                metrics: metrics,
+                displayMode: displayModeBinding,
+                onHeartRateSettings: {
+                    isBluetoothSheetPresented = true
+                },
+                onHistory: {
+                    isHistorySheetPresented = true
+                },
+                onManualControls: {
+                    isManualControlsSheetPresented = true
+                }
             )
-            .frame(height: metrics.wodScoreboardControlHeight)
+            .frame(height: metrics.companionDockHeight)
         }
         .frame(width: metrics.availableWidth, height: metrics.availableHeight)
     }
@@ -344,12 +352,23 @@ private struct DashboardMetrics {
 
     var activeHeaderHeight: CGFloat { isLandscape ? clamp(availableHeight * 0.13, min: 52, max: 64) : clamp(availableHeight * 0.115, min: 84, max: 104) }
     var activeControlHeight: CGFloat { isLandscape ? clamp(availableHeight * 0.105, min: 46, max: 54) : 112 }
-    var activeDashboardHeight: CGFloat { max(availableHeight - activeControlHeight - sectionSpacing, 0) }
+    var companionDockHeight: CGFloat {
+        if availableWidth >= 680 {
+            return clamp(availableHeight * 0.12, min: 68, max: 86)
+        }
+
+        if isLandscape {
+            return clamp(availableHeight * 0.18, min: 82, max: 112)
+        }
+
+        return clamp(availableHeight * 0.20, min: 126, max: 164)
+    }
+    var activeDashboardHeight: CGFloat { max(availableHeight - companionDockHeight - sectionSpacing, 0) }
     var activeMainHeight: CGFloat { max(activeDashboardHeight - activeHeaderHeight - sectionSpacing, 0) }
     var wodScoreboardSpacing: CGFloat { isLandscape ? 7 : 9 }
     var wodScoreboardHeaderHeight: CGFloat { isLandscape ? clamp(availableHeight * 0.082, min: 32, max: 44) : clamp(availableHeight * 0.072, min: 46, max: 62) }
     var wodScoreboardControlHeight: CGFloat { isLandscape ? clamp(availableHeight * 0.078, min: 32, max: 42) : clamp(availableHeight * 0.062, min: 42, max: 52) }
-    var wodScoreboardHeroHeight: CGFloat { max(availableHeight - wodScoreboardHeaderHeight - wodScoreboardControlHeight - (wodScoreboardSpacing * 2), 0) }
+    var wodScoreboardHeroHeight: CGFloat { max(availableHeight - wodScoreboardHeaderHeight - companionDockHeight - (wodScoreboardSpacing * 2), 0) }
     var wodLandscapeHeaderHeight: CGFloat { wodScoreboardHeaderHeight }
     var wodLandscapeRailWidth: CGFloat { clamp(availableWidth * 0.095, min: 62, max: 86) }
     var wodLandscapeRailGap: CGFloat { clamp(availableWidth * 0.014, min: 8, max: 14) }
@@ -425,10 +444,8 @@ private struct DashboardMetrics {
 private struct HeaderView: View {
     @ObservedObject var workoutManager: WorkoutManager
     @ObservedObject var viewModel: DisplayViewModel
-    @ObservedObject var bluetoothManager: BluetoothHeartRateManager
     let metrics: DashboardMetrics
-    @Binding var displayMode: GymDisplayMode
-    let onHeartRateSettings: () -> Void
+    let displayMode: GymDisplayMode
 
     var body: some View {
         if metrics.isLandscape {
@@ -454,9 +471,7 @@ private struct HeaderView: View {
                         .minimumScaleFactor(0.65)
                 }
 
-                if workoutManager.status == .idle {
-                    setupControls
-                } else if viewModel.isFollowingWatch {
+                if viewModel.isFollowingWatch {
                     Text(viewModel.watchSyncStatusText.uppercased())
                         .font(.system(size: max(metrics.headerMetaSize - 3, 10), weight: .black, design: .rounded))
                         .foregroundStyle(.yellow.opacity(0.85))
@@ -468,31 +483,7 @@ private struct HeaderView: View {
 
             Spacer(minLength: 6)
 
-            HStack(alignment: .center, spacing: 8) {
-                DisplayModeSelector(displayMode: $displayMode, metrics: metrics)
-
-                VStack(alignment: .trailing, spacing: 5) {
-                    Button(action: onHeartRateSettings) {
-                        Text(statusLabel)
-                            .font(.system(size: metrics.headerMetaSize, weight: .heavy, design: .rounded))
-                            .foregroundStyle(.yellow)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.55)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(.yellow.opacity(0.13), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-
-                    Text(workoutManager.status.rawValue.uppercased())
-                        .font(.system(size: metrics.headerMetaSize - 1, weight: .black, design: .rounded))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.65)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(.white.opacity(0.12), in: Capsule())
-                }
-            }
+            headerStatusBadge
             .layoutPriority(1)
         }
         .frame(maxWidth: .infinity)
@@ -519,41 +510,19 @@ private struct HeaderView: View {
 
                 Spacer(minLength: 6)
 
-                DisplayModeSelector(displayMode: $displayMode, metrics: metrics)
+                headerStatusBadge
             }
 
-            HStack(alignment: .center, spacing: 8) {
-                if workoutManager.status == .idle {
-                    setupControls
-                } else if viewModel.isFollowingWatch {
+            if viewModel.isFollowingWatch {
+                HStack {
                     Text(viewModel.watchSyncStatusText.uppercased())
                         .font(.system(size: max(metrics.headerMetaSize - 2, 10), weight: .black, design: .rounded))
                         .foregroundStyle(.yellow.opacity(0.85))
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
+
+                    Spacer(minLength: 6)
                 }
-
-                Spacer(minLength: 6)
-
-                Button(action: onHeartRateSettings) {
-                    Text(statusLabel)
-                        .font(.system(size: metrics.headerMetaSize - 1, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.yellow)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.55)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(.yellow.opacity(0.13), in: Capsule())
-                }
-                .buttonStyle(.plain)
-
-                Text(workoutManager.status.rawValue.uppercased())
-                    .font(.system(size: metrics.headerMetaSize - 2, weight: .black, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(.white.opacity(0.12), in: Capsule())
             }
         }
         .frame(maxWidth: .infinity)
@@ -575,70 +544,23 @@ private struct HeaderView: View {
         return workoutManager.workout.type.rawValue.uppercased()
     }
 
-    @ViewBuilder
-    private var setupControls: some View {
-        HStack(spacing: 8) {
-            if displayMode == .workout {
-                Button {
-                    viewModel.refreshLatestWorkout()
-                } label: {
-                    Text(viewModel.isRefreshingLatestWorkout ? "Refreshing…" : "Refresh WOD")
-                        .font(.system(size: max(metrics.headerMetaSize - 2, 10), weight: .black, design: .rounded))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.yellow)
-                .disabled(viewModel.isRefreshingLatestWorkout)
-
-                Text(viewModel.isFollowingWatch ? viewModel.watchSyncStatusText : viewModel.latestWorkoutStatusText)
-                    .font(.system(size: max(metrics.headerMetaSize - 3, 10), weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.62))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-            }
-
-            Button {
-                viewModel.toggleFollowWatch()
-            } label: {
-                Text(viewModel.isFollowingWatch ? "Stop Follow" : "Follow Watch")
-                    .font(.system(size: max(metrics.headerMetaSize - 2, 10), weight: .black, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(viewModel.isFollowingWatch ? .white.opacity(0.85) : .yellow)
-        }
+    private var headerStatusBadge: some View {
+        Text(headerStatusText)
+            .font(.system(size: metrics.headerMetaSize, weight: .black, design: .rounded))
+            .foregroundStyle(.white.opacity(0.86))
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.white.opacity(0.1), in: Capsule())
     }
 
-    private var statusLabel: String {
-        if bluetoothManager.connectionState.isConnected {
-            let name = bluetoothManager.connectedPeripheralName ?? "Connected"
-            let shortName = name
-                .replacingOccurrences(of: "tactix 8 - 51mm", with: "TACTIX 8", options: .caseInsensitive)
-                .replacingOccurrences(of: "Tactix 8 - 51mm", with: "TACTIX 8", options: .caseInsensitive)
-                .replacingOccurrences(of: "Tactix 8", with: "TACTIX 8", options: .caseInsensitive)
-
-            if let bpm = viewModel.activeHeartRate {
-                return "\(shortName) • \(bpm) BPM • \(compactZoneLabel)"
-            }
-            return "\(shortName) CONNECTED"
+    private var headerStatusText: String {
+        if viewModel.isFollowingWatch {
+            return viewModel.isMirroringWatchSession ? "FOLLOWING WATCH" : viewModel.watchSyncStatusText.uppercased()
         }
 
-        switch bluetoothManager.connectionState {
-        case .scanning:
-            return "SCANNING…"
-        default: 
-            return "HR DISCONNECTED"
-        }
-    }
-
-    private var compactZoneLabel: String {
-        let name = viewModel.activeCurrentZone.name.uppercased()
-        if name.hasPrefix("ZONE ") {
-            return name.replacingOccurrences(of: "ZONE ", with: "Z")
-        }
-        return name
+        return displayMode.rawValue
     }
 }
 
@@ -673,16 +595,397 @@ private struct DisplayModeSelector: View {
     }
 }
 
-// MARK: - WORKOUT Scoreboard Header
+// MARK: - Companion Control Dock
 
-private struct WODScoreboardHeader: View {
-    @ObservedObject var workoutManager: WorkoutManager
+private struct CompanionControlDock: View {
     @ObservedObject var viewModel: DisplayViewModel
     @ObservedObject var bluetoothManager: BluetoothHeartRateManager
     let metrics: DashboardMetrics
     @Binding var displayMode: GymDisplayMode
     let onHeartRateSettings: () -> Void
     let onHistory: () -> Void
+    let onManualControls: () -> Void
+
+    private var usesSingleRow: Bool {
+        metrics.availableWidth >= 680
+    }
+
+    var body: some View {
+        VStack(spacing: metrics.isLandscape ? 6 : 8) {
+            Group {
+                if usesSingleRow {
+                    HStack(spacing: 10) {
+                        dockButtons
+                    }
+                } else {
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 10),
+                            GridItem(.flexible(), spacing: 10)
+                        ],
+                        spacing: 10
+                    ) {
+                        dockButtons
+                    }
+                }
+            }
+            .frame(maxHeight: .infinity)
+
+            Button(action: onManualControls) {
+                Label("Manual Controls", systemImage: "slider.horizontal.3")
+                    .font(.system(size: metrics.isLandscape ? 10 : 11, weight: .heavy, design: .rounded))
+                    .lineLimit(1)
+                    .foregroundStyle(.white.opacity(0.62))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Manual Controls")
+            .accessibilityHint("Opens Start, Back, Next, Finish, and Reset controls for simulator testing.")
+        }
+        .padding(.horizontal, metrics.isLandscape ? 8 : 10)
+        .padding(.vertical, metrics.isLandscape ? 6 : 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.white.opacity(0.1), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private var dockButtons: some View {
+        CompanionDockButton(
+            iconName: "dot.radiowaves.left.and.right",
+            title: followTitle,
+            value: followValue,
+            isActive: viewModel.isFollowingWatch,
+            metrics: metrics,
+            action: {
+                viewModel.toggleFollowWatch()
+            }
+        )
+        .accessibilityLabel("Follow Watch")
+        .accessibilityValue(followAccessibilityValue)
+        .accessibilityHint("Toggles watch following using the existing watch sync behavior.")
+
+        CompanionDockButton(
+            iconName: "heart.fill",
+            title: heartRateTitle,
+            value: heartRateValue,
+            isActive: bluetoothManager.connectionState.isConnected,
+            metrics: metrics,
+            action: onHeartRateSettings
+        )
+        .accessibilityLabel("Heart Rate")
+        .accessibilityValue(heartRateAccessibilityValue)
+        .accessibilityHint("Opens heart rate connection settings.")
+
+        CompanionDockButton(
+            iconName: "clock.arrow.circlepath",
+            title: "History",
+            value: historyValue,
+            isActive: !viewModel.workoutHistory.isEmpty,
+            metrics: metrics,
+            action: onHistory
+        )
+        .accessibilityLabel("Workout History")
+        .accessibilityValue(historyValue)
+        .accessibilityHint("Opens saved workout results without changing the active workout.")
+
+        CompanionModeControl(
+            displayMode: $displayMode,
+            metrics: metrics
+        )
+        .accessibilityLabel("Display Mode")
+        .accessibilityValue(displayMode == .workout ? "Workout" : "Run")
+    }
+
+    private var followTitle: String {
+        if viewModel.isFollowingWatch {
+            return viewModel.isMirroringWatchSession ? "Following" : "Connecting"
+        }
+
+        return "Follow Watch"
+    }
+
+    private var followValue: String {
+        if viewModel.isFollowingWatch {
+            return viewModel.watchSyncStatusText
+        }
+
+        return "Off"
+    }
+
+    private var followAccessibilityValue: String {
+        viewModel.isFollowingWatch ? viewModel.watchSyncStatusText : "Not following"
+    }
+
+    private var heartRateTitle: String {
+        if let bpm = viewModel.activeHeartRate {
+            return "HR \(bpm)"
+        }
+
+        switch bluetoothManager.connectionState {
+        case .scanning, .deviceFound, .connecting:
+            return "Searching"
+        case .connected:
+            return "HR Connected"
+        case .failed, .disconnected:
+            return "Reconnect HR"
+        default:
+            return "HR Off"
+        }
+    }
+
+    private var heartRateValue: String {
+        if let bpm = viewModel.activeHeartRate {
+            return "\(bpm) BPM"
+        }
+
+        return bluetoothManager.connectionState.rawValue
+    }
+
+    private var heartRateAccessibilityValue: String {
+        if let bpm = viewModel.activeHeartRate {
+            return "Receiving \(bpm) beats per minute"
+        }
+
+        return bluetoothManager.connectionState.rawValue
+    }
+
+    private var historyValue: String {
+        if viewModel.isRefreshingWorkoutHistory {
+            return "Refreshing"
+        }
+
+        if viewModel.workoutHistory.isEmpty {
+            return "No results"
+        }
+
+        return "\(viewModel.workoutHistory.count) saved"
+    }
+}
+
+private struct CompanionDockButton: View {
+    let iconName: String
+    let title: String
+    let value: String
+    let isActive: Bool
+    let metrics: DashboardMetrics
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: metrics.isLandscape ? 8 : 10) {
+                Image(systemName: iconName)
+                    .font(.system(size: iconSize, weight: .heavy))
+                    .frame(width: iconFrame, height: iconFrame)
+                    .foregroundStyle(isActive ? .black : .yellow)
+                    .background(isActive ? .yellow : .yellow.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: titleSize, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.58)
+
+                    Text(value)
+                        .font(.system(size: valueSize, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.66))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.58)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, metrics.isLandscape ? 10 : 12)
+            .frame(maxWidth: .infinity, minHeight: controlHeight)
+            .background(.white.opacity(isActive ? 0.15 : 0.08), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isActive ? .yellow.opacity(0.46) : .white.opacity(0.12), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+    }
+
+    private var controlHeight: CGFloat {
+        metrics.availableWidth >= 680 ? 58 : 52
+    }
+
+    private var iconFrame: CGFloat {
+        metrics.availableWidth >= 680 ? 34 : 30
+    }
+
+    private var iconSize: CGFloat {
+        metrics.availableWidth >= 680 ? 18 : 16
+    }
+
+    private var titleSize: CGFloat {
+        metrics.availableWidth >= 680 ? 16 : 14
+    }
+
+    private var valueSize: CGFloat {
+        metrics.availableWidth >= 680 ? 12 : 11
+    }
+}
+
+private struct CompanionModeControl: View {
+    @Binding var displayMode: GymDisplayMode
+    let metrics: DashboardMetrics
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Label("Mode", systemImage: "rectangle.split.2x1")
+                .font(.system(size: metrics.availableWidth >= 680 ? 13 : 12, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.7))
+                .lineLimit(1)
+
+            HStack(spacing: 4) {
+                ForEach(GymDisplayMode.allCases, id: \.self) { mode in
+                    Button {
+                        displayMode = mode
+                        print("[DISPLAY MODE] selected \(mode.rawValue)")
+                    } label: {
+                        Text(mode.rawValue)
+                            .font(.system(size: metrics.availableWidth >= 680 ? 14 : 12, weight: .black, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.62)
+                            .foregroundStyle(displayMode == mode ? .black : .white.opacity(0.82))
+                            .frame(maxWidth: .infinity, minHeight: metrics.availableWidth >= 680 ? 32 : 28)
+                            .background(displayMode == mode ? .yellow : .white.opacity(0.08), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.horizontal, metrics.isLandscape ? 10 : 12)
+        .frame(maxWidth: .infinity, minHeight: metrics.availableWidth >= 680 ? 58 : 52)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+}
+
+private struct ManualControlsSheet: View {
+    @ObservedObject var viewModel: DisplayViewModel
+    @ObservedObject var workoutManager: WorkoutManager
+    let displayMode: GymDisplayMode
+
+    private var controls: [DashboardControl] {
+        if displayMode == .workout {
+            return WODCompactControlStrip.controls(
+                for: workoutManager.status,
+                isFollowingWatch: viewModel.isFollowingWatch,
+                isMirroringWatchSession: viewModel.isMirroringWatchSession
+            )
+        }
+
+        return runControls
+    }
+
+    private var runControls: [DashboardControl] {
+        if viewModel.isFollowingWatch && viewModel.isMirroringWatchSession {
+            return [
+                DashboardControl(label: "Stop Follow", kind: .secondary, action: .stopFollowing, isEnabled: true)
+            ]
+        }
+
+        switch workoutManager.status {
+        case .idle:
+            return [
+                DashboardControl(label: "Start", kind: .primary, action: .primary, isEnabled: true),
+                DashboardControl(label: "Finish", kind: .warning, action: .finish, isEnabled: false),
+                DashboardControl(label: "Reset", kind: .secondary, action: .reset, isEnabled: true)
+            ]
+        case .running:
+            return [
+                DashboardControl(label: "Pause", kind: .primary, action: .primary, isEnabled: true),
+                DashboardControl(label: "Finish", kind: .warning, action: .finish, isEnabled: true),
+                DashboardControl(label: "Reset", kind: .secondary, action: .reset, isEnabled: true)
+            ]
+        case .paused:
+            return [
+                DashboardControl(label: "Resume", kind: .primary, action: .primary, isEnabled: true),
+                DashboardControl(label: "Finish", kind: .warning, action: .finish, isEnabled: true),
+                DashboardControl(label: "Reset", kind: .secondary, action: .reset, isEnabled: true)
+            ]
+        case .finished:
+            return [
+                DashboardControl(label: "Reset", kind: .primary, action: .reset, isEnabled: true)
+            ]
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Manual controls are preserved for simulator testing and fallback operation. The Garmin watch remains the primary workout controller.")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.72))
+
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 12),
+                        GridItem(.flexible(), spacing: 12)
+                    ],
+                    spacing: 12
+                ) {
+                    ForEach(controls) { control in
+                        Button(control.label) {
+                            handle(control)
+                        }
+                        .font(.system(size: 17, weight: .black, design: .rounded))
+                        .foregroundStyle(control.kind == .primary ? .black : .white)
+                        .frame(maxWidth: .infinity, minHeight: 58)
+                        .background(buttonBackground(for: control.kind), in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(.white.opacity(control.kind == .secondary ? 0.14 : 0), lineWidth: 1)
+                        )
+                        .disabled(!control.isEnabled)
+                        .opacity(control.isEnabled ? 1 : 0.42)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(22)
+            .background(Color.black.ignoresSafeArea())
+            .navigationTitle("Manual Controls")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func handle(_ control: DashboardControl) {
+        switch control.action {
+        case .primary: viewModel.primaryAction()
+        case .back: viewModel.previousStation()
+        case .next: viewModel.nextStation()
+        case .finish: viewModel.finishWorkout()
+        case .reset: viewModel.resetWorkout()
+        case .stopFollowing: viewModel.stopFollowingWatch()
+        }
+    }
+
+    private func buttonBackground(for kind: DashboardButtonKind) -> Color {
+        switch kind {
+        case .primary: return .yellow
+        case .secondary: return .white.opacity(0.1)
+        case .warning: return .red.opacity(0.74)
+        }
+    }
+}
+
+// MARK: - WORKOUT Scoreboard Header
+
+private struct WODScoreboardHeader: View {
+    @ObservedObject var workoutManager: WorkoutManager
+    @ObservedObject var viewModel: DisplayViewModel
+    let metrics: DashboardMetrics
+    let displayMode: GymDisplayMode
 
     var body: some View {
         HStack(alignment: .center, spacing: metrics.isLandscape ? 10 : 7) {
@@ -703,13 +1006,15 @@ private struct WODScoreboardHeader: View {
 
             Spacer(minLength: 4)
 
-            if metrics.isLandscape {
-                compactStatusCluster
-            } else {
-                VStack(alignment: .trailing, spacing: 3) {
-                    compactStatusCluster
-                }
-            }
+            Text(headerStatusText)
+                .font(.system(size: metrics.isLandscape ? 12 : 13, weight: .black, design: .rounded))
+                .foregroundStyle(viewModel.isFollowingWatch ? .yellow : .white.opacity(0.82))
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(.white.opacity(0.1), in: Capsule())
+                .layoutPriority(1)
         }
         .padding(.horizontal, metrics.isLandscape ? 10 : 12)
         .padding(.vertical, metrics.isLandscape ? 5 : 7)
@@ -721,76 +1026,12 @@ private struct WODScoreboardHeader: View {
         )
     }
 
-    private var compactStatusCluster: some View {
-        HStack(spacing: metrics.isLandscape ? 7 : 5) {
-            if viewModel.isFollowingWatch {
-                Text("FOLLOW")
-                    .font(.system(size: metrics.isLandscape ? 10 : 11, weight: .black, design: .rounded))
-                    .foregroundStyle(.black)
-                    .lineLimit(1)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(.yellow, in: Capsule())
-            } else if workoutManager.status == .idle {
-                Button {
-                    viewModel.toggleFollowWatch()
-                } label: {
-                    Text("Follow")
-                        .font(.system(size: metrics.isLandscape ? 10 : 11, weight: .black, design: .rounded))
-                        .lineLimit(1)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .background(.white.opacity(0.1), in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.yellow)
-            }
-
-            Button(action: onHeartRateSettings) {
-                Text(heartRateBadge)
-                    .font(.system(size: metrics.isLandscape ? 10 : 11, weight: .black, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.82))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.55)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(.white.opacity(0.1), in: Capsule())
-            }
-            .buttonStyle(.plain)
-
-            Button(action: onHistory) {
-                Text("History")
-                    .font(.system(size: metrics.isLandscape ? 10 : 11, weight: .black, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.82))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.55)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(.white.opacity(0.1), in: Capsule())
-            }
-            .buttonStyle(.plain)
-
-            DisplayModeSelector(displayMode: $displayMode, metrics: metrics)
-                .scaleEffect(metrics.isLandscape ? 0.78 : 0.82)
-                .frame(width: metrics.isLandscape ? 106 : 116, height: metrics.isLandscape ? 26 : 28)
-        }
-    }
-
-    private var heartRateBadge: String {
-        if let bpm = viewModel.activeHeartRate {
-            return "HR \(bpm)"
+    private var headerStatusText: String {
+        if viewModel.isFollowingWatch {
+            return viewModel.isMirroringWatchSession ? "FOLLOWING WATCH" : viewModel.watchSyncStatusText.uppercased()
         }
 
-        if bluetoothManager.connectionState.isConnected {
-            return "HR --"
-        }
-
-        switch bluetoothManager.connectionState {
-        case .scanning, .connecting:
-            return "HR …"
-        default:
-            return "HR --"
-        }
+        return displayMode.rawValue
     }
 }
 
