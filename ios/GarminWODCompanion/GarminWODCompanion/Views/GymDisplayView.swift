@@ -7,6 +7,7 @@ struct GymDisplayView: View {
     @StateObject private var viewModel = DisplayViewModel()
     @State private var isBluetoothSheetPresented = false
     @State private var isAnalyticsSheetPresented = false
+    @State private var isHistorySheetPresented = false
 
     private var displayMode: GymDisplayMode {
         GymDisplayMode(storedValue: displayModeRawValue)
@@ -119,6 +120,11 @@ struct GymDisplayView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $isHistorySheetPresented) {
+            WorkoutHistoryView(viewModel: viewModel)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     private func migrateDisplayModePreferenceIfNeeded() {
@@ -228,6 +234,9 @@ struct GymDisplayView: View {
                 displayMode: displayModeBinding,
                 onHeartRateSettings: {
                     isBluetoothSheetPresented = true
+                },
+                onHistory: {
+                    isHistorySheetPresented = true
                 }
             )
             .frame(height: metrics.wodScoreboardHeaderHeight)
@@ -264,6 +273,9 @@ struct GymDisplayView: View {
                 displayMode: displayModeBinding,
                 onHeartRateSettings: {
                     isBluetoothSheetPresented = true
+                },
+                onHistory: {
+                    isHistorySheetPresented = true
                 }
             )
             .frame(height: metrics.wodScoreboardHeaderHeight)
@@ -670,6 +682,7 @@ private struct WODScoreboardHeader: View {
     let metrics: DashboardMetrics
     @Binding var displayMode: GymDisplayMode
     let onHeartRateSettings: () -> Void
+    let onHistory: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: metrics.isLandscape ? 10 : 7) {
@@ -735,6 +748,18 @@ private struct WODScoreboardHeader: View {
 
             Button(action: onHeartRateSettings) {
                 Text(heartRateBadge)
+                    .font(.system(size: metrics.isLandscape ? 10 : 11, weight: .black, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.82))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(.white.opacity(0.1), in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onHistory) {
+                Text("History")
                     .font(.system(size: metrics.isLandscape ? 10 : 11, weight: .black, design: .rounded))
                     .foregroundStyle(.white.opacity(0.82))
                     .lineLimit(1)
@@ -1991,6 +2016,148 @@ private struct WorkoutAnalyticsView: View {
         }
 
         return "\(event.movementName) • \(heartRate)"
+    }
+}
+
+// MARK: - Workout History
+
+private struct WorkoutHistoryView: View {
+    @ObservedObject var viewModel: DisplayViewModel
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Workout History")
+                                .font(.system(size: 28, weight: .black, design: .rounded))
+                            Text(viewModel.workoutHistoryStatusText)
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.64))
+                        }
+
+                        Spacer()
+
+                        Button(viewModel.isRefreshingWorkoutHistory ? "Refreshing" : "Refresh") {
+                            viewModel.refreshWorkoutHistory(reason: "history")
+                        }
+                        .disabled(viewModel.isRefreshingWorkoutHistory)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.yellow)
+                        .foregroundStyle(.black)
+                    }
+
+                    if viewModel.workoutHistory.isEmpty {
+                        emptyHistory
+                    } else {
+                        VStack(spacing: 10) {
+                            ForEach(viewModel.workoutHistory) { summary in
+                                Button {
+                                    viewModel.openCompletedWorkout(summary)
+                                } label: {
+                                    WorkoutHistoryRow(summary: summary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    if let selected = viewModel.selectedCompletedWorkout {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Results")
+                                .font(.system(size: 20, weight: .black, design: .rounded))
+                            WorkoutAnalyticsView(analytics: selected.analytics)
+                                .frame(minHeight: 420)
+                        }
+                        .padding(.top, 8)
+                    }
+                }
+                .padding(20)
+            }
+            .background(Color.black.ignoresSafeArea())
+            .foregroundStyle(.white)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .onAppear {
+            viewModel.refreshWorkoutHistory(reason: "historyOpen")
+        }
+        .onDisappear {
+            viewModel.clearSelectedCompletedWorkout()
+        }
+    }
+
+    private var emptyHistory: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("No saved workouts yet.")
+                .font(.system(size: 18, weight: .black, design: .rounded))
+            Text("Completed watch workouts appear here after the watch uploads them to the Garmin-WOD archive.")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.68))
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct WorkoutHistoryRow: View {
+    let summary: CompletedWorkoutSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(summary.workoutName.isEmpty ? "Workout" : summary.workoutName)
+                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                Spacer()
+
+                Text(summary.hasDetailedAnalytics ? "Splits" : "Summary")
+                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .foregroundStyle(summary.hasDetailedAnalytics ? .yellow : .white.opacity(0.58))
+            }
+
+            Text(dateText)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.64))
+
+            HStack(spacing: 12) {
+                metric("Time", summary.activeSeconds.map(WorkoutSummary.format(seconds:)) ?? "--")
+                metric("Rounds", summary.roundsCompleted > 0 ? "\(summary.roundsCompleted)" : "--")
+                metric("Avg HR", summary.averageHeartRate.map(String.init) ?? "--")
+                metric("Max HR", summary.maximumHeartRate.map(String.init) ?? "--")
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(.white.opacity(0.10), lineWidth: 1)
+        )
+    }
+
+    private func metric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.system(size: 10, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.48))
+            Text(value)
+                .font(.system(size: 13, weight: .black, design: .rounded))
+        }
+    }
+
+    private var dateText: String {
+        guard let finishedAt = summary.finishedAt else {
+            return "Date unavailable"
+        }
+
+        let seconds = finishedAt > 9_999_999_999 ? TimeInterval(finishedAt / 1000) : TimeInterval(finishedAt)
+        let date = Date(timeIntervalSince1970: seconds)
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 

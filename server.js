@@ -8,6 +8,8 @@ const HOST = process.env.HOST || "0.0.0.0";
 const DATA_DIR = path.join(ROOT, "data");
 const LATEST_WORKOUT_PATH = path.join(DATA_DIR, "latest-workout.json");
 const WORKOUT_SESSION_PATH = path.join(DATA_DIR, "workout-session.json");
+const COMPLETED_WORKOUTS_DIR = path.join(DATA_DIR, "completed-workouts");
+const COMPLETED_WORKOUTS_INDEX_PATH = path.join(COMPLETED_WORKOUTS_DIR, "index.json");
 
 loadEnvFile(path.join(ROOT, ".env"));
 
@@ -53,6 +55,22 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "PUT" && url.pathname === "/api/workout-session") {
       await handleSaveWorkoutSession(request, response);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/completed-workouts") {
+      await handleSaveCompletedWorkout(request, response);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/completed-workouts") {
+      await handleListCompletedWorkouts(url, response);
+      return;
+    }
+
+    const completedWorkoutMatch = url.pathname.match(/^\/api\/completed-workouts\/([^/]+)$/);
+    if (request.method === "GET" && completedWorkoutMatch) {
+      await handleGetCompletedWorkout(completedWorkoutMatch[1], response);
       return;
     }
 
@@ -162,9 +180,65 @@ async function handleSaveWorkoutSession(request, response) {
   if (decision.write) {
     await fs.promises.mkdir(DATA_DIR, { recursive: true });
     await fs.promises.writeFile(WORKOUT_SESSION_PATH, JSON.stringify(decision.session, null, 2) + "\n", "utf8");
+    if (decision.session.status === "finished" && decision.session.analytics) {
+      await storeCompletedWorkoutFromPayload(decision.session.analytics);
+    }
   }
 
   sendJson(response, 200, { session: decision.session });
+}
+
+async function handleSaveCompletedWorkout(request, response) {
+  const body = await readJsonBody(request);
+  const result = normalizeCompletedWorkout(body, Date.now());
+
+  if (!result.ok) {
+    sendJson(response, 400, { error: result.error });
+    return;
+  }
+
+  const stored = await storeCompletedWorkout(result.session);
+  sendJson(response, 200, {
+    accepted: true,
+    sessionId: stored.sessionId,
+    stored: true,
+    duplicate: stored.duplicate,
+    summary: stored.summary,
+  });
+}
+
+async function handleListCompletedWorkouts(url, response) {
+  await migrateLatestFinishedSessionToArchive();
+
+  const limit = Math.max(1, Math.min(integerOrNull(url.searchParams.get("limit")) || 50, 100));
+  const before = integerOrNull(url.searchParams.get("before"));
+  const index = await readCompletedWorkoutIndex();
+  const ordered = [...index.items].sort(compareCompletedWorkoutSummaries);
+  const filtered = before === null
+    ? ordered
+    : ordered.filter((item) => (integerOrNull(item.finishedAt) || 0) < before);
+  const items = filtered.slice(0, limit);
+  const nextCursor = filtered.length > limit && items.length > 0
+    ? String(items[items.length - 1].finishedAt || 0)
+    : null;
+
+  sendJson(response, 200, { items, nextCursor });
+}
+
+async function handleGetCompletedWorkout(sessionId, response) {
+  const safeSessionId = decodeURIComponent(sessionId);
+  if (!isSafeSessionId(safeSessionId)) {
+    sendJson(response, 400, { error: "Invalid sessionId." });
+    return;
+  }
+
+  const session = await readCompletedWorkout(safeSessionId);
+  if (!session) {
+    sendJson(response, 404, { error: "Completed workout not found." });
+    return;
+  }
+
+  sendJson(response, 200, { session });
 }
 
 async function extractWithFallbacks(apiKey, imageDataUrl) {
@@ -619,6 +693,236 @@ async function readWorkoutSessionFromDisk() {
   }
 }
 
+async function storeCompletedWorkoutFromPayload(payload) {
+  const result = normalizeCompletedWorkout(payload, Date.now());
+  if (!result.ok) {
+    console.warn(`[COMPLETED] skipped archive: ${result.error}`);
+    return null;
+  }
+
+  return storeCompletedWorkout(result.session);
+}
+
+function normalizeCompletedWorkout(input, nowMs = Date.now()) {
+  if (!input || typeof input !== "object") {
+    return { ok: false, error: "completed workout payload must be an object." };
+  }
+
+  const analyticsInput = input.analytics && typeof input.analytics === "object" ? input.analytics : input;
+  const analytics = normalizeWorkoutAnalytics(analyticsInput);
+  const sessionId = stringOrEmpty(input.sessionId || (analytics && analytics.sessionId));
+
+  if (!isSafeSessionId(sessionId)) {
+    return { ok: false, error: "sessionId must be a safe non-empty identifier." };
+  }
+
+  const workoutIdentity = stringOrEmpty(input.workoutIdentity || input.workoutId || (analytics && analytics.workoutId));
+  const workoutName = stringOrEmpty(input.workoutName || (analytics && analytics.workoutName) || "Workout") || "Workout";
+  const startedAt = integerOrNull(input.startedAt) ?? (analytics ? integerOrNull(analytics.startedAt) : null);
+  const finishedAt = integerOrNull(input.finishedAt) ?? (analytics ? integerOrNull(analytics.finishedAt) : null) ?? nowMs;
+  const totalActiveSeconds = integerOrNull(input.totalActiveSeconds) ?? (analytics ? integerOrNull(analytics.totalActiveSeconds) : null);
+  const totalActiveMs = integerOrNull(input.totalActiveMs) ?? (totalActiveSeconds === null ? null : totalActiveSeconds * 1000);
+  const roundsCompleted = integerOrNull(input.roundsCompleted) ?? (analytics ? integerOrNull(analytics.roundsCompleted) : null) ?? 0;
+
+  if (analytics && !analytics.sessionId) {
+    analytics.sessionId = sessionId;
+  }
+  if (analytics && !analytics.workoutId) {
+    analytics.workoutId = workoutIdentity;
+  }
+  if (analytics && !analytics.workoutName) {
+    analytics.workoutName = workoutName;
+  }
+
+  return {
+    ok: true,
+    session: {
+      schemaVersion: integerOrNull(input.schemaVersion) || 1,
+      sessionId,
+      workoutIdentity,
+      workoutName,
+      startedAt,
+      finishedAt,
+      totalActiveMs,
+      totalActiveSeconds,
+      roundsCompleted,
+      status: "completed",
+      events: analytics ? analytics.events : [],
+      analytics,
+      source: normalizeCompletedWorkoutSource(input.source),
+      archivedAt: nowMs,
+    },
+  };
+}
+
+function normalizeCompletedWorkoutSource(source) {
+  if (!source || typeof source !== "object") {
+    return { device: "watch" };
+  }
+
+  const normalized = {
+    device: stringOrEmpty(source.device || "watch") || "watch",
+  };
+
+  const appVersion = stringOrEmpty(source.appVersion);
+  const deviceModel = stringOrEmpty(source.deviceModel);
+  if (appVersion) normalized.appVersion = appVersion;
+  if (deviceModel) normalized.deviceModel = deviceModel;
+
+  return normalized;
+}
+
+async function storeCompletedWorkout(session) {
+  if (!isSafeSessionId(session.sessionId)) {
+    throw new Error("Invalid completed workout sessionId.");
+  }
+
+  await fs.promises.mkdir(COMPLETED_WORKOUTS_DIR, { recursive: true });
+  const filePath = completedWorkoutPath(session.sessionId);
+  const existing = await readCompletedWorkout(session.sessionId);
+  const summary = buildCompletedWorkoutSummary(existing || session);
+
+  if (existing) {
+    await upsertCompletedWorkoutSummary(summary);
+    return {
+      sessionId: session.sessionId,
+      duplicate: true,
+      summary,
+    };
+  }
+
+  await writeJsonAtomic(filePath, session);
+  await upsertCompletedWorkoutSummary(summary);
+
+  return {
+    sessionId: session.sessionId,
+    duplicate: false,
+    summary,
+  };
+}
+
+async function readCompletedWorkout(sessionId) {
+  if (!isSafeSessionId(sessionId)) {
+    return null;
+  }
+
+  try {
+    const data = await fs.promises.readFile(completedWorkoutPath(sessionId), "utf8");
+    return JSON.parse(data);
+  } catch (error) {
+    return null;
+  }
+}
+
+function completedWorkoutPath(sessionId) {
+  return path.join(COMPLETED_WORKOUTS_DIR, `${sessionId}.json`);
+}
+
+function isSafeSessionId(sessionId) {
+  return /^[A-Za-z0-9._-]{1,160}$/.test(stringOrEmpty(sessionId));
+}
+
+async function readCompletedWorkoutIndex() {
+  try {
+    const data = await fs.promises.readFile(COMPLETED_WORKOUTS_INDEX_PATH, "utf8");
+    const parsed = JSON.parse(data);
+    return {
+      schemaVersion: integerOrNull(parsed.schemaVersion) || 1,
+      items: Array.isArray(parsed.items)
+        ? parsed.items.map(normalizeCompletedWorkoutSummary).filter(Boolean)
+        : [],
+    };
+  } catch (error) {
+    return { schemaVersion: 1, items: [] };
+  }
+}
+
+async function upsertCompletedWorkoutSummary(summary) {
+  const index = await readCompletedWorkoutIndex();
+  const bySessionId = new Map();
+
+  for (const item of index.items) {
+    bySessionId.set(item.sessionId, item);
+  }
+  bySessionId.set(summary.sessionId, summary);
+
+  const nextIndex = {
+    schemaVersion: 1,
+    items: [...bySessionId.values()].sort(compareCompletedWorkoutSummaries),
+  };
+
+  await writeJsonAtomic(COMPLETED_WORKOUTS_INDEX_PATH, nextIndex);
+}
+
+function normalizeCompletedWorkoutSummary(input) {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+
+  const sessionId = stringOrEmpty(input.sessionId);
+  if (!isSafeSessionId(sessionId)) {
+    return null;
+  }
+
+  return {
+    sessionId,
+    workoutIdentity: stringOrEmpty(input.workoutIdentity),
+    workoutName: stringOrEmpty(input.workoutName || "Workout") || "Workout",
+    startedAt: integerOrNull(input.startedAt),
+    finishedAt: integerOrNull(input.finishedAt) || 0,
+    totalActiveMs: integerOrNull(input.totalActiveMs),
+    totalActiveSeconds: integerOrNull(input.totalActiveSeconds),
+    roundsCompleted: integerOrNull(input.roundsCompleted) || 0,
+    movementCount: integerOrNull(input.movementCount) || 0,
+    averageHeartRate: integerOrNull(input.averageHeartRate),
+    maximumHeartRate: integerOrNull(input.maximumHeartRate),
+    hasDetailedAnalytics: input.hasDetailedAnalytics === true,
+  };
+}
+
+function buildCompletedWorkoutSummary(session) {
+  const analytics = normalizeWorkoutAnalytics(session.analytics);
+  const movementEvents = analytics ? analytics.movementEvents : [];
+  const heartRateEvents = movementEvents.filter((event) => event.averageHeartRate !== null && event.heartRateSampleCount > 0);
+  const totalHeartRateSamples = heartRateEvents.reduce((sum, event) => sum + event.heartRateSampleCount, 0);
+  const weightedHeartRate = heartRateEvents.reduce((sum, event) => sum + event.averageHeartRate * event.heartRateSampleCount, 0);
+
+  return {
+    sessionId: session.sessionId,
+    workoutIdentity: stringOrEmpty(session.workoutIdentity || (analytics && analytics.workoutId)),
+    workoutName: stringOrEmpty(session.workoutName || (analytics && analytics.workoutName) || "Workout") || "Workout",
+    startedAt: integerOrNull(session.startedAt) ?? (analytics ? analytics.startedAt : null),
+    finishedAt: integerOrNull(session.finishedAt) ?? (analytics ? analytics.finishedAt : null) ?? 0,
+    totalActiveMs: integerOrNull(session.totalActiveMs),
+    totalActiveSeconds: integerOrNull(session.totalActiveSeconds) ?? (analytics ? analytics.totalActiveSeconds : null),
+    roundsCompleted: integerOrNull(session.roundsCompleted) ?? (analytics ? analytics.roundsCompleted : 0) ?? 0,
+    movementCount: movementEvents.length,
+    averageHeartRate: totalHeartRateSamples > 0 ? Math.round(weightedHeartRate / totalHeartRateSamples) : null,
+    maximumHeartRate: movementEvents.map((event) => event.maximumHeartRate).filter(Number.isInteger).reduce((max, value) => max === null || value > max ? value : max, null),
+    hasDetailedAnalytics: !!analytics && (movementEvents.length > 0 || analytics.events.length > 0),
+  };
+}
+
+function compareCompletedWorkoutSummaries(a, b) {
+  const finishedDelta = (integerOrNull(b.finishedAt) || 0) - (integerOrNull(a.finishedAt) || 0);
+  if (finishedDelta !== 0) return finishedDelta;
+  return String(b.sessionId).localeCompare(String(a.sessionId));
+}
+
+async function migrateLatestFinishedSessionToArchive() {
+  const latest = await readWorkoutSessionFromDisk();
+  if (latest && latest.status === "finished" && latest.analytics) {
+    await storeCompletedWorkoutFromPayload(latest.analytics);
+  }
+}
+
+async function writeJsonAtomic(filePath, value) {
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await fs.promises.writeFile(tempPath, JSON.stringify(value, null, 2) + "\n", "utf8");
+  await fs.promises.rename(tempPath, filePath);
+}
+
 function numberOrNull(value) {
   if (value === null || value === undefined || value === "") return null;
 
@@ -729,6 +1033,8 @@ function loadEnvFile(filePath) {
 
 module.exports = {
   acceptWorkoutSessionState,
+  buildCompletedWorkoutSummary,
+  normalizeCompletedWorkout,
   normalizeWorkoutAnalytics,
   normalizeWorkoutSessionState,
   normalizeWorkoutContract,

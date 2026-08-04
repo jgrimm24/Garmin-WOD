@@ -305,6 +305,104 @@ struct MovementBreakdown: Equatable, Identifiable {
     let maximumHeartRate: Int?
 }
 
+struct CompletedWorkoutSummary: Codable, Equatable, Identifiable {
+    var id: String { sessionId }
+
+    let sessionId: String
+    let workoutIdentity: String
+    let workoutName: String
+    let startedAt: Int?
+    let finishedAt: Int?
+    let totalActiveMs: Int?
+    let totalActiveSeconds: Int?
+    let roundsCompleted: Int
+    let movementCount: Int
+    let averageHeartRate: Int?
+    let maximumHeartRate: Int?
+    let hasDetailedAnalytics: Bool
+
+    init(
+        sessionId: String,
+        workoutIdentity: String = "",
+        workoutName: String = "Workout",
+        startedAt: Int? = nil,
+        finishedAt: Int? = nil,
+        totalActiveMs: Int? = nil,
+        totalActiveSeconds: Int? = nil,
+        roundsCompleted: Int = 0,
+        movementCount: Int = 0,
+        averageHeartRate: Int? = nil,
+        maximumHeartRate: Int? = nil,
+        hasDetailedAnalytics: Bool = false
+    ) {
+        self.sessionId = sessionId
+        self.workoutIdentity = workoutIdentity
+        self.workoutName = workoutName
+        self.startedAt = startedAt
+        self.finishedAt = finishedAt
+        self.totalActiveMs = totalActiveMs
+        self.totalActiveSeconds = totalActiveSeconds
+        self.roundsCompleted = roundsCompleted
+        self.movementCount = movementCount
+        self.averageHeartRate = averageHeartRate
+        self.maximumHeartRate = maximumHeartRate
+        self.hasDetailedAnalytics = hasDetailedAnalytics
+    }
+
+    var activeSeconds: Int? {
+        if let totalActiveSeconds {
+            return totalActiveSeconds
+        }
+        if let totalActiveMs {
+            return totalActiveMs / 1000
+        }
+        return nil
+    }
+}
+
+struct CompletedWorkoutSession: Codable, Equatable, Identifiable {
+    var id: String { sessionId }
+
+    let schemaVersion: Int
+    let sessionId: String
+    let workoutIdentity: String
+    let workoutName: String
+    let startedAt: Int?
+    let finishedAt: Int?
+    let totalActiveMs: Int?
+    let totalActiveSeconds: Int?
+    let roundsCompleted: Int
+    let status: String
+    let events: [WorkoutTimelineEvent]
+    let analytics: WorkoutAnalytics?
+    let source: CompletedWorkoutSource?
+    let archivedAt: Int?
+
+    var summary: CompletedWorkoutSummary {
+        let analyticsSummary = analytics?.summary
+        return CompletedWorkoutSummary(
+            sessionId: sessionId,
+            workoutIdentity: workoutIdentity,
+            workoutName: workoutName.isEmpty ? (analytics?.workoutName ?? "Workout") : workoutName,
+            startedAt: startedAt ?? analytics?.startedAt,
+            finishedAt: finishedAt ?? analytics?.finishedAt,
+            totalActiveMs: totalActiveMs,
+            totalActiveSeconds: totalActiveSeconds ?? analytics?.totalActiveSeconds,
+            roundsCompleted: roundsCompleted > 0 ? roundsCompleted : (analytics?.roundsCompleted ?? 0),
+            movementCount: analyticsSummary?.movementCount ?? 0,
+            averageHeartRate: analyticsSummary?.averageHeartRate,
+            maximumHeartRate: analyticsSummary?.maximumHeartRate,
+            hasDetailedAnalytics: analytics != nil
+        )
+    }
+}
+
+struct CompletedWorkoutSource: Codable, Equatable {
+    let device: String
+    let appVersion: String?
+    let deviceModel: String?
+}
+
 struct WorkoutContract: Codable, Identifiable {
     var schemaVersion: Int
     var id: String

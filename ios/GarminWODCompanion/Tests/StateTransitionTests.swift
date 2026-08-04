@@ -76,6 +76,57 @@ final class MemoryWorkoutCache: WorkoutCaching {
     }
 }
 
+final class StubCompletedWorkoutHistoryClient: CompletedWorkoutHistoryServing {
+    var historyFetchCount = 0
+    var detailFetchCount = 0
+    var historyResult: Result<CompletedWorkoutHistoryPage, CompletedWorkoutHistoryError>
+    var detailResults: [String: Result<CompletedWorkoutSession, CompletedWorkoutHistoryError>]
+
+    init(
+        historyResult: Result<CompletedWorkoutHistoryPage, CompletedWorkoutHistoryError> = .success(CompletedWorkoutHistoryPage(items: [], nextCursor: nil)),
+        detailResults: [String: Result<CompletedWorkoutSession, CompletedWorkoutHistoryError>] = [:]
+    ) {
+        self.historyResult = historyResult
+        self.detailResults = detailResults
+    }
+
+    func fetchCompletedWorkoutHistory(limit: Int, before: String?, completion: @escaping (Result<CompletedWorkoutHistoryPage, CompletedWorkoutHistoryError>) -> Void) {
+        historyFetchCount += 1
+        completion(historyResult)
+    }
+
+    func fetchCompletedWorkout(sessionId: String, completion: @escaping (Result<CompletedWorkoutSession, CompletedWorkoutHistoryError>) -> Void) {
+        detailFetchCount += 1
+        completion(detailResults[sessionId] ?? .failure(.notFound))
+    }
+}
+
+final class MemoryCompletedWorkoutHistoryStore: CompletedWorkoutHistoryStoring {
+    var summaries: [CompletedWorkoutSummary]
+    var sessions: [String: CompletedWorkoutSession]
+
+    init(summaries: [CompletedWorkoutSummary] = [], sessions: [String: CompletedWorkoutSession] = [:]) {
+        self.summaries = summaries
+        self.sessions = sessions
+    }
+
+    func loadSummaries() -> [CompletedWorkoutSummary] {
+        summaries
+    }
+
+    func saveSummaries(_ summaries: [CompletedWorkoutSummary]) {
+        self.summaries = summaries
+    }
+
+    func loadSession(sessionId: String) -> CompletedWorkoutSession? {
+        sessions[sessionId]
+    }
+
+    func saveSession(_ session: CompletedWorkoutSession) {
+        sessions[session.sessionId] = session
+    }
+}
+
 func latestWorkoutFixture(title: String = "Roney") -> Data {
     """
     {
@@ -1016,5 +1067,127 @@ expect(latestBeforeFollowViewModel.workoutManager.workout.id == "latest-watch", 
 expect(latestBeforeFollowViewModel.isMirroringWatchSession, "Follow Watch should mirror once the refreshed workout identity matches the watch")
 expect(latestBeforeFollowViewModel.workoutManager.status == .running, "refreshed Follow Watch session should apply running state")
 expect(latestBeforeFollowCache.cachedWorkout?.id == "latest-watch", "Follow Watch latest sync should update the local cache")
+
+print("[TEST] Completed workout history")
+let historyAnalytics = WorkoutAnalytics(
+    schemaVersion: 1,
+    sessionId: "history-1",
+    workoutId: "id:history",
+    workoutName: "History WOD",
+    startedAt: 1_785_800_000,
+    finishedAt: 1_785_800_120,
+    totalActiveSeconds: 120,
+    roundsCompleted: 1,
+    transitionTimingAvailable: false,
+    movementEvents: [
+        WorkoutMovementEvent(
+            movementIndex: 0,
+            movementName: "20 CAL ROW",
+            prescribedReps: nil,
+            prescribedMeters: nil,
+            prescribedCalories: 20,
+            prescribedSeconds: nil,
+            roundNumber: 1,
+            enteredElapsedSeconds: 0,
+            exitedElapsedSeconds: 60,
+            durationSeconds: 60,
+            averageHeartRate: 140,
+            maximumHeartRate: 150,
+            minimumHeartRate: 120,
+            heartRateSampleCount: 10,
+            interrupted: false
+        )
+    ],
+    events: []
+)
+let historySession = CompletedWorkoutSession(
+    schemaVersion: 1,
+    sessionId: "history-1",
+    workoutIdentity: "id:history",
+    workoutName: "History WOD",
+    startedAt: 1_785_800_000,
+    finishedAt: 1_785_800_120,
+    totalActiveMs: 120_000,
+    totalActiveSeconds: 120,
+    roundsCompleted: 1,
+    status: "completed",
+    events: [],
+    analytics: historyAnalytics,
+    source: CompletedWorkoutSource(device: "watch", appVersion: nil, deviceModel: nil),
+    archivedAt: nil
+)
+let olderSummary = CompletedWorkoutSummary(sessionId: "history-0", workoutName: "Older", finishedAt: 1_785_700_000)
+let duplicateOlderSummary = CompletedWorkoutSummary(sessionId: "history-0", workoutName: "Older Duplicate", finishedAt: 1_785_700_001)
+let sortedHistory = sortedDedupedSummaries([olderSummary, historySession.summary, duplicateOlderSummary])
+expect(sortedHistory.count == 2, "history summaries should dedupe by sessionId")
+expect(sortedHistory.first?.sessionId == "history-1", "history summaries should sort newest first")
+
+let historyPayload = """
+{
+  "items": [
+    {
+      "sessionId": "history-1",
+      "workoutIdentity": "id:history",
+      "workoutName": "History WOD",
+      "startedAt": 1785800000,
+      "finishedAt": 1785800120,
+      "totalActiveMs": 120000,
+      "totalActiveSeconds": 120,
+      "roundsCompleted": 1,
+      "movementCount": 1,
+      "averageHeartRate": 140,
+      "maximumHeartRate": 150,
+      "hasDetailedAnalytics": true
+    }
+  ],
+  "nextCursor": null
+}
+""".data(using: .utf8)!
+let decodedHistory = try JSONDecoder().decode(CompletedWorkoutHistoryPage.self, from: historyPayload)
+expect(decodedHistory.items.first?.sessionId == "history-1", "history list response should decode")
+
+let tempHistoryURL = FileManager.default.temporaryDirectory
+    .appendingPathComponent("garmin-wod-history-tests-\(UUID().uuidString)", isDirectory: true)
+let fileHistoryStore = CompletedWorkoutHistoryStore(directoryURL: tempHistoryURL)
+fileHistoryStore.saveSummaries([historySession.summary])
+fileHistoryStore.saveSession(historySession)
+expect(fileHistoryStore.loadSummaries().first?.sessionId == "history-1", "file-backed history summaries should persist")
+expect(fileHistoryStore.loadSession(sessionId: "history-1")?.analytics?.summary.maximumHeartRate == 150, "file-backed history detail should persist analytics")
+try? FileManager.default.removeItem(at: tempHistoryURL)
+
+let historyClient = StubCompletedWorkoutHistoryClient(
+    historyResult: .success(CompletedWorkoutHistoryPage(items: [historySession.summary], nextCursor: nil)),
+    detailResults: ["history-1": .success(historySession)]
+)
+let historyStore = MemoryCompletedWorkoutHistoryStore()
+let historyViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: StubLatestWorkoutClient(result: .failure(.invalidStatus(404))),
+    workoutSessionClient: StubWorkoutSessionClient(result: .failure(.notFound)),
+    completedWorkoutHistoryClient: historyClient,
+    completedWorkoutHistoryStore: historyStore,
+    workoutCache: MemoryWorkoutCache()
+)
+historyViewModel.refreshWorkoutHistory(reason: "test")
+expect(historyViewModel.workoutHistory.first?.sessionId == "history-1", "history refresh should merge backend summaries")
+historyViewModel.openCompletedWorkout(historySession.summary)
+expect(historyViewModel.selectedCompletedWorkout?.sessionId == "history-1", "history detail should open selected session")
+expect(historyStore.sessions["history-1"]?.analytics?.summary.movementCount == 1, "opened history detail should cache full session")
+
+let importPreservationStore = MemoryCompletedWorkoutHistoryStore(summaries: [historySession.summary], sessions: ["history-1": historySession])
+let importPreservationViewModel = DisplayViewModel(
+    workoutManager: WorkoutManager(workout: workout),
+    timerManager: TimerManager(),
+    heartRateManager: MockHeartRateManager(),
+    latestWorkoutClient: StubLatestWorkoutClient(result: .success(makeWorkout(id: "new-import", title: "New Import"))),
+    workoutSessionClient: StubWorkoutSessionClient(result: .failure(.notFound)),
+    completedWorkoutHistoryClient: StubCompletedWorkoutHistoryClient(),
+    completedWorkoutHistoryStore: importPreservationStore,
+    workoutCache: MemoryWorkoutCache()
+)
+importPreservationViewModel.refreshLatestWorkout()
+expect(importPreservationViewModel.workoutHistory.contains { $0.sessionId == "history-1" }, "latest WOD import should not clear history")
 
 print("[TEST] PASS: DisplayViewModel state transitions")

@@ -7,6 +7,8 @@
     "test:importer-draft": "node tests/importer-draft-state.test.js",
     "test:latest-workout": "node tests/latest-workout.test.js",
     "test:watch-cache": "node tests/watch-startup-cache.test.js",
+    "test:history": "node tests/completed-workouts.test.js",
+    "test:watch-history": "node tests/watch-history-outbox.test.js",
     "test:session": "node tests/workout-session.test.js"
   },
   "dependencies": {}

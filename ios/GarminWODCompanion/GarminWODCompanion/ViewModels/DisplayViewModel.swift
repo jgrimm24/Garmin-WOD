@@ -22,11 +22,17 @@ final class DisplayViewModel: ObservableObject {
     @Published private(set) var isFollowingWatch: Bool = false
     @Published private(set) var isMirroringWatchSession: Bool = false
     @Published private(set) var watchSyncStatusText: String = "Follow Watch Off"
+    @Published private(set) var workoutHistory: [CompletedWorkoutSummary] = []
+    @Published private(set) var selectedCompletedWorkout: CompletedWorkoutSession?
+    @Published private(set) var workoutHistoryStatusText: String = "History ready"
+    @Published private(set) var isRefreshingWorkoutHistory: Bool = false
 
     private var zoneTimer: Timer?
     private var watchSessionPollTimer: Timer?
     private let latestWorkoutClient: LatestWorkoutServing
     private let workoutSessionClient: WorkoutSessionServing
+    private let completedWorkoutHistoryClient: CompletedWorkoutHistoryServing
+    private let completedWorkoutHistoryStore: CompletedWorkoutHistoryStoring
     private let workoutCache: WorkoutCaching
     private var hasLoadedStartupWorkout = false
     private var isPollingWatchSession = false
@@ -43,6 +49,8 @@ final class DisplayViewModel: ObservableObject {
         bluetoothHeartRateManager: BluetoothHeartRateManager = BluetoothHeartRateManager(),
         latestWorkoutClient: LatestWorkoutServing = WorkoutAPIClient(),
         workoutSessionClient: WorkoutSessionServing = WorkoutSessionAPIClient(),
+        completedWorkoutHistoryClient: CompletedWorkoutHistoryServing = CompletedWorkoutHistoryAPIClient(),
+        completedWorkoutHistoryStore: CompletedWorkoutHistoryStoring = CompletedWorkoutHistoryStore(),
         workoutCache: WorkoutCaching = WorkoutCache()
     ) {
         self.workoutManager = workoutManager
@@ -51,8 +59,12 @@ final class DisplayViewModel: ObservableObject {
         self.bluetoothHeartRateManager = bluetoothHeartRateManager
         self.latestWorkoutClient = latestWorkoutClient
         self.workoutSessionClient = workoutSessionClient
+        self.completedWorkoutHistoryClient = completedWorkoutHistoryClient
+        self.completedWorkoutHistoryStore = completedWorkoutHistoryStore
         self.workoutCache = workoutCache
         self.latestWorkoutAnalytics = Self.loadPersistedAnalytics(storageKey: analyticsStorageKey)
+        self.workoutHistory = completedWorkoutHistoryStore.loadSummaries()
+        migrateLatestAnalyticsIntoHistoryIfNeeded()
         print("[LIFECYCLE] DisplayViewModel init")
         scheduleZoneTimer()
     }
@@ -116,10 +128,12 @@ final class DisplayViewModel: ObservableObject {
         }
 
         refreshLatestWorkout(reason: .startup)
+        refreshWorkoutHistory(reason: "startup")
     }
 
     func refreshLatestWorkout() {
         refreshLatestWorkout(reason: .manual)
+        refreshWorkoutHistory(reason: "manual")
     }
 
     func refreshLatestWorkoutAfterForeground() {
@@ -128,6 +142,7 @@ final class DisplayViewModel: ObservableObject {
         }
 
         refreshLatestWorkout(reason: .foreground)
+        refreshWorkoutHistory(reason: "foreground")
     }
 
     private func refreshLatestWorkout(
@@ -161,6 +176,53 @@ final class DisplayViewModel: ObservableObject {
                 self?.handleLatestWorkoutResult(result, reason: reason)
             }
         }
+    }
+
+    func refreshWorkoutHistory(reason: String = "manual") {
+        guard !isRefreshingWorkoutHistory else {
+            print("[HISTORY] \(reason) refresh skipped; request already running")
+            return
+        }
+
+        isRefreshingWorkoutHistory = true
+        workoutHistoryStatusText = workoutHistory.isEmpty ? "Loading history" : "Refreshing history"
+        print("[HISTORY] \(reason) refresh started")
+
+        completedWorkoutHistoryClient.fetchCompletedWorkoutHistory(limit: 50, before: nil) { [weak self] result in
+            self?.performOnMain {
+                self?.handleWorkoutHistoryResult(result, reason: reason)
+            }
+        }
+    }
+
+    func openCompletedWorkout(_ summary: CompletedWorkoutSummary) {
+        if let cached = completedWorkoutHistoryStore.loadSession(sessionId: summary.sessionId) {
+            selectedCompletedWorkout = cached
+        }
+
+        completedWorkoutHistoryClient.fetchCompletedWorkout(sessionId: summary.sessionId) { [weak self] result in
+            self?.performOnMain {
+                switch result {
+                case .success(let session):
+                    self?.selectedCompletedWorkout = session
+                    self?.completedWorkoutHistoryStore.saveSession(session)
+                    self?.mergeWorkoutHistorySummaries([session.summary])
+                    self?.workoutHistoryStatusText = "Loaded result"
+
+                case .failure(let error):
+                    if self?.selectedCompletedWorkout == nil {
+                        self?.workoutHistoryStatusText = "Could not load result"
+                    } else {
+                        self?.workoutHistoryStatusText = "Showing cached result"
+                    }
+                    print("[HISTORY] detail fetch failed session=\(summary.sessionId): \(error)")
+                }
+            }
+        }
+    }
+
+    func clearSelectedCompletedWorkout() {
+        selectedCompletedWorkout = nil
     }
 
     func startWorkout() {
@@ -310,6 +372,7 @@ final class DisplayViewModel: ObservableObject {
         print("[WATCH SYNC] follow enabled")
         isFollowingWatch = true
         watchSyncStatusText = "Syncing WOD"
+        refreshWorkoutHistory(reason: "followWatch")
         refreshLatestWorkout(reason: .followWatch) { [weak self] _ in
             self?.beginWatchSessionFollowing()
         }
@@ -559,6 +622,11 @@ final class DisplayViewModel: ObservableObject {
         if state.status == .finished {
             latestWorkoutAnalytics = state.analytics
             persistLatestAnalytics(state.analytics)
+            if let analytics = state.analytics {
+                let session = completedWorkoutSession(from: analytics)
+                completedWorkoutHistoryStore.saveSession(session)
+                mergeWorkoutHistorySummaries([session.summary])
+            }
             captureWorkoutSummaryIfNeeded()
             timerManager.stop()
         }
@@ -661,6 +729,61 @@ final class DisplayViewModel: ObservableObject {
         timestamp?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased() ?? ""
+    }
+
+    private func handleWorkoutHistoryResult(
+        _ result: Result<CompletedWorkoutHistoryPage, CompletedWorkoutHistoryError>,
+        reason: String
+    ) {
+        isRefreshingWorkoutHistory = false
+
+        switch result {
+        case .success(let page):
+            mergeWorkoutHistorySummaries(page.items)
+            workoutHistoryStatusText = workoutHistory.isEmpty ? "No saved workouts" : "History updated"
+            print("[HISTORY] \(reason) refresh applied count=\(page.items.count)")
+
+        case .failure(let error):
+            workoutHistoryStatusText = workoutHistory.isEmpty ? "History unavailable" : "Showing cached history"
+            print("[HISTORY] \(reason) refresh failed: \(error)")
+        }
+    }
+
+    private func mergeWorkoutHistorySummaries(_ summaries: [CompletedWorkoutSummary]) {
+        let merged = sortedDedupedSummaries(workoutHistory + summaries)
+        workoutHistory = merged
+        completedWorkoutHistoryStore.saveSummaries(merged)
+    }
+
+    private func migrateLatestAnalyticsIntoHistoryIfNeeded() {
+        guard let latestWorkoutAnalytics else {
+            return
+        }
+
+        let session = completedWorkoutSession(from: latestWorkoutAnalytics)
+        if completedWorkoutHistoryStore.loadSession(sessionId: session.sessionId) == nil {
+            completedWorkoutHistoryStore.saveSession(session)
+        }
+        mergeWorkoutHistorySummaries([session.summary])
+    }
+
+    private func completedWorkoutSession(from analytics: WorkoutAnalytics) -> CompletedWorkoutSession {
+        CompletedWorkoutSession(
+            schemaVersion: analytics.schemaVersion,
+            sessionId: analytics.sessionId,
+            workoutIdentity: analytics.workoutId,
+            workoutName: analytics.workoutName,
+            startedAt: analytics.startedAt,
+            finishedAt: analytics.finishedAt,
+            totalActiveMs: analytics.totalActiveSeconds.map { $0 * 1000 },
+            totalActiveSeconds: analytics.totalActiveSeconds,
+            roundsCompleted: analytics.roundsCompleted,
+            status: "completed",
+            events: analytics.events,
+            analytics: analytics,
+            source: CompletedWorkoutSource(device: "watch", appVersion: nil, deviceModel: nil),
+            archivedAt: nil
+        )
     }
 
     private func performOnMain(_ action: @escaping () -> Void) {

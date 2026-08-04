@@ -83,6 +83,7 @@ class GarminWODView extends WatchUi.View {
     var _analyticsStationIndex;
     var _analyticsRoundNumber;
     var _completedAnalyticsPayload;
+    var _completedOutbox;
 
     function initialize() {
         View.initialize();
@@ -155,6 +156,7 @@ class GarminWODView extends WatchUi.View {
         _analyticsStationIndex = null;
         _analyticsRoundNumber = null;
         _completedAnalyticsPayload = null;
+        _completedOutbox = new GarminWODCompletedWorkoutOutbox();
     }
 
     // Load your resources here
@@ -171,6 +173,7 @@ class GarminWODView extends WatchUi.View {
         }
 
         fetchLatestWorkout();
+        _completedOutbox.uploadPending();
 
         if (!_isTimerActive) {
             _timer.start(method(:onTick), 1000, true);
@@ -1487,10 +1490,39 @@ class GarminWODView extends WatchUi.View {
         if (saved) {
             disableHeartRateSensor();
         }
+        enqueueCompletedWorkout();
         _isFinished = true;
         vibrateWorkoutComplete();
         publishWorkoutSessionState("finished");
         WatchUi.requestUpdate();
+    }
+
+    function enqueueCompletedWorkout() as Void {
+        if (_completedAnalyticsPayload == null || !_sessionSync.hasSession()) {
+            return;
+        }
+
+        var totalActiveSeconds = _completedAnalyticsPayload["totalActiveSeconds"];
+        var completedSession = {
+            "schemaVersion" => 1,
+            "sessionId" => _sessionSync.getSessionId(),
+            "workoutIdentity" => _currentWorkoutIdentity,
+            "workoutName" => _workout.title,
+            "startedAt" => _completedAnalyticsPayload["startedAt"],
+            "finishedAt" => _completedAnalyticsPayload["finishedAt"],
+            "totalActiveSeconds" => totalActiveSeconds,
+            "totalActiveMs" => totalActiveSeconds == null ? null : totalActiveSeconds * 1000,
+            "roundsCompleted" => _completedAnalyticsPayload["roundsCompleted"],
+            "status" => "completed",
+            "events" => _completedAnalyticsPayload["events"],
+            "analytics" => _completedAnalyticsPayload,
+            "source" => {
+                "device" => "watch"
+            }
+        };
+
+        _completedOutbox.enqueue(completedSession);
+        _completedOutbox.uploadPending();
     }
 
     function ensureWorkoutSessionSync() as Void {
