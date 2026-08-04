@@ -321,6 +321,13 @@ function normalizeWorkoutContract(workout) {
   const now = new Date().toISOString();
   const title = String(workout.title || "Today's WOD");
   const sourceText = String(workout.sourceText || "");
+  const repScheme = normalizeRepScheme(workout.repScheme);
+  const normalizedStructure = normalizeRepSchemeStructure({
+    structureType: normalizeStructureType(workout.structureType),
+    rounds: numberOrNull(workout.rounds),
+    repScheme,
+    parserWarnings: Array.isArray(workout.parserWarnings) ? workout.parserWarnings.map(String) : [],
+  });
 
   return {
     schemaVersion: 1,
@@ -328,18 +335,52 @@ function normalizeWorkoutContract(workout) {
     title,
     type: normalizeWorkoutType(workout.type),
     workoutType: normalizeWorkoutTypeCode(workout.workoutType || workout.type),
-    structureType: normalizeStructureType(workout.structureType),
+    structureType: normalizedStructure.structureType,
     durationMinutes: numberOrNull(workout.durationMinutes),
     durationSeconds: numberOrNull(workout.durationSeconds),
-    rounds: numberOrNull(workout.rounds),
-    repScheme: normalizeRepScheme(workout.repScheme),
+    rounds: normalizedStructure.rounds,
+    repScheme,
     intervalSeconds: numberOrNull(workout.intervalSeconds),
-    parserWarnings: Array.isArray(workout.parserWarnings) ? workout.parserWarnings.map(String) : [],
+    parserWarnings: normalizedStructure.parserWarnings,
     notes: Array.isArray(workout.notes) ? workout.notes.map(String) : [],
     sourceText,
     createdAt: String(workout.createdAt || now),
     updatedAt: now,
     stations: Array.isArray(workout.stations) ? workout.stations.map(normalizeStationContract) : [],
+  };
+}
+
+function normalizeRepSchemeStructure({ structureType, rounds, repScheme, parserWarnings }) {
+  const warnings = Array.isArray(parserWarnings) ? parserWarnings.slice() : [];
+  const hasRepScheme = Array.isArray(repScheme) && repScheme.length >= 2;
+  let normalizedStructureType = structureType;
+  let normalizedRounds = rounds;
+
+  if (!hasRepScheme) {
+    return {
+      structureType: normalizedStructureType,
+      rounds: normalizedRounds,
+      parserWarnings: warnings,
+    };
+  }
+
+  if (normalizedStructureType === "UNKNOWN" || normalizedStructureType === "FIXED_STATIONS") {
+    normalizedStructureType = "REP_SCHEME";
+  }
+
+  if (normalizedRounds == null) {
+    normalizedRounds = repScheme.length;
+  } else if (normalizedRounds !== repScheme.length) {
+    const warning = `Rep scheme has ${repScheme.length} rounds but workout says ${normalizedRounds} rounds.`;
+    if (!warnings.includes(warning)) {
+      warnings.push(warning);
+    }
+  }
+
+  return {
+    structureType: normalizedStructureType,
+    rounds: normalizedRounds,
+    parserWarnings: warnings,
   };
 }
 
@@ -353,6 +394,12 @@ function normalizeStationContract(station, index) {
     weightLb: numberOrNull(station.weightLb),
     maleWeightLb: numberOrNull(station.maleWeightLb === undefined ? station.weightLb : station.maleWeightLb),
     femaleWeightLb: numberOrNull(station.femaleWeightLb),
+    weightUnit: stringOrNull(station.weightUnit),
+    maleWeightKg: numberOrNull(station.maleWeightKg),
+    femaleWeightKg: numberOrNull(station.femaleWeightKg),
+    heightUnit: stringOrNull(station.heightUnit),
+    maleHeightIn: numberOrNull(station.maleHeightIn),
+    femaleHeightIn: numberOrNull(station.femaleHeightIn),
     workSeconds: numberOrNull(station.workSeconds),
     notes: String(station.notes || ""),
   };
@@ -506,6 +553,11 @@ function caloriesOrNull(value) {
 function stringOrEmpty(value) {
   if (value === null || value === undefined) return "";
   return String(value).trim();
+}
+
+function stringOrNull(value) {
+  const text = stringOrEmpty(value);
+  return text ? text : null;
 }
 
 function integerOrNull(value) {

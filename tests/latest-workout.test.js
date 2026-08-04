@@ -33,6 +33,12 @@ function latestWorkout(overrides = {}) {
         weightLb: null,
         maleWeightLb: null,
         femaleWeightLb: null,
+        weightUnit: "kg",
+        maleWeightKg: 24,
+        femaleWeightKg: 16,
+        heightUnit: null,
+        maleHeightIn: null,
+        femaleHeightIn: null,
         workSeconds: null,
         notes: "200m Run",
       },
@@ -133,11 +139,17 @@ async function run() {
       assert.equal(response.status, 200, "first latest WOD GET should succeed");
       assert.equal(response.body.title, "Roney");
       assert.equal(response.body.workoutType, "FOR_TIME");
+      assert.equal(response.body.stations[0].weightUnit, "kg");
+      assert.equal(response.body.stations[0].maleWeightKg, 24);
+      assert.equal(response.body.stations[0].femaleWeightKg, 16);
 
       response = await requestJson(baseUrl, "/api/latest-workout");
       assert.equal(response.status, 200, "second latest WOD GET should still succeed");
       assert.equal(response.body.title, "Roney");
       assert.deepStrictEqual(response.body.repScheme, [], "repeated GET should preserve optional schema fields");
+      assert.equal(response.body.stations[0].weightUnit, "kg", "repeated GET should preserve kg metadata");
+      assert.equal(response.body.stations[0].maleWeightKg, 24, "repeated GET should preserve male kg");
+      assert.equal(response.body.stations[0].femaleWeightKg, 16, "repeated GET should preserve female kg");
 
       const savedFile = JSON.parse(await fs.promises.readFile(LATEST_WORKOUT_PATH, "utf8"));
       assert.equal(savedFile.title, "Roney", "latest-workout.json should remain on disk after repeated GETs");

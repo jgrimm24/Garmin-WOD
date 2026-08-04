@@ -377,7 +377,7 @@ function findStationLines(lines, classification = null) {
     if (/^\d+\s*(?:rounds?|rds?)\b/i.test(normalizedLine)) return false;
     if (classification && parseRepSchemeFromLine(normalizedLine).length) return false;
     if (isGenderWeightLine(normalizedLine)) return false;
-    return /(^\d+[\).:-]\s*)|(^\d+\s+\D)|(\d+\s*(?:reps?|cal|cals|m|meter|meters|sec|seconds|min|minute|minutes|lb|#|@))|row|run|bike|pull|push|squat|bench|sit|clean|snatch|deadlift|burpee|wall ball|toes|thruster|double\s+unders?|box\s+jumps?|rest/i.test(normalizedLine);
+    return /(^\d+[\).:-]\s*)|(^\d+\s+\D)|(\d+\s*(?:reps?|cal|cals|m|meter|meters|sec|seconds|min|minute|minutes|lb|kg|in|#|@))|row|run|bike|pull|push|squat|bench|sit|clean|snatch|deadlift|burpee|wall ball|toes|thruster|kettlebell|kb|swings?|double\s+unders?|box\s+jumps?|rest/i.test(normalizedLine);
   });
 }
 
@@ -439,8 +439,8 @@ function findRepSchemeInlineStationLines(lines) {
     const match = cleaned.match(/^\s*\d+(?:\s*(?:-|–|—|,|\/)\s*\d+){1,}\s+(?:reps?\s+)?(?:of\s+)?(.+)$/i);
     if (!match) continue;
 
-    const movementText = match[1].replace(/\bfor\s+time\b/gi, "").trim();
-    if (!movementText || isRepSchemeLine(movementText)) continue;
+    const movementText = match[1].replace(/\bfor\s+time\b/gi, "").replace(/\breps?\b/gi, "").replace(/[:\s]+$/g, "").trim();
+    if (!movementText || isRepSchemeLine(movementText) || !looksLikeMovementLine(movementText)) continue;
 
     movementText
       .split(/\s+(?:and|then)\s+|[,/]/i)
@@ -450,6 +450,10 @@ function findRepSchemeInlineStationLines(lines) {
   }
 
   return stationLines;
+}
+
+function looksLikeMovementLine(line) {
+  return /row|run|bike|pull|push|squat|bench|sit|clean|snatch|deadlift|burpee|wall ball|toes|thruster|kettlebell|kb|swings?|double\s+unders?|box\s+jumps?|rest/i.test(line);
 }
 
 function isMonotonicRepScheme(values) {
@@ -575,7 +579,9 @@ function parseStation(line, workoutType) {
     .trim();
   const secondsMatch = cleaned.match(/(\d+)\s*(?:sec|secs|second|seconds)\b/i);
   const minutesMatch = cleaned.match(/(\d+)\s*(?:min|minute|minutes)\b/i);
-  const weightInfo = parseWeightInfo(cleaned);
+  const equipmentInfo = parseEquipmentInfo(cleaned);
+  const weightInfo = equipmentInfo.weight;
+  const heightInfo = equipmentInfo.height;
   const distanceMatch = cleaned.match(/(\d+)\s*(?:-| )?\s*(?:m|meter|meters)\b/i);
   const caloriesMatch = cleaned.match(/(\d+(?:\s*\/\s*\d+)?)\s*(?:cal|cals|calorie|calories)\b/i);
   const repsMatch = cleaned.match(/^(\d+)\s+(?!sec|secs|second|seconds|min|minute|minutes|m\b|meter|meters|cal|cals|calorie|calories)(.+)$/i);
@@ -595,13 +601,16 @@ function parseStation(line, workoutType) {
   }
 
   name = name
-    .replace(weightInfo.matchedText, " ")
+    .replace(equipmentInfo.matchedText, " ")
     .replace(/\s*\d+(?:\s*\/\s*\d+)?\s*(?:cal|cals|calorie|calories)\b/i, "")
     .replace(/\s*\d+\s*(?:-| )?\s*(?:m|meter|meters)\b/i, "")
     .replace(/\s*@\s*\d+\s*(?:lb|lbs|#)?/i, "")
     .replace(/\s*\d+\s*(?:lb|lbs|#)\b/i, "")
+    .replace(/\s*\d+\s*(?:kg)\b/i, "")
+    .replace(/\s*\d+\s*(?:in|inch|inches)\b/i, "")
     .replace(/\s*\d+\s*(?:sec|secs|second|seconds)\b/i, "")
     .replace(/\s*\d+\s*(?:min|minute|minutes)\b/i, "")
+    .replace(/\(\s*\)/g, "")
     .replace(/[,\s]+$/g, "")
     .trim();
 
@@ -616,44 +625,119 @@ function parseStation(line, workoutType) {
     weightLb: weightInfo.weightLb,
     maleWeightLb: weightInfo.maleWeightLb,
     femaleWeightLb: weightInfo.femaleWeightLb,
+    weightUnit: weightInfo.weightUnit,
+    maleWeightKg: weightInfo.maleWeightKg,
+    femaleWeightKg: weightInfo.femaleWeightKg,
+    heightUnit: heightInfo.heightUnit,
+    maleHeightIn: heightInfo.maleHeightIn,
+    femaleHeightIn: heightInfo.femaleHeightIn,
     notes: cleaned,
+  };
+}
+
+function parseEquipmentInfo(text) {
+  const height = parseHeightInfo(text);
+  const weight = parseWeightInfo(text);
+
+  if (height.matchedText) {
+    return {
+      weight: emptyWeightInfo(),
+      height,
+      matchedText: height.matchedText,
+    };
+  }
+
+  return {
+    weight,
+    height: emptyHeightInfo(),
+    matchedText: weight.matchedText,
   };
 }
 
 function parseWeightInfo(text) {
   const pairedWeightMatch =
-    text.match(/(?:^|[\s,])(?:@|with\s+)\s*(\d+)\s*\/\s*(\d+)\s*(?:lb|lbs|#)?(?=$|[\s,.)])/i) ||
-    text.match(/(?:^|[\s,])(\d+)\s*\/\s*(\d+)\s*(?:lb|lbs|#)(?=$|[\s,.)])/i);
+    text.match(/(?:^|[\s,(])(?:@|with\s+)?\s*(\d+)\s*\/\s*(\d+)\s*(lb|lbs|#|kg)\s*\)?(?=$|[\s,.])/i) ||
+    text.match(/(?:^|[\s,(])(?:@|with\s+)\s*(\d+)\s*\/\s*(\d+)(?=$|[\s,.)])/i);
 
   if (pairedWeightMatch) {
-    const maleWeightLb = Number(pairedWeightMatch[1]);
-    const femaleWeightLb = Number(pairedWeightMatch[2]);
+    const maleValue = Number(pairedWeightMatch[1]);
+    const femaleValue = Number(pairedWeightMatch[2]);
+    const unit = pairedWeightMatch[3] && pairedWeightMatch[3].toLowerCase() === "kg" ? "kg" : "lb";
 
     return {
-      weightLb: maleWeightLb,
-      maleWeightLb,
-      femaleWeightLb,
+      weightLb: unit === "lb" ? maleValue : null,
+      maleWeightLb: unit === "lb" ? maleValue : null,
+      femaleWeightLb: unit === "lb" ? femaleValue : null,
+      weightUnit: unit,
+      maleWeightKg: unit === "kg" ? maleValue : null,
+      femaleWeightKg: unit === "kg" ? femaleValue : null,
       matchedText: pairedWeightMatch[0],
     };
   }
 
-  const singleWeightMatch = text.match(/(?:^|[\s,])(?:@|with\s+)?\s*(\d+)\s*(?:lb|lbs|#)(?=$|[\s,.)])/i);
+  const singleWeightMatch = text.match(/(?:^|[\s,(])(?:@|with\s+)?\s*(\d+)\s*(lb|lbs|#|kg)\s*\)?(?=$|[\s,.])/i);
 
   if (singleWeightMatch) {
-    const weightLb = Number(singleWeightMatch[1]);
+    const value = Number(singleWeightMatch[1]);
+    const unit = singleWeightMatch[2].toLowerCase() === "kg" ? "kg" : "lb";
 
     return {
-      weightLb,
-      maleWeightLb: weightLb,
+      weightLb: unit === "lb" ? value : null,
+      maleWeightLb: unit === "lb" ? value : null,
       femaleWeightLb: null,
+      weightUnit: unit,
+      maleWeightKg: unit === "kg" ? value : null,
+      femaleWeightKg: null,
       matchedText: singleWeightMatch[0],
     };
   }
 
+  return emptyWeightInfo();
+}
+
+function parseHeightInfo(text) {
+  const pairedHeightMatch = text.match(/(?:^|[\s,(])(\d+)\s*\/\s*(\d+)\s*(?:in|inch|inches)\s*\)?(?=$|[\s,.])/i);
+
+  if (pairedHeightMatch) {
+    return {
+      heightUnit: "in",
+      maleHeightIn: Number(pairedHeightMatch[1]),
+      femaleHeightIn: Number(pairedHeightMatch[2]),
+      matchedText: pairedHeightMatch[0],
+    };
+  }
+
+  const singleHeightMatch = text.match(/(?:^|[\s,(])(\d+)\s*(?:in|inch|inches)\s*\)?(?=$|[\s,.])/i);
+
+  if (singleHeightMatch) {
+    return {
+      heightUnit: "in",
+      maleHeightIn: Number(singleHeightMatch[1]),
+      femaleHeightIn: null,
+      matchedText: singleHeightMatch[0],
+    };
+  }
+
+  return emptyHeightInfo();
+}
+
+function emptyWeightInfo() {
   return {
     weightLb: null,
     maleWeightLb: null,
     femaleWeightLb: null,
+    weightUnit: null,
+    maleWeightKg: null,
+    femaleWeightKg: null,
+    matchedText: "",
+  };
+}
+
+function emptyHeightInfo() {
+  return {
+    heightUnit: null,
+    maleHeightIn: null,
+    femaleHeightIn: null,
     matchedText: "",
   };
 }
@@ -749,6 +833,10 @@ function renderWorkout(workout) {
             ${renderStationField(index, "distanceMeters", "Meters", "number", station.distanceMeters)}
             ${renderStationField(index, "maleWeightLb", "Male lb", "number", station.maleWeightLb)}
             ${renderStationField(index, "femaleWeightLb", "Female lb", "number", station.femaleWeightLb)}
+            ${renderStationField(index, "maleWeightKg", "Male kg", "number", station.maleWeightKg)}
+            ${renderStationField(index, "femaleWeightKg", "Female kg", "number", station.femaleWeightKg)}
+            ${renderStationField(index, "maleHeightIn", "Male in", "number", station.maleHeightIn)}
+            ${renderStationField(index, "femaleHeightIn", "Female in", "number", station.femaleHeightIn)}
             ${renderStationField(index, "workSeconds", "Seconds", "number", station.workSeconds)}
             <button class="station-remove" type="button" data-remove-station="${index}">Remove</button>
           </div>
@@ -777,6 +865,16 @@ function formatStationMeta(station) {
   } else if (station.weightLb) {
     pieces.push(`${station.weightLb} lb`);
   }
+  if (station.maleWeightKg && station.femaleWeightKg) {
+    pieces.push(`${station.maleWeightKg}/${station.femaleWeightKg} kg`);
+  } else if (station.maleWeightKg) {
+    pieces.push(`${station.maleWeightKg} kg`);
+  }
+  if (station.maleHeightIn && station.femaleHeightIn) {
+    pieces.push(`${station.maleHeightIn}/${station.femaleHeightIn} in`);
+  } else if (station.maleHeightIn) {
+    pieces.push(`${station.maleHeightIn} in`);
+  }
   return pieces.length ? pieces.join(" · ") : station.notes;
 }
 
@@ -792,8 +890,14 @@ function normalizeWorkout(workout) {
   const sourceText = workout.sourceText || "";
   const title = workout.title || "Today's WOD";
   const workoutType = normalizeWorkoutTypeLabel(workout.workoutType || workout.type || "Unknown");
-  const structureType = normalizeStructureType(workout.structureType);
   const durationMinutes = numberOrNull(workout.durationMinutes);
+  const repScheme = normalizeRepScheme(workout.repScheme);
+  const normalizedStructure = normalizeRepSchemeStructure({
+    structureType: normalizeStructureType(workout.structureType),
+    rounds: numberOrNull(workout.rounds),
+    repScheme,
+    parserWarnings: Array.isArray(workout.parserWarnings) ? workout.parserWarnings.map(String) : [],
+  });
 
   return {
     schemaVersion: 1,
@@ -801,13 +905,13 @@ function normalizeWorkout(workout) {
     title,
     type: workout.type || displayWorkoutType(workoutType),
     workoutType,
-    structureType,
+    structureType: normalizedStructure.structureType,
     durationMinutes,
     durationSeconds: numberOrNull(workout.durationSeconds) || (durationMinutes == null ? null : durationMinutes * 60),
-    rounds: numberOrNull(workout.rounds),
-    repScheme: normalizeRepScheme(workout.repScheme),
+    rounds: normalizedStructure.rounds,
+    repScheme,
     intervalSeconds: numberOrNull(workout.intervalSeconds),
-    parserWarnings: Array.isArray(workout.parserWarnings) ? workout.parserWarnings.map(String) : [],
+    parserWarnings: normalizedStructure.parserWarnings,
     stations: Array.isArray(workout.stations) ? workout.stations.map(normalizeStation) : [],
     notes: Array.isArray(workout.notes) ? workout.notes : [],
     sourceText,
@@ -816,10 +920,48 @@ function normalizeWorkout(workout) {
   };
 }
 
+function normalizeRepSchemeStructure({ structureType, rounds, repScheme, parserWarnings }) {
+  const warnings = Array.isArray(parserWarnings) ? parserWarnings.slice() : [];
+  const hasRepScheme = Array.isArray(repScheme) && repScheme.length >= 2;
+  let normalizedStructureType = structureType;
+  let normalizedRounds = rounds;
+
+  if (!hasRepScheme) {
+    return {
+      structureType: normalizedStructureType,
+      rounds: normalizedRounds,
+      parserWarnings: warnings,
+    };
+  }
+
+  if (normalizedStructureType === "UNKNOWN" || normalizedStructureType === "FIXED_STATIONS") {
+    normalizedStructureType = "REP_SCHEME";
+  }
+
+  if (normalizedRounds == null) {
+    normalizedRounds = repScheme.length;
+  } else if (normalizedRounds !== repScheme.length) {
+    const warning = `Rep scheme has ${repScheme.length} rounds but workout says ${normalizedRounds} rounds.`;
+    if (!warnings.includes(warning)) {
+      warnings.push(warning);
+    }
+  }
+
+  return {
+    structureType: normalizedStructureType,
+    rounds: normalizedRounds,
+    parserWarnings: warnings,
+  };
+}
+
 function normalizeStation(station, index) {
   const maleWeightLb = numberOrNull(station.maleWeightLb === undefined ? station.weightLb : station.maleWeightLb);
   const femaleWeightLb = numberOrNull(station.femaleWeightLb);
   const weightLb = numberOrNull(station.weightLb === undefined || station.weightLb === null ? maleWeightLb : station.weightLb);
+  const maleWeightKg = numberOrNull(station.maleWeightKg);
+  const femaleWeightKg = numberOrNull(station.femaleWeightKg);
+  const maleHeightIn = numberOrNull(station.maleHeightIn);
+  const femaleHeightIn = numberOrNull(station.femaleHeightIn);
 
   return {
     id: station.id || `station-${index + 1}`,
@@ -831,6 +973,12 @@ function normalizeStation(station, index) {
     weightLb,
     maleWeightLb,
     femaleWeightLb,
+    weightUnit: station.weightUnit || (maleWeightKg != null ? "kg" : maleWeightLb != null ? "lb" : null),
+    maleWeightKg,
+    femaleWeightKg,
+    heightUnit: station.heightUnit || (maleHeightIn != null ? "in" : null),
+    maleHeightIn,
+    femaleHeightIn,
     notes: station.notes || "",
   };
 }
@@ -917,8 +1065,14 @@ stationsList.addEventListener("input", (event) => {
 
   if (field === "maleWeightLb") {
     currentWorkout.stations[index].weightLb = currentWorkout.stations[index].maleWeightLb;
+    currentWorkout.stations[index].weightUnit = currentWorkout.stations[index].maleWeightLb == null ? null : "lb";
   } else if (field === "weightLb") {
     currentWorkout.stations[index].maleWeightLb = currentWorkout.stations[index].weightLb;
+    currentWorkout.stations[index].weightUnit = currentWorkout.stations[index].weightLb == null ? null : "lb";
+  } else if (field === "maleWeightKg" || field === "femaleWeightKg") {
+    currentWorkout.stations[index].weightUnit = currentWorkout.stations[index].maleWeightKg == null && currentWorkout.stations[index].femaleWeightKg == null ? null : "kg";
+  } else if (field === "maleHeightIn" || field === "femaleHeightIn") {
+    currentWorkout.stations[index].heightUnit = currentWorkout.stations[index].maleHeightIn == null && currentWorkout.stations[index].femaleHeightIn == null ? null : "in";
   }
 
   updateJsonOutput();
@@ -1022,6 +1176,12 @@ addStationButton.addEventListener("click", () => {
     weightLb: null,
     maleWeightLb: null,
     femaleWeightLb: null,
+    weightUnit: null,
+    maleWeightKg: null,
+    femaleWeightKg: null,
+    heightUnit: null,
+    maleHeightIn: null,
+    femaleHeightIn: null,
     notes: "",
   });
   renderWorkout(currentWorkout);
@@ -1268,6 +1428,10 @@ function toMonkeyCWorkout(workout) {
     var stationCalories;
     var stationMeters;
     var stationWeights;
+    var stationMaleWeightKg;
+    var stationFemaleWeightKg;
+    var stationMaleHeightIn;
+    var stationFemaleHeightIn;
 
     function initialize() {
         title = ${toMonkeyCString(normalized.title)};
@@ -1285,6 +1449,10 @@ function toMonkeyCWorkout(workout) {
         stationCalories = ${toMonkeyCArray(stations.map((station) => station.calories))};
         stationMeters = ${toMonkeyCArray(stations.map((station) => station.distanceMeters))};
         stationWeights = ${toMonkeyCArray(stations.map((station) => station.weightLb))};
+        stationMaleWeightKg = ${toMonkeyCArray(stations.map((station) => station.maleWeightKg))};
+        stationFemaleWeightKg = ${toMonkeyCArray(stations.map((station) => station.femaleWeightKg))};
+        stationMaleHeightIn = ${toMonkeyCArray(stations.map((station) => station.maleHeightIn))};
+        stationFemaleHeightIn = ${toMonkeyCArray(stations.map((station) => station.femaleHeightIn))};
     }
 
     function getStationCount() {
@@ -1471,6 +1639,12 @@ function toWorkoutContract(workout) {
       weightLb: station.weightLb,
       maleWeightLb: station.maleWeightLb,
       femaleWeightLb: station.femaleWeightLb,
+      weightUnit: station.weightUnit,
+      maleWeightKg: station.maleWeightKg,
+      femaleWeightKg: station.femaleWeightKg,
+      heightUnit: station.heightUnit,
+      maleHeightIn: station.maleHeightIn,
+      femaleHeightIn: station.femaleHeightIn,
       workSeconds: station.workSeconds,
       notes: station.notes,
     })),

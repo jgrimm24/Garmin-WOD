@@ -16,23 +16,47 @@ console.log(`Generated ${path.relative(ROOT, outputPath)} from ${path.relative(R
 
 function normalizeWorkout(workout) {
   const durationMinutes = numberOrNull(workout.durationMinutes);
+  const repScheme = normalizeRepScheme(workout.repScheme);
+  const normalizedStructure = normalizeRepSchemeStructure({
+    structureType: normalizeStructureType(workout.structureType),
+    rounds: numberOrNull(workout.rounds),
+    repScheme,
+  });
+
   return {
     title: stringOrDefault(workout.title, "Today's WOD"),
     type: stringOrDefault(workout.type, "Unknown"),
     workoutType: normalizeWorkoutTypeCode(workout.workoutType || workout.type),
-    structureType: normalizeStructureType(workout.structureType),
+    structureType: normalizedStructure.structureType,
     durationMinutes,
     durationSeconds: numberOrNull(workout.durationSeconds) || (durationMinutes == null ? null : durationMinutes * 60),
-    rounds: numberOrNull(workout.rounds),
-    repScheme: normalizeRepScheme(workout.repScheme),
+    rounds: normalizedStructure.rounds,
+    repScheme,
     intervalSeconds: numberOrNull(workout.intervalSeconds),
     stations: Array.isArray(workout.stations) ? workout.stations.map(normalizeStation) : [],
+  };
+}
+
+function normalizeRepSchemeStructure({ structureType, rounds, repScheme }) {
+  const hasRepScheme = Array.isArray(repScheme) && repScheme.length >= 2;
+
+  if (!hasRepScheme) {
+    return { structureType, rounds };
+  }
+
+  return {
+    structureType: structureType === "UNKNOWN" || structureType === "FIXED_STATIONS" ? "REP_SCHEME" : structureType,
+    rounds: rounds == null ? repScheme.length : rounds,
   };
 }
 
 function normalizeStation(station) {
   const maleWeightLb = numberOrNull(station.maleWeightLb === undefined ? station.weightLb : station.maleWeightLb);
   const femaleWeightLb = numberOrNull(station.femaleWeightLb);
+  const maleWeightKg = numberOrNull(station.maleWeightKg);
+  const femaleWeightKg = numberOrNull(station.femaleWeightKg);
+  const maleHeightIn = numberOrNull(station.maleHeightIn);
+  const femaleHeightIn = numberOrNull(station.femaleHeightIn);
 
   return {
     name: stringOrDefault(station.name, "Station"),
@@ -43,6 +67,12 @@ function normalizeStation(station) {
     weightLb: numberOrNull(station.weightLb === undefined || station.weightLb === null ? maleWeightLb : station.weightLb),
     maleWeightLb,
     femaleWeightLb,
+    weightUnit: station.weightUnit || (maleWeightKg != null ? "kg" : maleWeightLb != null ? "lb" : null),
+    maleWeightKg,
+    femaleWeightKg,
+    heightUnit: station.heightUnit || (maleHeightIn != null ? "in" : null),
+    maleHeightIn,
+    femaleHeightIn,
   };
 }
 
@@ -65,6 +95,10 @@ function renderWorkoutClass(workout) {
     var stationCalories;
     var stationMeters;
     var stationWeights;
+    var stationMaleWeightKg;
+    var stationFemaleWeightKg;
+    var stationMaleHeightIn;
+    var stationFemaleHeightIn;
     var _hasWorkout;
 
     function initialize() {
@@ -83,6 +117,10 @@ function renderWorkoutClass(workout) {
         stationCalories = [];
         stationMeters = [];
         stationWeights = [];
+        stationMaleWeightKg = [];
+        stationFemaleWeightKg = [];
+        stationMaleHeightIn = [];
+        stationFemaleHeightIn = [];
         _hasWorkout = false;
     }
 
@@ -103,6 +141,10 @@ function renderWorkoutClass(workout) {
         var parsedCalories = [];
         var parsedMeters = [];
         var parsedWeights = [];
+        var parsedMaleWeightKg = [];
+        var parsedFemaleWeightKg = [];
+        var parsedMaleHeightIn = [];
+        var parsedFemaleHeightIn = [];
 
         for (var i = 0; i < stations.size(); i++) {
             var station = stations[i];
@@ -114,6 +156,10 @@ function renderWorkoutClass(workout) {
                 parsedCalories.add(getContractValue(station, "calories", null));
                 parsedMeters.add(getContractValue(station, "meters", null));
                 parsedWeights.add(getContractValue(station, "weightLb", getContractValue(station, "maleWeightLb", null)));
+                parsedMaleWeightKg.add(getContractValue(station, "maleWeightKg", null));
+                parsedFemaleWeightKg.add(getContractValue(station, "femaleWeightKg", null));
+                parsedMaleHeightIn.add(getContractValue(station, "maleHeightIn", null));
+                parsedFemaleHeightIn.add(getContractValue(station, "femaleHeightIn", null));
             }
         }
 
@@ -136,6 +182,10 @@ function renderWorkoutClass(workout) {
         stationCalories = parsedCalories;
         stationMeters = parsedMeters;
         stationWeights = parsedWeights;
+        stationMaleWeightKg = parsedMaleWeightKg;
+        stationFemaleWeightKg = parsedFemaleWeightKg;
+        stationMaleHeightIn = parsedMaleHeightIn;
+        stationFemaleHeightIn = parsedFemaleHeightIn;
         _hasWorkout = true;
 
         return true;

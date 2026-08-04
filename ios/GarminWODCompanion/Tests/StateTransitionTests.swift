@@ -482,6 +482,12 @@ let extendedWorkoutData = """
       "weightLb": null,
       "maleWeightLb": null,
       "femaleWeightLb": null,
+      "weightUnit": "kg",
+      "maleWeightKg": 24,
+      "femaleWeightKg": 16,
+      "heightUnit": "in",
+      "maleHeightIn": 24,
+      "femaleHeightIn": 20,
       "workSeconds": null,
       "notes": "1000 m Run"
     }
@@ -493,6 +499,12 @@ expect(extendedWorkout.workoutType == .interval, "optional workoutType should de
 expect(extendedWorkout.structureType == .timedInterval, "optional structureType should decode")
 expect(extendedWorkout.repScheme == [21, 15, 9], "optional repScheme should decode")
 expect(extendedWorkout.intervalSeconds == 540, "optional intervalSeconds should decode")
+expect(extendedWorkout.stations[0].weightUnit == "kg", "optional kg weight unit should decode")
+expect(extendedWorkout.stations[0].maleWeightKg == 24, "optional male kg should decode")
+expect(extendedWorkout.stations[0].femaleWeightKg == 16, "optional female kg should decode")
+expect(extendedWorkout.stations[0].heightUnit == "in", "optional height unit should decode")
+expect(extendedWorkout.stations[0].maleHeightIn == 24, "optional male height should decode")
+expect(extendedWorkout.stations[0].femaleHeightIn == 20, "optional female height should decode")
 
 let unknownClassificationData = """
 {

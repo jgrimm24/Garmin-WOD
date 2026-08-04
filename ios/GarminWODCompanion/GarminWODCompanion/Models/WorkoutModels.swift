@@ -188,6 +188,12 @@ struct WorkoutStation: Codable, Identifiable {
     var weightLb: Int?
     var maleWeightLb: Int?
     var femaleWeightLb: Int?
+    var weightUnit: String?
+    var maleWeightKg: Int?
+    var femaleWeightKg: Int?
+    var heightUnit: String?
+    var maleHeightIn: Int?
+    var femaleHeightIn: Int?
     var notes: String?
 
     enum CodingKeys: String, CodingKey {
@@ -201,6 +207,12 @@ struct WorkoutStation: Codable, Identifiable {
         case weightLb
         case maleWeightLb
         case femaleWeightLb
+        case weightUnit
+        case maleWeightKg
+        case femaleWeightKg
+        case heightUnit
+        case maleHeightIn
+        case femaleHeightIn
         case notes
     }
 
@@ -214,6 +226,12 @@ struct WorkoutStation: Codable, Identifiable {
         weightLb: Int? = nil,
         maleWeightLb: Int? = nil,
         femaleWeightLb: Int? = nil,
+        weightUnit: String? = nil,
+        maleWeightKg: Int? = nil,
+        femaleWeightKg: Int? = nil,
+        heightUnit: String? = nil,
+        maleHeightIn: Int? = nil,
+        femaleHeightIn: Int? = nil,
         notes: String? = nil
     ) {
         self.id = id
@@ -225,6 +243,12 @@ struct WorkoutStation: Codable, Identifiable {
         self.weightLb = weightLb
         self.maleWeightLb = maleWeightLb
         self.femaleWeightLb = femaleWeightLb
+        self.weightUnit = weightUnit
+        self.maleWeightKg = maleWeightKg
+        self.femaleWeightKg = femaleWeightKg
+        self.heightUnit = heightUnit
+        self.maleHeightIn = maleHeightIn
+        self.femaleHeightIn = femaleHeightIn
         self.notes = notes
     }
 
@@ -240,6 +264,12 @@ struct WorkoutStation: Codable, Identifiable {
         weightLb = try container.decodeIfPresent(Int.self, forKey: .weightLb)
         maleWeightLb = try container.decodeIfPresent(Int.self, forKey: .maleWeightLb)
         femaleWeightLb = try container.decodeIfPresent(Int.self, forKey: .femaleWeightLb)
+        weightUnit = try container.decodeIfPresent(String.self, forKey: .weightUnit)
+        maleWeightKg = try container.decodeIfPresent(Int.self, forKey: .maleWeightKg)
+        femaleWeightKg = try container.decodeIfPresent(Int.self, forKey: .femaleWeightKg)
+        heightUnit = try container.decodeIfPresent(String.self, forKey: .heightUnit)
+        maleHeightIn = try container.decodeIfPresent(Int.self, forKey: .maleHeightIn)
+        femaleHeightIn = try container.decodeIfPresent(Int.self, forKey: .femaleHeightIn)
         notes = try container.decodeIfPresent(String.self, forKey: .notes)
     }
 
@@ -254,6 +284,12 @@ struct WorkoutStation: Codable, Identifiable {
         try container.encodeIfPresent(weightLb, forKey: .weightLb)
         try container.encodeIfPresent(maleWeightLb, forKey: .maleWeightLb)
         try container.encodeIfPresent(femaleWeightLb, forKey: .femaleWeightLb)
+        try container.encodeIfPresent(weightUnit, forKey: .weightUnit)
+        try container.encodeIfPresent(maleWeightKg, forKey: .maleWeightKg)
+        try container.encodeIfPresent(femaleWeightKg, forKey: .femaleWeightKg)
+        try container.encodeIfPresent(heightUnit, forKey: .heightUnit)
+        try container.encodeIfPresent(maleHeightIn, forKey: .maleHeightIn)
+        try container.encodeIfPresent(femaleHeightIn, forKey: .femaleHeightIn)
         try container.encodeIfPresent(notes, forKey: .notes)
     }
 }
@@ -281,6 +317,12 @@ extension WorkoutContract {
             fingerprint += ":\(syncValue(station.weightLb))"
             fingerprint += ":\(syncValue(station.maleWeightLb))"
             fingerprint += ":\(syncValue(station.femaleWeightLb))"
+            fingerprint += ":\(syncValue(station.weightUnit))"
+            fingerprint += ":\(syncValue(station.maleWeightKg))"
+            fingerprint += ":\(syncValue(station.femaleWeightKg))"
+            fingerprint += ":\(syncValue(station.heightUnit))"
+            fingerprint += ":\(syncValue(station.maleHeightIn))"
+            fingerprint += ":\(syncValue(station.femaleHeightIn))"
             fingerprint += ":\(syncValue(station.workSeconds))"
         }
 
@@ -316,6 +358,18 @@ extension WorkoutStation {
             parts.append("\(maleWeightLb)/\(femaleWeightLb) lb")
         } else if let weightLb {
             parts.append("\(weightLb) lb")
+        }
+
+        if let maleWeightKg, let femaleWeightKg {
+            parts.append("\(maleWeightKg)/\(femaleWeightKg) kg")
+        } else if let maleWeightKg {
+            parts.append("\(maleWeightKg) kg")
+        }
+
+        if let maleHeightIn, let femaleHeightIn {
+            parts.append("\(maleHeightIn)/\(femaleHeightIn) in")
+        } else if let maleHeightIn {
+            parts.append("\(maleHeightIn) in")
         }
 
         if let workSeconds {
