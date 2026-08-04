@@ -28,21 +28,23 @@ assert(runHeader.includes("headerStatusBadge"), "RUN top header should render a 
 
 const dock = section("CompanionControlDock");
 [
-  "Follow Watch",
+  "Not Following",
   "Heart Rate",
   "Workout History",
   "Display Mode",
-  "Manual Controls",
   "dot.radiowaves.left.and.right",
   "heart.fill",
   "clock.arrow.circlepath"
 ].forEach((needle) => {
   assert(dock.includes(needle), `bottom dock should include ${needle}`);
 });
-assert(dock.includes("metrics.availableWidth >= 680"), "wide layouts should use a single-row dock threshold");
+assert(dock.includes("metrics.availableWidth >= 520"), "most layouts should favor a single-row toolbar threshold");
 assert(dock.includes("LazyVGrid"), "compact layouts should use a grid dock");
-assert(dock.includes("HR \\(bpm)"), "HR dock state should show a live heart-rate value");
+assert(dock.includes("return \"\\(bpm)\""), "HR dock state should prioritize the live heart-rate number");
 assert(dock.includes("viewModel.toggleFollowWatch()"), "Follow Watch dock action should preserve existing follow semantics");
+assert(!dock.includes("Manual Controls"), "normal toolbar should not expose manual controls");
+assert(!dock.includes("No results"), "History toolbar item should not show empty-state status text");
+assert(!dock.includes("BPM\""), "HR toolbar item should not use a secondary BPM subtitle");
 
 const manualSheet = section("ManualControlsSheet");
 ["primaryAction", "previousStation", "nextStation", "finishWorkout", "resetWorkout", "stopFollowingWatch"].forEach((needle) => {

@@ -8,7 +8,6 @@ struct GymDisplayView: View {
     @State private var isBluetoothSheetPresented = false
     @State private var isAnalyticsSheetPresented = false
     @State private var isHistorySheetPresented = false
-    @State private var isManualControlsSheetPresented = false
 
     private var displayMode: GymDisplayMode {
         GymDisplayMode(storedValue: displayModeRawValue)
@@ -74,9 +73,6 @@ struct GymDisplayView: View {
                                     },
                                     onHistory: {
                                         isHistorySheetPresented = true
-                                    },
-                                    onManualControls: {
-                                        isManualControlsSheetPresented = true
                                     }
                                 )
                                 .frame(height: metrics.companionDockHeight)
@@ -133,15 +129,6 @@ struct GymDisplayView: View {
             WorkoutHistoryView(viewModel: viewModel)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $isManualControlsSheetPresented) {
-            ManualControlsSheet(
-                viewModel: viewModel,
-                workoutManager: viewModel.workoutManager,
-                displayMode: displayMode
-            )
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
         }
     }
 
@@ -262,9 +249,6 @@ struct GymDisplayView: View {
                 },
                 onHistory: {
                     isHistorySheetPresented = true
-                },
-                onManualControls: {
-                    isManualControlsSheetPresented = true
                 }
             )
             .frame(height: metrics.companionDockHeight)
@@ -300,9 +284,6 @@ struct GymDisplayView: View {
                 },
                 onHistory: {
                     isHistorySheetPresented = true
-                },
-                onManualControls: {
-                    isManualControlsSheetPresented = true
                 }
             )
             .frame(height: metrics.companionDockHeight)
@@ -354,14 +335,14 @@ private struct DashboardMetrics {
     var activeControlHeight: CGFloat { isLandscape ? clamp(availableHeight * 0.105, min: 46, max: 54) : 112 }
     var companionDockHeight: CGFloat {
         if availableWidth >= 680 {
-            return clamp(availableHeight * 0.12, min: 68, max: 86)
+            return clamp(availableHeight * 0.078, min: 46, max: 58)
         }
 
         if isLandscape {
-            return clamp(availableHeight * 0.18, min: 82, max: 112)
+            return clamp(availableHeight * 0.12, min: 48, max: 62)
         }
 
-        return clamp(availableHeight * 0.20, min: 126, max: 164)
+        return clamp(availableHeight * 0.13, min: 74, max: 96)
     }
     var activeDashboardHeight: CGFloat { max(availableHeight - companionDockHeight - sectionSpacing, 0) }
     var activeMainHeight: CGFloat { max(activeDashboardHeight - activeHeaderHeight - sectionSpacing, 0) }
@@ -550,9 +531,6 @@ private struct HeaderView: View {
             .foregroundStyle(.white.opacity(0.86))
             .lineLimit(1)
             .minimumScaleFactor(0.6)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.white.opacity(0.1), in: Capsule())
     }
 
     private var headerStatusText: String {
@@ -604,17 +582,16 @@ private struct CompanionControlDock: View {
     @Binding var displayMode: GymDisplayMode
     let onHeartRateSettings: () -> Void
     let onHistory: () -> Void
-    let onManualControls: () -> Void
 
     private var usesSingleRow: Bool {
-        metrics.availableWidth >= 680
+        metrics.availableWidth >= 520
     }
 
     var body: some View {
-        VStack(spacing: metrics.isLandscape ? 6 : 8) {
+        VStack(spacing: 4) {
             Group {
                 if usesSingleRow {
-                    HStack(spacing: 10) {
+                    HStack(spacing: metrics.isLandscape ? 8 : 10) {
                         dockButtons
                     }
                 } else {
@@ -623,30 +600,20 @@ private struct CompanionControlDock: View {
                             GridItem(.flexible(), spacing: 10),
                             GridItem(.flexible(), spacing: 10)
                         ],
-                        spacing: 10
+                        spacing: 6
                     ) {
                         dockButtons
                     }
                 }
             }
             .frame(maxHeight: .infinity)
-
-            Button(action: onManualControls) {
-                Label("Manual Controls", systemImage: "slider.horizontal.3")
-                    .font(.system(size: metrics.isLandscape ? 10 : 11, weight: .heavy, design: .rounded))
-                    .lineLimit(1)
-                    .foregroundStyle(.white.opacity(0.62))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Manual Controls")
-            .accessibilityHint("Opens Start, Back, Next, Finish, and Reset controls for simulator testing.")
         }
         .padding(.horizontal, metrics.isLandscape ? 8 : 10)
-        .padding(.vertical, metrics.isLandscape ? 6 : 8)
+        .padding(.vertical, metrics.isLandscape ? 4 : 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 16))
+        .background(.black.opacity(0.22), in: Capsule())
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            Capsule()
                 .stroke(.white.opacity(0.1), lineWidth: 1)
         )
     }
@@ -656,7 +623,6 @@ private struct CompanionControlDock: View {
         CompanionDockButton(
             iconName: "dot.radiowaves.left.and.right",
             title: followTitle,
-            value: followValue,
             isActive: viewModel.isFollowingWatch,
             metrics: metrics,
             action: {
@@ -670,7 +636,6 @@ private struct CompanionControlDock: View {
         CompanionDockButton(
             iconName: "heart.fill",
             title: heartRateTitle,
-            value: heartRateValue,
             isActive: bluetoothManager.connectionState.isConnected,
             metrics: metrics,
             action: onHeartRateSettings
@@ -682,13 +647,12 @@ private struct CompanionControlDock: View {
         CompanionDockButton(
             iconName: "clock.arrow.circlepath",
             title: "History",
-            value: historyValue,
             isActive: !viewModel.workoutHistory.isEmpty,
             metrics: metrics,
             action: onHistory
         )
         .accessibilityLabel("Workout History")
-        .accessibilityValue(historyValue)
+        .accessibilityValue(viewModel.workoutHistory.isEmpty ? "No saved workouts loaded" : "\(viewModel.workoutHistory.count) saved workouts")
         .accessibilityHint("Opens saved workout results without changing the active workout.")
 
         CompanionModeControl(
@@ -701,18 +665,18 @@ private struct CompanionControlDock: View {
 
     private var followTitle: String {
         if viewModel.isFollowingWatch {
-            return viewModel.isMirroringWatchSession ? "Following" : "Connecting"
+            if viewModel.isMirroringWatchSession {
+                return "Following"
+            }
+
+            if viewModel.watchSyncStatusText.localizedCaseInsensitiveContains("lost") {
+                return "Reconnect"
+            }
+
+            return "Connecting"
         }
 
-        return "Follow Watch"
-    }
-
-    private var followValue: String {
-        if viewModel.isFollowingWatch {
-            return viewModel.watchSyncStatusText
-        }
-
-        return "Off"
+        return "Not Following"
     }
 
     private var followAccessibilityValue: String {
@@ -721,27 +685,19 @@ private struct CompanionControlDock: View {
 
     private var heartRateTitle: String {
         if let bpm = viewModel.activeHeartRate {
-            return "HR \(bpm)"
+            return "\(bpm)"
         }
 
         switch bluetoothManager.connectionState {
         case .scanning, .deviceFound, .connecting:
             return "Searching"
         case .connected:
-            return "HR Connected"
+            return "Connected"
         case .failed, .disconnected:
-            return "Reconnect HR"
+            return "Disconnected"
         default:
-            return "HR Off"
+            return "Disconnected"
         }
-    }
-
-    private var heartRateValue: String {
-        if let bpm = viewModel.activeHeartRate {
-            return "\(bpm) BPM"
-        }
-
-        return bluetoothManager.connectionState.rawValue
     }
 
     private var heartRateAccessibilityValue: String {
@@ -752,81 +708,46 @@ private struct CompanionControlDock: View {
         return bluetoothManager.connectionState.rawValue
     }
 
-    private var historyValue: String {
-        if viewModel.isRefreshingWorkoutHistory {
-            return "Refreshing"
-        }
-
-        if viewModel.workoutHistory.isEmpty {
-            return "No results"
-        }
-
-        return "\(viewModel.workoutHistory.count) saved"
-    }
 }
 
 private struct CompanionDockButton: View {
     let iconName: String
     let title: String
-    let value: String
     let isActive: Bool
     let metrics: DashboardMetrics
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: metrics.isLandscape ? 8 : 10) {
+            HStack(spacing: metrics.isLandscape ? 5 : 7) {
                 Image(systemName: iconName)
                     .font(.system(size: iconSize, weight: .heavy))
-                    .frame(width: iconFrame, height: iconFrame)
-                    .foregroundStyle(isActive ? .black : .yellow)
-                    .background(isActive ? .yellow : .yellow.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+                    .foregroundStyle(isActive ? .yellow : .white.opacity(0.7))
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: titleSize, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.58)
-
-                    Text(value)
-                        .font(.system(size: valueSize, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.66))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.58)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(title)
+                    .font(.system(size: titleSize, weight: .black, design: .rounded))
+                    .foregroundStyle(.white.opacity(isActive ? 0.94 : 0.78))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.58)
             }
-            .padding(.horizontal, metrics.isLandscape ? 10 : 12)
+            .padding(.horizontal, metrics.isLandscape ? 7 : 8)
             .frame(maxWidth: .infinity, minHeight: controlHeight)
-            .background(.white.opacity(isActive ? 0.15 : 0.08), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isActive ? .yellow.opacity(0.46) : .white.opacity(0.12), lineWidth: 1)
-            )
+            .background(isActive ? .white.opacity(0.1) : .clear, in: Capsule())
         }
         .buttonStyle(.plain)
         .contentShape(Rectangle())
     }
 
     private var controlHeight: CGFloat {
-        metrics.availableWidth >= 680 ? 58 : 52
-    }
-
-    private var iconFrame: CGFloat {
-        metrics.availableWidth >= 680 ? 34 : 30
+        metrics.availableWidth >= 520 ? 38 : 30
     }
 
     private var iconSize: CGFloat {
-        metrics.availableWidth >= 680 ? 18 : 16
-    }
-
-    private var titleSize: CGFloat {
         metrics.availableWidth >= 680 ? 16 : 14
     }
 
-    private var valueSize: CGFloat {
-        metrics.availableWidth >= 680 ? 12 : 11
+    private var titleSize: CGFloat {
+        metrics.availableWidth >= 680 ? 15 : 12
     }
 }
 
@@ -836,11 +757,6 @@ private struct CompanionModeControl: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Label("Mode", systemImage: "rectangle.split.2x1")
-                .font(.system(size: metrics.availableWidth >= 680 ? 13 : 12, weight: .black, design: .rounded))
-                .foregroundStyle(.white.opacity(0.7))
-                .lineLimit(1)
-
             HStack(spacing: 4) {
                 ForEach(GymDisplayMode.allCases, id: \.self) { mode in
                     Button {
@@ -848,22 +764,22 @@ private struct CompanionModeControl: View {
                         print("[DISPLAY MODE] selected \(mode.rawValue)")
                     } label: {
                         Text(mode.rawValue)
-                            .font(.system(size: metrics.availableWidth >= 680 ? 14 : 12, weight: .black, design: .rounded))
+                            .font(.system(size: metrics.availableWidth >= 680 ? 13 : 11, weight: .black, design: .rounded))
                             .lineLimit(1)
                             .minimumScaleFactor(0.62)
                             .foregroundStyle(displayMode == mode ? .black : .white.opacity(0.82))
-                            .frame(maxWidth: .infinity, minHeight: metrics.availableWidth >= 680 ? 32 : 28)
-                            .background(displayMode == mode ? .yellow : .white.opacity(0.08), in: Capsule())
+                            .frame(maxWidth: .infinity, minHeight: metrics.availableWidth >= 520 ? 34 : 28)
+                            .background(displayMode == mode ? .yellow : .clear, in: Capsule())
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
-        .padding(.horizontal, metrics.isLandscape ? 10 : 12)
-        .frame(maxWidth: .infinity, minHeight: metrics.availableWidth >= 680 ? 58 : 52)
-        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .padding(3)
+        .frame(maxWidth: .infinity, minHeight: metrics.availableWidth >= 520 ? 38 : 30)
+        .background(.white.opacity(0.08), in: Capsule())
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            Capsule()
                 .stroke(.white.opacity(0.12), lineWidth: 1)
         )
     }
@@ -1011,9 +927,6 @@ private struct WODScoreboardHeader: View {
                 .foregroundStyle(viewModel.isFollowingWatch ? .yellow : .white.opacity(0.82))
                 .lineLimit(1)
                 .minimumScaleFactor(0.55)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.white.opacity(0.1), in: Capsule())
                 .layoutPriority(1)
         }
         .padding(.horizontal, metrics.isLandscape ? 10 : 12)
