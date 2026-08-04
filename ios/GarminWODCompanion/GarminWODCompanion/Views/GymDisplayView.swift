@@ -6,6 +6,7 @@ struct GymDisplayView: View {
     @AppStorage(GymDisplayMode.storageKey) private var displayModeRawValue = GymDisplayMode.defaultMode.rawValue
     @StateObject private var viewModel = DisplayViewModel()
     @State private var isBluetoothSheetPresented = false
+    @State private var isAnalyticsSheetPresented = false
 
     private var displayMode: GymDisplayMode {
         GymDisplayMode(storedValue: displayModeRawValue)
@@ -42,6 +43,8 @@ struct GymDisplayView: View {
                             metrics: metrics,
                             isLandscape: isLandscape
                         ) {
+                            isAnalyticsSheetPresented = true
+                        } onNewWorkout: {
                             viewModel.resetWorkout()
                         }
                     } else {
@@ -110,6 +113,11 @@ struct GymDisplayView: View {
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isAnalyticsSheetPresented) {
+            WorkoutAnalyticsView(analytics: viewModel.latestWorkoutAnalytics)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -1854,12 +1862,145 @@ private struct DashboardButtonStyle: ButtonStyle {
     }
 }
 
+// MARK: - Workout Analytics
+
+private struct WorkoutAnalyticsView: View {
+    let analytics: WorkoutAnalytics?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                if let analytics {
+                    analyticsContent(analytics)
+                } else {
+                    noAnalyticsContent
+                }
+            }
+            .background(Color.black.ignoresSafeArea())
+            .navigationTitle("Workout Analytics")
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func analyticsContent(_ analytics: WorkoutAnalytics) -> some View {
+        let summary = analytics.summary
+
+        return VStack(alignment: .leading, spacing: 16) {
+            analyticsSection("Workout Summary") {
+                analyticsRow("Workout", analytics.workoutName.isEmpty ? "Workout" : analytics.workoutName)
+                analyticsRow("Total Time", WorkoutSummary.format(seconds: summary.totalActiveSeconds))
+                analyticsRow("Average HR", summary.averageHeartRate.map { "\($0)" } ?? "--")
+                analyticsRow("Peak HR", summary.maximumHeartRate.map { "\($0)" } ?? "--")
+                analyticsRow("Movements", "\(summary.movementCount)")
+                analyticsRow("Rounds Completed", "\(summary.roundsCompleted)")
+            }
+
+            analyticsSection("Movement Breakdown") {
+                ForEach(summary.movementBreakdowns) { movement in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(movement.movementName)
+                            .font(.system(size: 17, weight: .black, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+
+                        Text("\(movement.occurrences.count) occurrences • Avg \(WorkoutSummary.format(seconds: movement.averageSeconds)) • Peak \(movement.maximumHeartRate.map(String.init) ?? "--")")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.68))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            analyticsSection("Round Breakdown") {
+                if summary.roundSplits.isEmpty {
+                    analyticsRow("Rounds", "Unavailable")
+                } else {
+                    ForEach(summary.roundSplits) { split in
+                        analyticsRow("Round \(split.roundNumber)", WorkoutSummary.format(seconds: split.durationSeconds))
+                    }
+                }
+            }
+
+            analyticsSection("Highlights") {
+                analyticsRow("Longest Movement", movementHighlight(summary.longestMovement))
+                analyticsRow("Fastest Movement", movementHighlight(summary.fastestMovement))
+                analyticsRow("Highest HR Movement", heartRateHighlight(summary.highestHeartRateMovement))
+                analyticsRow("Transitions", summary.transitionTimingAvailable ? "Available" : "Not measured")
+            }
+        }
+        .padding(18)
+    }
+
+    private var noAnalyticsContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("No analytics available.")
+                .font(.system(size: 24, weight: .black, design: .rounded))
+
+            Text("Workout split analytics are available after the watch finishes and publishes a Version 1 analytics payload.")
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.68))
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func analyticsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title.uppercased())
+                .font(.system(size: 13, weight: .black, design: .rounded))
+                .foregroundStyle(.yellow)
+
+            content()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func analyticsRow(_ title: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.68))
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+
+            Spacer(minLength: 8)
+
+            Text(value)
+                .font(.system(size: 16, weight: .black, design: .rounded))
+                .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+                .minimumScaleFactor(0.65)
+        }
+    }
+
+    private func movementHighlight(_ event: WorkoutMovementEvent?) -> String {
+        guard let event else {
+            return "--"
+        }
+
+        return "\(event.movementName) • \(WorkoutSummary.format(seconds: event.durationSeconds))"
+    }
+
+    private func heartRateHighlight(_ event: WorkoutMovementEvent?) -> String {
+        guard let event, let heartRate = event.maximumHeartRate else {
+            return "--"
+        }
+
+        return "\(event.movementName) • \(heartRate)"
+    }
+}
+
 // MARK: - Workout Summary Screen
 
 private struct WorkoutSummaryScreen: View {
     let summary: WorkoutSummary
     let metrics: DashboardMetrics
     let isLandscape: Bool
+    let onAnalytics: () -> Void
     let onNewWorkout: () -> Void
 
     var body: some View {
@@ -1901,6 +2042,9 @@ private struct WorkoutSummaryScreen: View {
             }
 
             Spacer(minLength: 0)
+
+            analyticsButton
+                .frame(height: max(buttonHeight(size) - 8, 36))
 
             newWorkoutButton
                 .frame(height: buttonHeight(size))
@@ -1947,10 +2091,13 @@ private struct WorkoutSummaryScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .layoutPriority(1)
 
-            newWorkoutButton
-                .frame(maxWidth: size.width * 0.72)
-                .frame(height: buttonHeight(size))
-                .layoutPriority(3)
+            HStack(spacing: spacing) {
+                analyticsButton
+                newWorkoutButton
+            }
+            .frame(maxWidth: size.width * 0.72)
+            .frame(height: buttonHeight(size))
+            .layoutPriority(3)
         }
         .padding(outerPadding(size))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -2020,6 +2167,13 @@ private struct WorkoutSummaryScreen: View {
     private var newWorkoutButton: some View {
         Button("New Workout") { onNewWorkout() }
             .buttonStyle(DashboardButtonStyle(kind: .primary, metrics: metrics))
+            .contentShape(Rectangle())
+            .frame(maxWidth: .infinity)
+    }
+
+    private var analyticsButton: some View {
+        Button("Workout Analytics") { onAnalytics() }
+            .buttonStyle(DashboardButtonStyle(kind: .secondary, metrics: metrics))
             .contentShape(Rectangle())
             .frame(maxWidth: .infinity)
     }

@@ -430,6 +430,186 @@ let rawSessionPayload = """
 let decodedRawSession = try WorkoutSessionAPIClient.decodeWorkoutSessionResponse(data: rawSessionPayload, statusCode: 200)
 expect(decodedRawSession.sessionId == "raw-watch-session", "raw session response should decode sessionId")
 expect(decodedRawSession.elapsedSeconds == 42, "raw session response should decode elapsed time")
+expect(decodedRawSession.analytics == nil, "older session payloads without analytics should decode safely")
+
+let analyticsSessionPayload = """
+{
+  "workoutId": "\(workout.syncIdentity)",
+  "sessionId": "analytics-session",
+  "revision": 14,
+  "status": "finished",
+  "round": 2,
+  "stationIndex": 2,
+  "elapsedSeconds": 120,
+  "updatedAt": \(Int(Date().timeIntervalSince1970)),
+  "analytics": {
+    "schemaVersion": 1,
+    "sessionId": "analytics-session",
+    "workoutId": "\(workout.syncIdentity)",
+    "workoutName": "State Test",
+    "startedAt": 100,
+    "finishedAt": 220,
+    "totalActiveSeconds": 120,
+    "roundsCompleted": 2,
+    "transitionTimingAvailable": false,
+    "movementEvents": [
+      {
+        "movementIndex": 0,
+        "movementName": "21 BURPEES",
+        "prescribedReps": 21,
+        "prescribedMeters": null,
+        "prescribedCalories": null,
+        "prescribedSeconds": null,
+        "roundNumber": 1,
+        "enteredElapsedSeconds": 0,
+        "exitedElapsedSeconds": 30,
+        "durationSeconds": 30,
+        "averageHeartRate": 140,
+        "maximumHeartRate": 150,
+        "minimumHeartRate": 120,
+        "heartRateSampleCount": 10,
+        "interrupted": false
+      },
+      {
+        "movementIndex": 0,
+        "movementName": "15 BURPEES",
+        "prescribedReps": 15,
+        "prescribedMeters": null,
+        "prescribedCalories": null,
+        "prescribedSeconds": null,
+        "roundNumber": 2,
+        "enteredElapsedSeconds": 60,
+        "exitedElapsedSeconds": 90,
+        "durationSeconds": 30,
+        "averageHeartRate": 150,
+        "maximumHeartRate": 160,
+        "minimumHeartRate": 130,
+        "heartRateSampleCount": 10,
+        "interrupted": false
+      }
+    ],
+    "events": [
+      {
+        "eventType": "workout_started",
+        "sequence": 1,
+        "elapsedSeconds": 0,
+        "timestamp": 100,
+        "roundNumber": 1,
+        "stationIndex": 0,
+        "stationName": "21 BURPEES"
+      }
+    ]
+  }
+}
+""".data(using: .utf8)!
+let decodedAnalyticsSession = try WorkoutSessionAPIClient.decodeWorkoutSessionResponse(data: analyticsSessionPayload, statusCode: 200)
+expect(decodedAnalyticsSession.analytics?.movementEvents.count == 2, "session analytics should decode movement events")
+expect(decodedAnalyticsSession.analytics?.events.count == 1, "session analytics should decode timeline events")
+expect(decodedAnalyticsSession.analytics?.summary.movementBreakdowns.first?.movementName == "BURPEES", "rep-scheme movement identity should ignore changing reps")
+expect(decodedAnalyticsSession.analytics?.summary.maximumHeartRate == 160, "analytics summary should compute peak HR")
+expect(decodedAnalyticsSession.analytics?.summary.averageHeartRate == 145, "analytics summary should compute weighted average HR")
+
+print("[TEST] Workout analytics summaries")
+let fixedRoundAnalytics = WorkoutAnalytics(
+    schemaVersion: 1,
+    sessionId: "fixed",
+    workoutId: "fixed-workout",
+    workoutName: "Fixed Rounds",
+    startedAt: 0,
+    finishedAt: 210,
+    totalActiveSeconds: 210,
+    roundsCompleted: 3,
+    transitionTimingAvailable: false,
+    movementEvents: [
+        WorkoutMovementEvent(movementIndex: 0, movementName: "400M RUN", prescribedReps: nil, prescribedMeters: 400, prescribedCalories: nil, prescribedSeconds: nil, roundNumber: 1, enteredElapsedSeconds: 0, exitedElapsedSeconds: 50, durationSeconds: 50, averageHeartRate: 130, maximumHeartRate: 140, minimumHeartRate: 110, heartRateSampleCount: 10, interrupted: false),
+        WorkoutMovementEvent(movementIndex: 1, movementName: "10 BENCH PRESS", prescribedReps: 10, prescribedMeters: nil, prescribedCalories: nil, prescribedSeconds: nil, roundNumber: 1, enteredElapsedSeconds: 50, exitedElapsedSeconds: 70, durationSeconds: 20, averageHeartRate: 135, maximumHeartRate: 145, minimumHeartRate: 120, heartRateSampleCount: 10, interrupted: false),
+        WorkoutMovementEvent(movementIndex: 0, movementName: "400M RUN", prescribedReps: nil, prescribedMeters: 400, prescribedCalories: nil, prescribedSeconds: nil, roundNumber: 2, enteredElapsedSeconds: 70, exitedElapsedSeconds: 135, durationSeconds: 65, averageHeartRate: 145, maximumHeartRate: 155, minimumHeartRate: 130, heartRateSampleCount: 10, interrupted: false),
+        WorkoutMovementEvent(movementIndex: 1, movementName: "10 BENCH PRESS", prescribedReps: 10, prescribedMeters: nil, prescribedCalories: nil, prescribedSeconds: nil, roundNumber: 2, enteredElapsedSeconds: 135, exitedElapsedSeconds: 160, durationSeconds: 25, averageHeartRate: 150, maximumHeartRate: 160, minimumHeartRate: 140, heartRateSampleCount: 10, interrupted: false),
+        WorkoutMovementEvent(movementIndex: 0, movementName: "400M RUN", prescribedReps: nil, prescribedMeters: 400, prescribedCalories: nil, prescribedSeconds: nil, roundNumber: 3, enteredElapsedSeconds: 160, exitedElapsedSeconds: 185, durationSeconds: 25, averageHeartRate: 150, maximumHeartRate: 162, minimumHeartRate: 140, heartRateSampleCount: 10, interrupted: false),
+        WorkoutMovementEvent(movementIndex: 1, movementName: "10 BENCH PRESS", prescribedReps: 10, prescribedMeters: nil, prescribedCalories: nil, prescribedSeconds: nil, roundNumber: 3, enteredElapsedSeconds: 185, exitedElapsedSeconds: 210, durationSeconds: 25, averageHeartRate: 150, maximumHeartRate: 158, minimumHeartRate: 140, heartRateSampleCount: 10, interrupted: false)
+    ],
+    events: []
+)
+let fixedSummary = fixedRoundAnalytics.summary
+expect(fixedSummary.roundSplits.map(\.durationSeconds) == [70, 90, 50], "fixed rounds should produce round splits")
+expect(fixedSummary.movementBreakdowns.count == 2, "fixed rounds should group repeated movements")
+expect(fixedSummary.movementBreakdowns.first(where: { $0.movementName == "RUN" })?.occurrences.count == 3, "400M RUN should group under RUN")
+expect(fixedSummary.longestMovement?.durationSeconds == 65, "longest movement should be selected")
+expect(fixedSummary.fastestMovement?.durationSeconds == 20, "fastest movement should be selected")
+expect(!fixedSummary.transitionTimingAvailable, "transition timing should remain explicitly unavailable")
+
+let emptyAnalytics = WorkoutAnalytics(
+    schemaVersion: 1,
+    sessionId: "empty",
+    workoutId: "empty-workout",
+    workoutName: "Empty",
+    startedAt: nil,
+    finishedAt: nil,
+    totalActiveSeconds: nil,
+    roundsCompleted: 0,
+    transitionTimingAvailable: false,
+    movementEvents: [],
+    events: []
+)
+expect(emptyAnalytics.summary.movementCount == 0, "empty analytics should be safe")
+expect(emptyAnalytics.summary.averageHeartRate == nil, "empty analytics should not invent HR")
+expect(emptyAnalytics.summary.roundSplits.isEmpty, "empty analytics should not invent rounds")
+
+let singleMovementAnalytics = WorkoutAnalytics(
+    schemaVersion: 1,
+    sessionId: "single",
+    workoutId: "single-workout",
+    workoutName: "Single",
+    startedAt: 0,
+    finishedAt: 30,
+    totalActiveSeconds: 30,
+    roundsCompleted: 1,
+    transitionTimingAvailable: false,
+    movementEvents: [
+        WorkoutMovementEvent(movementIndex: 0, movementName: "30 SEC PLANK", prescribedReps: nil, prescribedMeters: nil, prescribedCalories: nil, prescribedSeconds: 30, roundNumber: 1, enteredElapsedSeconds: 0, exitedElapsedSeconds: 30, durationSeconds: 30, averageHeartRate: nil, maximumHeartRate: nil, minimumHeartRate: nil, heartRateSampleCount: 0, interrupted: false)
+    ],
+    events: []
+)
+expect(singleMovementAnalytics.summary.movementCount == 1, "single movement workout should summarize")
+expect(singleMovementAnalytics.summary.movementBreakdowns.first?.movementName == "PLANK", "seconds prescription should not become movement identity")
+
+let emomAnalytics = WorkoutAnalytics(
+    schemaVersion: 1,
+    sessionId: "emom",
+    workoutId: "emom-workout",
+    workoutName: "EMOM",
+    startedAt: 0,
+    finishedAt: 120,
+    totalActiveSeconds: 120,
+    roundsCompleted: 2,
+    transitionTimingAvailable: false,
+    movementEvents: [
+        WorkoutMovementEvent(movementIndex: 0, movementName: "10 BURPEES", prescribedReps: 10, prescribedMeters: nil, prescribedCalories: nil, prescribedSeconds: nil, roundNumber: 1, enteredElapsedSeconds: 0, exitedElapsedSeconds: 60, durationSeconds: 60, averageHeartRate: nil, maximumHeartRate: nil, minimumHeartRate: nil, heartRateSampleCount: 0, interrupted: false),
+        WorkoutMovementEvent(movementIndex: 0, movementName: "10 BURPEES", prescribedReps: 10, prescribedMeters: nil, prescribedCalories: nil, prescribedSeconds: nil, roundNumber: 2, enteredElapsedSeconds: 60, exitedElapsedSeconds: 120, durationSeconds: 60, averageHeartRate: nil, maximumHeartRate: nil, minimumHeartRate: nil, heartRateSampleCount: 0, interrupted: false)
+    ],
+    events: []
+)
+expect(emomAnalytics.summary.roundSplits.map(\.durationSeconds) == [60, 60], "EMOM-style elapsed boundaries should summarize as rounds")
+
+let amrapAnalytics = WorkoutAnalytics(
+    schemaVersion: 1,
+    sessionId: "amrap",
+    workoutId: "amrap-workout",
+    workoutName: "AMRAP",
+    startedAt: 0,
+    finishedAt: 100,
+    totalActiveSeconds: 100,
+    roundsCompleted: 1,
+    transitionTimingAvailable: false,
+    movementEvents: [
+        WorkoutMovementEvent(movementIndex: 0, movementName: "20 CAL ROW", prescribedReps: nil, prescribedMeters: nil, prescribedCalories: 20, prescribedSeconds: nil, roundNumber: 1, enteredElapsedSeconds: 0, exitedElapsedSeconds: 40, durationSeconds: 40, averageHeartRate: nil, maximumHeartRate: nil, minimumHeartRate: nil, heartRateSampleCount: 0, interrupted: false),
+        WorkoutMovementEvent(movementIndex: 1, movementName: "30 WALL BALLS", prescribedReps: 30, prescribedMeters: nil, prescribedCalories: nil, prescribedSeconds: nil, roundNumber: 1, enteredElapsedSeconds: 40, exitedElapsedSeconds: 80, durationSeconds: 40, averageHeartRate: nil, maximumHeartRate: nil, minimumHeartRate: nil, heartRateSampleCount: 0, interrupted: false),
+        WorkoutMovementEvent(movementIndex: 0, movementName: "20 CAL ROW", prescribedReps: nil, prescribedMeters: nil, prescribedCalories: 20, prescribedSeconds: nil, roundNumber: 2, enteredElapsedSeconds: 80, exitedElapsedSeconds: 100, durationSeconds: 20, averageHeartRate: nil, maximumHeartRate: nil, minimumHeartRate: nil, heartRateSampleCount: 0, interrupted: true)
+    ],
+    events: []
+)
+expect(amrapAnalytics.summary.roundsCompleted == 1, "AMRAP summary should preserve completed round count from watch")
+expect(amrapAnalytics.summary.roundSplits.map(\.durationSeconds) == [80, 20], "AMRAP partial rounds should remain visible without changing completed count")
 
 do {
     _ = try WorkoutSessionAPIClient.decodeWorkoutSessionResponse(data: Data(), statusCode: 200)

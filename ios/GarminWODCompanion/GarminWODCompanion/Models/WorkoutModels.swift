@@ -103,6 +103,206 @@ struct WorkoutSessionState: Codable, Equatable {
     let stationIndex: Int
     let elapsedSeconds: Int
     let updatedAt: Int
+    let analytics: WorkoutAnalytics?
+
+    init(
+        workoutId: String,
+        sessionId: String,
+        revision: Int,
+        status: RemoteWorkoutSessionStatus,
+        round: Int,
+        stationIndex: Int,
+        elapsedSeconds: Int,
+        updatedAt: Int,
+        analytics: WorkoutAnalytics? = nil
+    ) {
+        self.workoutId = workoutId
+        self.sessionId = sessionId
+        self.revision = revision
+        self.status = status
+        self.round = round
+        self.stationIndex = stationIndex
+        self.elapsedSeconds = elapsedSeconds
+        self.updatedAt = updatedAt
+        self.analytics = analytics
+    }
+}
+
+struct WorkoutAnalytics: Codable, Equatable {
+    var schemaVersion: Int
+    var sessionId: String
+    var workoutId: String
+    var workoutName: String
+    var startedAt: Int?
+    var finishedAt: Int?
+    var totalActiveSeconds: Int?
+    var roundsCompleted: Int
+    var transitionTimingAvailable: Bool
+    var movementEvents: [WorkoutMovementEvent]
+    var events: [WorkoutTimelineEvent]
+
+    var summary: WorkoutAnalyticsSummary {
+        WorkoutAnalyticsSummary(analytics: self)
+    }
+}
+
+struct WorkoutMovementEvent: Codable, Equatable, Identifiable {
+    var id: String {
+        "\(roundNumber)-\(movementIndex)-\(enteredElapsedSeconds)-\(exitedElapsedSeconds)"
+    }
+
+    var movementIndex: Int
+    var movementName: String
+    var prescribedReps: Int?
+    var prescribedMeters: Int?
+    var prescribedCalories: Int?
+    var prescribedSeconds: Int?
+    var roundNumber: Int
+    var enteredElapsedSeconds: Int
+    var exitedElapsedSeconds: Int
+    var durationSeconds: Int
+    var averageHeartRate: Int?
+    var maximumHeartRate: Int?
+    var minimumHeartRate: Int?
+    var heartRateSampleCount: Int
+    var interrupted: Bool?
+}
+
+struct WorkoutTimelineEvent: Codable, Equatable {
+    var eventType: String
+    var sequence: Int
+    var elapsedSeconds: Int
+    var timestamp: Int?
+    var roundNumber: Int?
+    var stationIndex: Int?
+    var stationName: String?
+}
+
+struct WorkoutAnalyticsSummary: Equatable {
+    let totalActiveSeconds: Int
+    let movementCount: Int
+    let roundsCompleted: Int
+    let averageHeartRate: Int?
+    let maximumHeartRate: Int?
+    let roundSplits: [RoundSplit]
+    let movementBreakdowns: [MovementBreakdown]
+    let longestMovement: WorkoutMovementEvent?
+    let fastestMovement: WorkoutMovementEvent?
+    let highestHeartRateMovement: WorkoutMovementEvent?
+    let transitionTimingAvailable: Bool
+
+    init(analytics: WorkoutAnalytics) {
+        let completedEvents = analytics.movementEvents.filter { $0.durationSeconds >= 0 }
+        totalActiveSeconds = analytics.totalActiveSeconds ?? completedEvents.map(\.durationSeconds).reduce(0, +)
+        movementCount = completedEvents.count
+        roundsCompleted = analytics.roundsCompleted
+        transitionTimingAvailable = analytics.transitionTimingAvailable
+
+        let heartRateEvents = completedEvents.filter { ($0.heartRateSampleCount > 0) && $0.averageHeartRate != nil }
+        if heartRateEvents.isEmpty {
+            averageHeartRate = nil
+        } else {
+            let totalWeightedHeartRate = heartRateEvents.reduce(0) { partial, event in
+                partial + ((event.averageHeartRate ?? 0) * max(event.heartRateSampleCount, 1))
+            }
+            let totalSamples = heartRateEvents.reduce(0) { $0 + max($1.heartRateSampleCount, 1) }
+            averageHeartRate = totalSamples > 0 ? totalWeightedHeartRate / totalSamples : nil
+        }
+
+        maximumHeartRate = completedEvents.compactMap(\.maximumHeartRate).max()
+        roundSplits = Self.buildRoundSplits(from: completedEvents)
+        movementBreakdowns = Self.buildMovementBreakdowns(from: completedEvents)
+        longestMovement = completedEvents.max { $0.durationSeconds < $1.durationSeconds }
+        fastestMovement = completedEvents.filter { $0.durationSeconds > 0 }.min { $0.durationSeconds < $1.durationSeconds }
+        highestHeartRateMovement = completedEvents.compactMap { event -> WorkoutMovementEvent? in
+            event.maximumHeartRate == nil ? nil : event
+        }.max { ($0.maximumHeartRate ?? 0) < ($1.maximumHeartRate ?? 0) }
+    }
+
+    static func buildRoundSplits(from events: [WorkoutMovementEvent]) -> [RoundSplit] {
+        let grouped = Dictionary(grouping: events, by: \.roundNumber)
+        return grouped.keys.sorted().map { round in
+            RoundSplit(
+                roundNumber: round,
+                durationSeconds: grouped[round, default: []].map(\.durationSeconds).reduce(0, +)
+            )
+        }
+    }
+
+    static func buildMovementBreakdowns(from events: [WorkoutMovementEvent]) -> [MovementBreakdown] {
+        let grouped = Dictionary(grouping: events) { event in
+            normalizedMovementIdentity(event.movementName)
+        }
+
+        return grouped.keys.sorted().map { movementName in
+            let occurrences = grouped[movementName, default: []].sorted {
+                if $0.roundNumber == $1.roundNumber {
+                    return $0.movementIndex < $1.movementIndex
+                }
+                return $0.roundNumber < $1.roundNumber
+            }
+            let total = occurrences.map(\.durationSeconds).reduce(0, +)
+            let fastest = occurrences.map(\.durationSeconds).min() ?? 0
+            let slowest = occurrences.map(\.durationSeconds).max() ?? 0
+            let maxHeartRate = occurrences.compactMap(\.maximumHeartRate).max()
+
+            return MovementBreakdown(
+                movementName: movementName,
+                occurrences: occurrences,
+                totalSeconds: total,
+                averageSeconds: occurrences.isEmpty ? 0 : total / occurrences.count,
+                fastestSeconds: fastest,
+                slowestSeconds: slowest,
+                maximumHeartRate: maxHeartRate
+            )
+        }
+    }
+
+    static func normalizedMovementIdentity(_ name: String) -> String {
+        let words = name
+            .uppercased()
+            .replacingOccurrences(of: "@", with: " ")
+            .split(separator: " ")
+            .map(String.init)
+
+        let stripped = words.drop { word in
+            isPrescriptionWord(word)
+        }
+
+        return stripped.isEmpty ? name.uppercased() : stripped.joined(separator: " ")
+    }
+
+    private static func isPrescriptionWord(_ word: String) -> Bool {
+        if word.allSatisfy(\.isNumber) {
+            return true
+        }
+
+        if ["CAL", "CALS", "M", "SEC", "REPS"].contains(word) {
+            return true
+        }
+
+        let suffixes = ["M", "CAL", "CALS", "SEC"]
+        return suffixes.contains { suffix in
+            word.hasSuffix(suffix) && word.dropLast(suffix.count).allSatisfy(\.isNumber)
+        }
+    }
+}
+
+struct RoundSplit: Equatable, Identifiable {
+    var id: Int { roundNumber }
+    let roundNumber: Int
+    let durationSeconds: Int
+}
+
+struct MovementBreakdown: Equatable, Identifiable {
+    var id: String { movementName }
+    let movementName: String
+    let occurrences: [WorkoutMovementEvent]
+    let totalSeconds: Int
+    let averageSeconds: Int
+    let fastestSeconds: Int
+    let slowestSeconds: Int
+    let maximumHeartRate: Int?
 }
 
 struct WorkoutContract: Codable, Identifiable {

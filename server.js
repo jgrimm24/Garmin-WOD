@@ -492,7 +492,90 @@ function normalizeWorkoutSessionState(input, nowMs = Date.now()) {
       stationIndex,
       elapsedSeconds,
       updatedAt: nowMs,
+      analytics: normalizeWorkoutAnalytics(input.analytics),
     },
+  };
+}
+
+function normalizeWorkoutAnalytics(input) {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+
+  return {
+    schemaVersion: integerOrNull(input.schemaVersion) || 1,
+    sessionId: stringOrEmpty(input.sessionId),
+    workoutId: stringOrEmpty(input.workoutId),
+    workoutName: stringOrEmpty(input.workoutName),
+    startedAt: integerOrNull(input.startedAt),
+    finishedAt: integerOrNull(input.finishedAt),
+    totalActiveSeconds: integerOrNull(input.totalActiveSeconds),
+    roundsCompleted: integerOrNull(input.roundsCompleted) || 0,
+    transitionTimingAvailable: input.transitionTimingAvailable === true,
+    movementEvents: Array.isArray(input.movementEvents)
+      ? input.movementEvents.map(normalizeMovementAnalyticsEvent).filter(Boolean)
+      : [],
+    events: Array.isArray(input.events)
+      ? input.events.map(normalizeTimelineEvent).filter(Boolean)
+      : [],
+  };
+}
+
+function normalizeMovementAnalyticsEvent(event) {
+  if (!event || typeof event !== "object") {
+    return null;
+  }
+
+  const movementIndex = integerOrNull(event.movementIndex);
+  const roundNumber = integerOrNull(event.roundNumber);
+  const enteredElapsedSeconds = integerOrNull(event.enteredElapsedSeconds);
+  const exitedElapsedSeconds = integerOrNull(event.exitedElapsedSeconds);
+  const durationSeconds = integerOrNull(event.durationSeconds);
+
+  if (movementIndex === null || roundNumber === null || enteredElapsedSeconds === null || exitedElapsedSeconds === null || durationSeconds === null) {
+    return null;
+  }
+
+  return {
+    movementIndex,
+    movementName: stringOrEmpty(event.movementName),
+    prescribedReps: integerOrNull(event.prescribedReps),
+    prescribedMeters: integerOrNull(event.prescribedMeters),
+    prescribedCalories: caloriesOrNull(event.prescribedCalories),
+    prescribedSeconds: integerOrNull(event.prescribedSeconds),
+    roundNumber,
+    enteredElapsedSeconds,
+    exitedElapsedSeconds,
+    durationSeconds,
+    averageHeartRate: integerOrNull(event.averageHeartRate),
+    maximumHeartRate: integerOrNull(event.maximumHeartRate),
+    minimumHeartRate: integerOrNull(event.minimumHeartRate),
+    heartRateSampleCount: integerOrNull(event.heartRateSampleCount) || 0,
+    interrupted: event.interrupted === true,
+  };
+}
+
+function normalizeTimelineEvent(event) {
+  if (!event || typeof event !== "object") {
+    return null;
+  }
+
+  const eventType = stringOrEmpty(event.eventType);
+  const sequence = integerOrNull(event.sequence);
+  const elapsedSeconds = integerOrNull(event.elapsedSeconds);
+
+  if (!eventType || sequence === null || elapsedSeconds === null) {
+    return null;
+  }
+
+  return {
+    eventType,
+    sequence,
+    elapsedSeconds,
+    timestamp: integerOrNull(event.timestamp),
+    roundNumber: integerOrNull(event.roundNumber),
+    stationIndex: integerOrNull(event.stationIndex),
+    stationName: stringOrNull(event.stationName),
   };
 }
 
@@ -646,6 +729,7 @@ function loadEnvFile(filePath) {
 
 module.exports = {
   acceptWorkoutSessionState,
+  normalizeWorkoutAnalytics,
   normalizeWorkoutSessionState,
   normalizeWorkoutContract,
   server,

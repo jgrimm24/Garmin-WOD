@@ -79,6 +79,10 @@ class GarminWODView extends WatchUi.View {
     var _finalNativeDistanceMeters;
     var _exitConfirmPending;
     var _sessionSync;
+    var _analyticsRecorder;
+    var _analyticsStationIndex;
+    var _analyticsRoundNumber;
+    var _completedAnalyticsPayload;
 
     function initialize() {
         View.initialize();
@@ -147,6 +151,10 @@ class GarminWODView extends WatchUi.View {
         _finalNativeDistanceMeters = null;
         _exitConfirmPending = false;
         _sessionSync = new GarminWODSessionSync();
+        _analyticsRecorder = new GarminWODAnalyticsRecorder();
+        _analyticsStationIndex = null;
+        _analyticsRoundNumber = null;
+        _completedAnalyticsPayload = null;
     }
 
     // Load your resources here
@@ -249,6 +257,7 @@ class GarminWODView extends WatchUi.View {
             }
 
             _elapsedBeforePause = elapsed;
+            recordAnalyticsPause(elapsed);
             _isRunning = false;
             publishWorkoutSessionState("paused");
         } else {
@@ -292,12 +301,17 @@ class GarminWODView extends WatchUi.View {
                     " hrMonitoringStartedMs=" + getLogValue(_heartRateMonitoringStartedMs));
                 _lastLocation = null;
                 _isRunning = true;
+                ensureWorkoutSessionSync();
+                if (_elapsedBeforePause > 0) {
+                    recordAnalyticsResume(getElapsedSeconds());
+                } else {
+                    startWorkoutAnalytics(getElapsedSeconds());
+                }
                 if (workoutNeedsGps()) {
                     startLocationEvents();
                 } else {
                     System.println("GarminWOD startup no GPS required");
                 }
-                ensureWorkoutSessionSync();
                 publishWorkoutSessionState("running");
                 _startPendingForGps = false;
             } catch (e) {
@@ -426,6 +440,10 @@ class GarminWODView extends WatchUi.View {
         _finalNativeDistanceMeters = null;
         _exitConfirmPending = false;
         _sessionSync.clearSession();
+        _analyticsRecorder.reset();
+        _analyticsStationIndex = null;
+        _analyticsRoundNumber = null;
+        _completedAnalyticsPayload = null;
         WatchUi.requestUpdate();
     }
 
@@ -459,6 +477,10 @@ class GarminWODView extends WatchUi.View {
         _finalNativeDistanceMeters = null;
         _exitConfirmPending = false;
         resetStationDistanceStart();
+        _analyticsRecorder.reset();
+        _analyticsStationIndex = null;
+        _analyticsRoundNumber = null;
+        _completedAnalyticsPayload = null;
 
         return true;
     }
@@ -1265,20 +1287,30 @@ class GarminWODView extends WatchUi.View {
             return;
         }
 
+        var elapsed = getElapsedSeconds();
+        var previousRound = _manualRoundNumber;
+        var previousStation = _manualStationIndex;
+        recordAnalyticsStationCompleted(elapsed, false);
+
         if (_manualStationIndex < _workout.getStationCount() - 1) {
             _manualStationIndex++;
             resetStationDistanceStart();
             vibrateMovementAdvance();
         } else if (shouldContinueManualRoundFlow()) {
+            recordAnalyticsRoundCompleted(elapsed, previousRound);
             _manualRoundNumber++;
             _manualStationIndex = 0;
             resetStationDistanceStart();
+            recordAnalyticsRoundStarted(elapsed, _manualRoundNumber);
             vibrateRoundComplete();
         } else {
+            _manualStationIndex = previousStation;
+            _manualRoundNumber = previousRound;
             finishWorkout();
             return;
         }
 
+        recordAnalyticsStationStarted(elapsed);
         WatchUi.requestUpdate();
         publishWorkoutSessionState("running");
     }
@@ -1292,13 +1324,24 @@ class GarminWODView extends WatchUi.View {
             return;
         }
 
+        var elapsed = getElapsedSeconds();
+        var didMove = false;
+
         if (_manualStationIndex > 0) {
+            recordAnalyticsStationCompleted(elapsed, true);
             _manualStationIndex--;
             resetStationDistanceStart();
+            didMove = true;
         } else if (_manualRoundNumber > 1) {
+            recordAnalyticsStationCompleted(elapsed, true);
             _manualRoundNumber--;
             _manualStationIndex = _workout.getStationCount() - 1;
             resetStationDistanceStart();
+            didMove = true;
+        }
+
+        if (didMove) {
+            recordAnalyticsStationStarted(elapsed);
         }
 
         WatchUi.requestUpdate();
@@ -1430,6 +1473,13 @@ class GarminWODView extends WatchUi.View {
         updateHeartRateStats();
         _elapsedBeforePause = getElapsedSeconds();
         _isRunning = false;
+        _completedAnalyticsPayload = _analyticsRecorder.finishWorkout(
+            _elapsedBeforePause,
+            _manualRoundNumber,
+            _manualStationIndex,
+            getAnalyticsStationName(_manualStationIndex, _manualRoundNumber),
+            _manualStationIndex >= _workout.getStationCount() - 1
+        );
         captureFinalSummaryMetrics();
         logHeartRateDiagnostics("finish");
         var saved = _activityRecorder.stopAndSaveRecordingSession();
@@ -1455,12 +1505,144 @@ class GarminWODView extends WatchUi.View {
             return;
         }
 
+        var analytics = status.equals("finished") ? _completedAnalyticsPayload : null;
         _sessionSync.publish(
             status,
             _manualRoundNumber,
             _manualStationIndex,
-            getElapsedSeconds()
+            getElapsedSeconds(),
+            analytics
         );
+    }
+
+    function startWorkoutAnalytics(elapsedSeconds) as Void {
+        if (!_sessionSync.hasSession()) {
+            return;
+        }
+
+        _analyticsRecorder.startWorkout(
+            _sessionSync.getSessionId(),
+            _currentWorkoutIdentity,
+            _workout.title,
+            elapsedSeconds,
+            _manualRoundNumber,
+            _manualStationIndex,
+            getAnalyticsStationName(_manualStationIndex, _manualRoundNumber),
+            getAnalyticsStationReps(_manualStationIndex, _manualRoundNumber),
+            _workout.stationMeters[_manualStationIndex],
+            _workout.stationCalories[_manualStationIndex],
+            _workout.stationSeconds[_manualStationIndex]
+        );
+        _analyticsStationIndex = _manualStationIndex;
+        _analyticsRoundNumber = _manualRoundNumber;
+    }
+
+    function recordAnalyticsStationStarted(elapsedSeconds) as Void {
+        if (!_analyticsRecorder.hasActiveSession()) {
+            return;
+        }
+
+        _analyticsRecorder.startStation(
+            elapsedSeconds,
+            _manualRoundNumber,
+            _manualStationIndex,
+            getAnalyticsStationName(_manualStationIndex, _manualRoundNumber),
+            getAnalyticsStationReps(_manualStationIndex, _manualRoundNumber),
+            _workout.stationMeters[_manualStationIndex],
+            _workout.stationCalories[_manualStationIndex],
+            _workout.stationSeconds[_manualStationIndex]
+        );
+        _analyticsStationIndex = _manualStationIndex;
+        _analyticsRoundNumber = _manualRoundNumber;
+    }
+
+    function recordAnalyticsStationCompleted(elapsedSeconds, interrupted) as Void {
+        if (!_analyticsRecorder.hasActiveSession()) {
+            return;
+        }
+
+        _analyticsRecorder.completeStation(elapsedSeconds, interrupted);
+    }
+
+    function recordAnalyticsRoundCompleted(elapsedSeconds, roundNumber) as Void {
+        if (_analyticsRecorder.hasActiveSession()) {
+            _analyticsRecorder.completeRound(elapsedSeconds, roundNumber);
+        }
+    }
+
+    function recordAnalyticsRoundStarted(elapsedSeconds, roundNumber) as Void {
+        if (_analyticsRecorder.hasActiveSession()) {
+            _analyticsRecorder.startRound(elapsedSeconds, roundNumber, _manualStationIndex, getAnalyticsStationName(_manualStationIndex, roundNumber));
+        }
+    }
+
+    function recordAnalyticsPause(elapsedSeconds) as Void {
+        if (_analyticsRecorder.hasActiveSession()) {
+            _analyticsRecorder.pauseWorkout(elapsedSeconds, _manualRoundNumber, _manualStationIndex, getAnalyticsStationName(_manualStationIndex, _manualRoundNumber));
+        }
+    }
+
+    function recordAnalyticsResume(elapsedSeconds) as Void {
+        if (_analyticsRecorder.hasActiveSession()) {
+            _analyticsRecorder.resumeWorkout(elapsedSeconds, _manualRoundNumber, _manualStationIndex, getAnalyticsStationName(_manualStationIndex, _manualRoundNumber));
+        }
+    }
+
+    function getAnalyticsStationName(stationIndex, roundNumber) {
+        return _workout.getScoreboardMovementText(stationIndex, roundNumber);
+    }
+
+    function getAnalyticsStationReps(stationIndex, roundNumber) {
+        if (_workout.repScheme != null && roundNumber != null) {
+            var schemeIndex = roundNumber - 1;
+
+            if (schemeIndex >= 0 && schemeIndex < _workout.repScheme.size()) {
+                return _workout.repScheme[schemeIndex];
+            }
+        }
+
+        return _workout.stationReps[stationIndex];
+    }
+
+    function syncTimedWorkoutAnalytics() as Void {
+        if (!_analyticsRecorder.hasActiveSession() || !_workout.isEmom()) {
+            return;
+        }
+
+        var elapsed = getElapsedSeconds();
+        var stationIndex = getStationIndex(elapsed);
+        var roundNumber = getRoundNumber(elapsed);
+
+        if (_analyticsStationIndex == null || _analyticsRoundNumber == null) {
+            _analyticsStationIndex = stationIndex;
+            _analyticsRoundNumber = roundNumber;
+            return;
+        }
+
+        if (stationIndex == _analyticsStationIndex && roundNumber == _analyticsRoundNumber) {
+            return;
+        }
+
+        var previousRound = _analyticsRoundNumber;
+        recordAnalyticsStationCompleted(elapsed, false);
+
+        if (roundNumber != previousRound) {
+            recordAnalyticsRoundCompleted(elapsed, previousRound);
+            _analyticsRecorder.startRound(elapsed, roundNumber, stationIndex, getAnalyticsStationName(stationIndex, roundNumber));
+        }
+
+        _analyticsRecorder.startStation(
+            elapsed,
+            roundNumber,
+            stationIndex,
+            getAnalyticsStationName(stationIndex, roundNumber),
+            getAnalyticsStationReps(stationIndex, roundNumber),
+            _workout.stationMeters[stationIndex],
+            _workout.stationCalories[stationIndex],
+            _workout.stationSeconds[stationIndex]
+        );
+        _analyticsStationIndex = stationIndex;
+        _analyticsRoundNumber = roundNumber;
     }
 
     function retrySaveRecordingSession() as Void {
@@ -1825,6 +2007,7 @@ class GarminWODView extends WatchUi.View {
     function onTick() as Void {
         if (_isRunning) {
             updateHeartRateStats();
+            syncTimedWorkoutAnalytics();
 
             if (_workout.isAmrap() && _totalSeconds != null && getElapsedSeconds() >= _totalSeconds) {
                 finishWorkout();
@@ -2447,6 +2630,7 @@ class GarminWODView extends WatchUi.View {
 
         _heartRateSum += heartRate;
         _heartRateSamples++;
+        _analyticsRecorder.addHeartRateSample(heartRate);
 
         if (_maxHeartRate == null || heartRate > _maxHeartRate) {
             _maxHeartRate = heartRate;

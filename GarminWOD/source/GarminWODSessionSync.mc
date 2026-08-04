@@ -24,6 +24,10 @@ class GarminWODSessionSync {
         return _sessionId != null;
     }
 
+    function getSessionId() {
+        return _sessionId;
+    }
+
     function startSession(workoutId) {
         if (_sessionId != null) {
             return;
@@ -45,7 +49,7 @@ class GarminWODSessionSync {
         _isPublishing = false;
     }
 
-    function publish(status, round, stationIndex, elapsedSeconds) {
+    function publish(status, round, stationIndex, elapsedSeconds, analytics) {
         if (_sessionId == null || _workoutId == null) {
             System.println("GarminWOD sync skipped; no session for status=" + status);
             return;
@@ -63,6 +67,10 @@ class GarminWODSessionSync {
             "elapsedSeconds" => elapsedSeconds,
             "updatedAt" => Time.now().value()
         };
+
+        if (analytics != null) {
+            payload["analytics"] = analytics;
+        }
 
         if (_isPublishing) {
             _pendingPayload = payload;

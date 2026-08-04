@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const {
   acceptWorkoutSessionState,
+  normalizeWorkoutAnalytics,
   normalizeWorkoutSessionState,
   server,
 } = require("../server");
@@ -44,7 +45,67 @@ assert.deepEqual(normalized, {
   stationIndex: 0,
   elapsedSeconds: 0,
   updatedAt: 12345,
+  analytics: null,
 });
+
+console.log("[TEST] workout-session normalizes optional analytics payload");
+const analytics = normalizeWorkoutAnalytics({
+  schemaVersion: 1,
+  sessionId: "session-1",
+  workoutId: "id:roney|fp:test",
+  workoutName: "Roney",
+  startedAt: 100,
+  finishedAt: 220,
+  totalActiveSeconds: 120,
+  roundsCompleted: 2,
+  transitionTimingAvailable: false,
+  movementEvents: [
+    {
+      movementIndex: 0,
+      movementName: "20 CAL ROW",
+      prescribedCalories: 20,
+      roundNumber: 1,
+      enteredElapsedSeconds: 0,
+      exitedElapsedSeconds: 45,
+      durationSeconds: 45,
+      averageHeartRate: 140,
+      maximumHeartRate: 154,
+      minimumHeartRate: 120,
+      heartRateSampleCount: 30,
+    },
+    {
+      movementName: "missing required fields",
+    },
+  ],
+  events: [
+    {
+      eventType: "station_started",
+      sequence: 1,
+      elapsedSeconds: 0,
+      roundNumber: 1,
+      stationIndex: 0,
+      stationName: "20 CAL ROW",
+    },
+    {
+      eventType: "",
+      sequence: 2,
+      elapsedSeconds: 1,
+    },
+  ],
+});
+assert.equal(analytics.sessionId, "session-1", "analytics session ID should normalize");
+assert.equal(analytics.movementEvents.length, 1, "invalid movement analytics events should be dropped");
+assert.equal(analytics.events.length, 1, "invalid timeline events should be dropped");
+assert.equal(analytics.movementEvents[0].prescribedCalories, 20, "calorie prescription should normalize");
+
+const stateWithAnalytics = expectValid(
+  validState({
+    status: "finished",
+    analytics,
+  }),
+  "session with analytics should normalize"
+);
+assert.equal(stateWithAnalytics.analytics.movementEvents.length, 1, "session state should preserve analytics");
 
 console.log("[TEST] workout-session rejects missing and invalid fields");
 expectInvalid(validState({ workoutId: "" }), "empty workoutId should be rejected");

@@ -14,6 +14,7 @@ final class DisplayViewModel: ObservableObject {
     let bluetoothHeartRateManager: BluetoothHeartRateManager
 
     @Published private(set) var workoutSummary: WorkoutSummary?
+    @Published private(set) var latestWorkoutAnalytics: WorkoutAnalytics?
     @Published private(set) var isRefreshingLatestWorkout: Bool = false
     @Published private(set) var latestWorkoutStatusText: String = "Roney sample"
     @Published var selectedHeartRateSource: HeartRateSource = .mock
@@ -33,6 +34,7 @@ final class DisplayViewModel: ObservableObject {
     private var lastAppliedWatchSessionId: String?
     private var lastAppliedWatchRevision = 0
     private let watchSessionFreshnessSeconds = 30
+    private let analyticsStorageKey = "latestWorkoutAnalyticsV1"
 
     init(
         workoutManager: WorkoutManager = WorkoutManager(),
@@ -50,6 +52,7 @@ final class DisplayViewModel: ObservableObject {
         self.latestWorkoutClient = latestWorkoutClient
         self.workoutSessionClient = workoutSessionClient
         self.workoutCache = workoutCache
+        self.latestWorkoutAnalytics = Self.loadPersistedAnalytics(storageKey: analyticsStorageKey)
         print("[LIFECYCLE] DisplayViewModel init")
         scheduleZoneTimer()
     }
@@ -224,6 +227,8 @@ final class DisplayViewModel: ObservableObject {
         logState("nextStation before")
         workoutManager.advance()
         if workoutManager.status == .finished {
+            latestWorkoutAnalytics = nil
+            persistLatestAnalytics(nil)
             captureWorkoutSummaryIfNeeded()
             timerManager.stop()
         }
@@ -242,6 +247,8 @@ final class DisplayViewModel: ObservableObject {
         }
         logState("finishWorkout before")
         workoutManager.finish()
+        latestWorkoutAnalytics = nil
+        persistLatestAnalytics(nil)
         captureWorkoutSummaryIfNeeded()
         timerManager.stop()
         logState("finishWorkout after")
@@ -550,6 +557,8 @@ final class DisplayViewModel: ObservableObject {
         )
 
         if state.status == .finished {
+            latestWorkoutAnalytics = state.analytics
+            persistLatestAnalytics(state.analytics)
             captureWorkoutSummaryIfNeeded()
             timerManager.stop()
         }
@@ -659,6 +668,33 @@ final class DisplayViewModel: ObservableObject {
             action()
         } else {
             DispatchQueue.main.async(execute: action)
+        }
+    }
+
+    private static func loadPersistedAnalytics(storageKey: String) -> WorkoutAnalytics? {
+        guard let data = UserDefaults.standard.data(forKey: storageKey) else {
+            return nil
+        }
+
+        do {
+            return try JSONDecoder().decode(WorkoutAnalytics.self, from: data)
+        } catch {
+            print("[ANALYTICS] persisted analytics decode failed: \(error)")
+            return nil
+        }
+    }
+
+    private func persistLatestAnalytics(_ analytics: WorkoutAnalytics?) {
+        guard let analytics else {
+            UserDefaults.standard.removeObject(forKey: analyticsStorageKey)
+            return
+        }
+
+        do {
+            let data = try JSONEncoder().encode(analytics)
+            UserDefaults.standard.set(data, forKey: analyticsStorageKey)
+        } catch {
+            print("[ANALYTICS] persist failed: \(error)")
         }
     }
 
