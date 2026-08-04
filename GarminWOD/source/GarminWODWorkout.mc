@@ -14,6 +14,10 @@ class GarminWODWorkout {
     var stationCalories;
     var stationMeters;
     var stationWeights;
+    var stationMaleWeightKg;
+    var stationFemaleWeightKg;
+    var stationMaleHeightIn;
+    var stationFemaleHeightIn;
     var _hasWorkout;
 
     function initialize() {
@@ -32,6 +36,10 @@ class GarminWODWorkout {
         stationCalories = [];
         stationMeters = [];
         stationWeights = [];
+        stationMaleWeightKg = [];
+        stationFemaleWeightKg = [];
+        stationMaleHeightIn = [];
+        stationFemaleHeightIn = [];
         _hasWorkout = false;
     }
 
@@ -52,6 +60,10 @@ class GarminWODWorkout {
         var parsedCalories = [];
         var parsedMeters = [];
         var parsedWeights = [];
+        var parsedMaleWeightKg = [];
+        var parsedFemaleWeightKg = [];
+        var parsedMaleHeightIn = [];
+        var parsedFemaleHeightIn = [];
 
         for (var i = 0; i < stations.size(); i++) {
             var station = stations[i];
@@ -63,6 +75,10 @@ class GarminWODWorkout {
                 parsedCalories.add(getContractValue(station, "calories", null));
                 parsedMeters.add(getContractValue(station, "meters", null));
                 parsedWeights.add(getContractValue(station, "weightLb", getContractValue(station, "maleWeightLb", null)));
+                parsedMaleWeightKg.add(getContractValue(station, "maleWeightKg", null));
+                parsedFemaleWeightKg.add(getContractValue(station, "femaleWeightKg", null));
+                parsedMaleHeightIn.add(getContractValue(station, "maleHeightIn", null));
+                parsedFemaleHeightIn.add(getContractValue(station, "femaleHeightIn", null));
             }
         }
 
@@ -85,6 +101,10 @@ class GarminWODWorkout {
         stationCalories = parsedCalories;
         stationMeters = parsedMeters;
         stationWeights = parsedWeights;
+        stationMaleWeightKg = parsedMaleWeightKg;
+        stationFemaleWeightKg = parsedFemaleWeightKg;
+        stationMaleHeightIn = parsedMaleHeightIn;
+        stationFemaleHeightIn = parsedFemaleHeightIn;
         _hasWorkout = true;
 
         return true;

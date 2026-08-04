@@ -788,17 +788,15 @@ class GarminWODView extends WatchUi.View {
         var currentLines = getMovementDisplayLines(currentText);
         var nextText = getNextMovementText(stationIndex, roundNumber);
         var nextLines = getMovementDisplayLines(nextText);
-        var currentDetail = getCurrentMovementDetail(stationIndex);
+        var timeText = getCompactWorkoutTimeText(elapsed, remaining, stationIndex, secondInStation);
         var layoutMode = _workout.getWorkoutLayoutMode();
-        var topY = height * 7 / 100;
-        var currentLabelY = layoutMode.equals("INTERVAL") ? height * 14 / 100 : height * 16 / 100;
-        var currentLineOneY = layoutMode.equals("INTERVAL") ? height * 33 / 100 : height * 35 / 100;
-        var currentLineTwoY = layoutMode.equals("INTERVAL") ? height * 51 / 100 : height * 53 / 100;
-        var currentDetailY = height * 66 / 100;
+        var topY = height * 13 / 100;
+        var currentLineOneY = layoutMode.equals("INTERVAL") ? height * 31 / 100 : height * 33 / 100;
+        var currentLineTwoY = layoutMode.equals("INTERVAL") ? height * 43 / 100 : height * 45 / 100;
+        var currentDetailY = height * 59 / 100;
         var dividerY = layoutMode.equals("INTERVAL") ? height * 74 / 100 : height * 76 / 100;
-        var nextLabelY = layoutMode.equals("INTERVAL") ? height * 78 / 100 : height * 80 / 100;
-        var nextLineOneY = layoutMode.equals("INTERVAL") ? height * 85 / 100 : height * 86 / 100;
-        var nextLineTwoY = layoutMode.equals("INTERVAL") ? height * 90 / 100 : height * 90 / 100;
+        var nextLineOneY = layoutMode.equals("INTERVAL") ? height * 81 / 100 : height * 82 / 100;
+        var nextLineTwoY = layoutMode.equals("INTERVAL") ? height * 87 / 100 : height * 88 / 100;
         var bottomY = height * 96 / 100;
         var centerX = width / 2;
 
@@ -808,31 +806,21 @@ class GarminWODView extends WatchUi.View {
         }
 
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(width * 20 / 100, topY, Graphics.FONT_XTINY, getCompactRoundText(roundNumber), Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(width * 50 / 100, topY, Graphics.FONT_XTINY, getCompactWorkoutTimeText(elapsed, remaining, stationIndex, secondInStation), Graphics.TEXT_JUSTIFY_CENTER);
-        drawLiveHeartRate(dc, width, topY);
+        drawScoreboardHeader(dc, width, topY, getCompactRoundText(roundNumber));
 
         if (!_isRunning && _elapsedBeforePause > 0) {
             dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
             dc.drawText(centerX, height * 14 / 100, Graphics.FONT_XTINY, "PAUSED", Graphics.TEXT_JUSTIFY_CENTER);
         }
 
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(centerX, currentLabelY, Graphics.FONT_XTINY, "CURRENT", Graphics.TEXT_JUSTIFY_CENTER);
-
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         drawMovementLines(dc, centerX, currentLineOneY, currentLineTwoY, currentLines, getCurrentMovementFont(currentLines), Graphics.COLOR_WHITE);
 
-        if (currentDetail != null) {
-            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(centerX, currentDetailY, Graphics.FONT_XTINY, currentDetail, Graphics.TEXT_JUSTIFY_CENTER);
-        }
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(centerX, currentDetailY, Graphics.FONT_SMALL, timeText, Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawLine(width * 18 / 100, dividerY, width * 82 / 100, dividerY);
-
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(centerX, nextLabelY, Graphics.FONT_XTINY, "NEXT", Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         drawMovementLines(dc, centerX, nextLineOneY, nextLineTwoY, nextLines, getNextMovementFont(nextLines), Graphics.COLOR_WHITE);
@@ -890,22 +878,81 @@ class GarminWODView extends WatchUi.View {
         return "" + heartRate;
     }
 
-    function drawLiveHeartRate(dc, width, y) as Void {
-        var unit = width / 140;
-        if (unit < 1) {
-            unit = 1;
+    function drawScoreboardHeader(dc, width, y, roundText) as Void {
+        var hrText = getLiveHeartRateText();
+        var headerFont = getScoreboardHeaderFont(dc, width, roundText, hrText);
+        var leftX = getScoreboardHeaderLeftX(width);
+
+        dc.drawText(leftX, y, headerFont, roundText, Graphics.TEXT_JUSTIFY_LEFT);
+        drawLiveHeartRate(dc, width, y, headerFont, hrText);
+    }
+
+    function getScoreboardHeaderFont(dc, width, roundText, hrText) {
+        var font = Graphics.FONT_MEDIUM;
+
+        if (scoreboardHeaderOverlaps(dc, width, font, roundText, hrText)) {
+            return Graphics.FONT_SMALL;
         }
 
-        var heartWidth = unit * 7;
+        return font;
+    }
+
+    function scoreboardHeaderOverlaps(dc, width, font, roundText, hrText) {
+        var gap = getScoreboardHeaderGap(width);
+        var roundRight = getScoreboardHeaderLeftX(width) + getTextWidth(dc, roundText, font);
+        var heartMetrics = getHeartRateHeaderMetrics(width);
+        var hrLeft = heartMetrics[1] - getTextWidth(dc, hrText, font);
+
+        return roundRight + gap >= hrLeft;
+    }
+
+    function getScoreboardHeaderLeftX(width) {
+        return width * 18 / 100;
+    }
+
+    function getScoreboardHeaderGap(width) {
         var gap = width / 100;
+
         if (gap < 2) {
             gap = 2;
         }
 
-        var rightEdge = width * 75 / 100;
+        return gap;
+    }
+
+    function drawLiveHeartRate(dc, width, y, font, hrText) as Void {
+        var heartMetrics = getHeartRateHeaderMetrics(width);
+        var textRight = heartMetrics[1];
+        var heartLeft = heartMetrics[2];
+
+        dc.drawText(textRight, y, font, hrText, Graphics.TEXT_JUSTIFY_RIGHT);
+        drawPixelHeart(dc, heartLeft, y + heartMetrics[3], heartMetrics[3]);
+    }
+
+    function getHeartRateHeaderMetrics(width) {
+        var unit = width / 105;
+        if (unit < 2) {
+            unit = 2;
+        }
+
+        var heartWidth = unit * 7;
+        var gap = getScoreboardHeaderGap(width);
+        var rightEdge = width * 84 / 100;
         var textRight = rightEdge - heartWidth - gap;
-        dc.drawText(textRight, y, Graphics.FONT_XTINY, getLiveHeartRateText(), Graphics.TEXT_JUSTIFY_RIGHT);
-        drawPixelHeart(dc, rightEdge - heartWidth, y + unit, unit);
+
+        return [heartWidth, textRight, rightEdge - heartWidth, unit];
+    }
+
+    function getTextWidth(dc, text, font) {
+        if (dc has :getTextDimensions) {
+            var dimensions = dc.getTextDimensions(text, font);
+
+            if (dimensions != null && dimensions.size() > 0) {
+                return dimensions[0];
+            }
+        }
+
+        return text.length() * 11;
     }
 
     function drawPixelHeart(dc, left, top, unit) as Void {

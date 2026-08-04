@@ -138,6 +138,64 @@ function liveHeartRateText(heartRate) {
   return heartRate == null ? "--" : `${heartRate}`;
 }
 
+function estimatedMediumTextWidth(text) {
+  return String(text).length * 11;
+}
+
+function estimatedSmallTextWidth(text) {
+  return String(text).length * 9;
+}
+
+function scoreboardHeaderLayout({ width, roundText, heartRateText }) {
+  const unit = Math.max(2, width / 105);
+  const heartWidth = unit * 7;
+  const gap = Math.max(2, width / 100);
+  const leftX = width * 0.18;
+  const rightEdge = width * 0.84;
+  const hrTextRight = rightEdge - heartWidth - gap;
+  let roundWidth = estimatedMediumTextWidth(roundText);
+  let hrWidth = estimatedMediumTextWidth(heartRateText);
+  let font = "medium";
+  const overlaps = leftX + roundWidth + gap >= hrTextRight - hrWidth;
+
+  if (overlaps) {
+    font = "small";
+    roundWidth = estimatedSmallTextWidth(roundText);
+    hrWidth = estimatedSmallTextWidth(heartRateText);
+  }
+
+  return {
+    round: { left: leftX, right: leftX + roundWidth },
+    heartRate: { left: hrTextRight - hrWidth, textRight: hrTextRight, right: rightEdge },
+    heart: { left: rightEdge - heartWidth, right: rightEdge, width: heartWidth },
+    visible: { left: width * 0.17, right: width * 0.95 },
+    font,
+  };
+}
+
+function scoreboardMovementTimerLayout({ width, timeText }) {
+  const centerX = width / 2;
+  const timeWidth = estimatedSmallTextWidth(timeText);
+
+  return {
+    timer: { left: centerX - timeWidth / 2, right: centerX + timeWidth / 2, center: centerX },
+    centerX,
+  };
+}
+
+function assertHeaderDoesNotOverlap({ roundText, timeText, heartRateText }) {
+  const layout = scoreboardHeaderLayout({ width: 280, roundText, heartRateText });
+  const timerLayout = scoreboardMovementTimerLayout({ width: 280, timeText });
+
+  assert(layout.round.left >= layout.visible.left, `${roundText} should stay inside the left safe area`);
+  assert(layout.heartRate.right <= layout.visible.right, `${heartRateText} should stay inside the right safe area`);
+  assert(layout.heart.width > 0, `${heartRateText} should always reserve a heart icon`);
+  assert(layout.heart.left >= layout.heartRate.textRight, `${heartRateText} heart should sit to the right of the HR text`);
+  assert(layout.heart.right <= layout.visible.right, `${heartRateText} heart should stay on-screen`);
+  assert(layout.round.right < layout.heartRate.left, `${roundText} should not overlap ${heartRateText}`);
+  assert(Math.abs(timerLayout.timer.center - timerLayout.centerX) <= 1, `${timeText} should remain centered below movement`);
+}
+
 function sourceVisible({ running, elapsedBeforePause }) {
   return !running && elapsedBeforePause === 0;
 }
@@ -256,6 +314,36 @@ function run() {
     "Last station",
     "final rep-scheme station should not wrap"
   );
+  const realSchemeStations = [
+    { name: "BURPEES" },
+    { name: "KETTLEBELL SWINGS", maleWeightKg: 24, femaleWeightKg: 16 },
+    { name: "BOX JUMPS", maleHeightIn: 24, femaleHeightIn: 20 },
+  ];
+  assert.deepStrictEqual(
+    [
+      scoreboardMovementText(realSchemeStations[0], 1, repScheme),
+      scoreboardMovementText(realSchemeStations[1], 1, repScheme),
+      scoreboardMovementText(realSchemeStations[2], 1, repScheme),
+      scoreboardMovementText(realSchemeStations[0], 2, repScheme),
+      scoreboardMovementText(realSchemeStations[1], 2, repScheme),
+      scoreboardMovementText(realSchemeStations[2], 2, repScheme),
+      scoreboardMovementText(realSchemeStations[0], 3, repScheme),
+      scoreboardMovementText(realSchemeStations[1], 3, repScheme),
+      scoreboardMovementText(realSchemeStations[2], 3, repScheme),
+    ],
+    [
+      "21 BURPEES",
+      "21 KETTLEBELL SWINGS",
+      "21 BOX JUMPS",
+      "15 BURPEES",
+      "15 KETTLEBELL SWINGS",
+      "15 BOX JUMPS",
+      "9 BURPEES",
+      "9 KETTLEBELL SWINGS",
+      "9 BOX JUMPS",
+    ],
+    "watch scoreboard should use scheme reps while hiding kg and height metadata"
+  );
   assert.strictEqual(layoutMode({ workoutType: "INTERVAL", structureType: "TIMED_INTERVAL" }), "INTERVAL");
   assert.strictEqual(layoutMode({ workoutType: "UNKNOWN", structureType: "UNKNOWN" }), "STANDARD");
 
@@ -265,6 +353,13 @@ function run() {
   assert.strictEqual(controlHint({ running: false, elapsedBeforePause: 0 }), "START start");
   assert.strictEqual(liveHeartRateText(156), "156");
   assert.strictEqual(liveHeartRateText(null), "--");
+  assertHeaderDoesNotOverlap({ roundText: "R1/3", timeText: "0:00", heartRateText: "69" });
+  assertHeaderDoesNotOverlap({ roundText: "R1/8", timeText: "0:00", heartRateText: "69" });
+  assertHeaderDoesNotOverlap({ roundText: "R1/8", timeText: "0:00", heartRateText: "--" });
+  assertHeaderDoesNotOverlap({ roundText: "R10/12", timeText: "9:59", heartRateText: "198" });
+  assertHeaderDoesNotOverlap({ roundText: "R3/3", timeText: "59:59", heartRateText: "--" });
+  assertHeaderDoesNotOverlap({ roundText: "R10/12", timeText: "59:59", heartRateText: "198" });
+  assertHeaderDoesNotOverlap({ roundText: "R12/12", timeText: "1:02:34", heartRateText: "175" });
 
   const station = {
     name: "BENCH PRESS",
