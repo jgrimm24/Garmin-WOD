@@ -2048,129 +2048,685 @@ private struct WorkoutAnalyticsView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            WorkoutDetailContent(session: nil, analytics: analytics)
+                .navigationTitle(analytics?.workoutName.isEmpty == false ? analytics?.workoutName ?? "Workout" : "Workout")
+                .navigationBarTitleDisplayMode(.inline)
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+private struct WorkoutDetailContent: View {
+    let session: CompletedWorkoutSession?
+    let analytics: WorkoutAnalytics?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
                 if let analytics {
-                    analyticsContent(analytics)
+                    let model = WorkoutAnalyticsPresentationModel(session: session, analytics: analytics)
+                    WorkoutHeroSummaryView(model: model)
+                    WorkoutSectionMenu(model: model)
+                    WorkoutHighlightsView(model: model)
                 } else {
                     noAnalyticsContent
                 }
             }
-            .background(Color.black.ignoresSafeArea())
-            .navigationTitle("Workout Analytics")
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 28)
         }
-        .preferredColorScheme(.dark)
-    }
-
-    private func analyticsContent(_ analytics: WorkoutAnalytics) -> some View {
-        let summary = analytics.summary
-
-        return VStack(alignment: .leading, spacing: 16) {
-            analyticsSection("Workout Summary") {
-                analyticsRow("Workout", analytics.workoutName.isEmpty ? "Workout" : analytics.workoutName)
-                analyticsRow("Total Time", WorkoutSummary.format(seconds: summary.totalActiveSeconds))
-                analyticsRow("Average HR", summary.averageHeartRate.map { "\($0)" } ?? "--")
-                analyticsRow("Peak HR", summary.maximumHeartRate.map { "\($0)" } ?? "--")
-                analyticsRow("Movements", "\(summary.movementCount)")
-                analyticsRow("Rounds Completed", "\(summary.roundsCompleted)")
-            }
-
-            analyticsSection("Movement Breakdown") {
-                ForEach(summary.movementBreakdowns) { movement in
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(movement.movementName)
-                            .font(.system(size: 17, weight: .black, design: .rounded))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.65)
-
-                        Text("\(movement.occurrences.count) occurrences • Avg \(WorkoutSummary.format(seconds: movement.averageSeconds)) • Peak \(movement.maximumHeartRate.map(String.init) ?? "--")")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.68))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.65)
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-
-            analyticsSection("Round Breakdown") {
-                if summary.roundSplits.isEmpty {
-                    analyticsRow("Rounds", "Unavailable")
-                } else {
-                    ForEach(summary.roundSplits) { split in
-                        analyticsRow("Round \(split.roundNumber)", WorkoutSummary.format(seconds: split.durationSeconds))
-                    }
-                }
-            }
-
-            analyticsSection("Highlights") {
-                analyticsRow("Longest Movement", movementHighlight(summary.longestMovement))
-                analyticsRow("Fastest Movement", movementHighlight(summary.fastestMovement))
-                analyticsRow("Highest HR Movement", heartRateHighlight(summary.highestHeartRateMovement))
-                analyticsRow("Transitions", summary.transitionTimingAvailable ? "Available" : "Not measured")
-            }
-        }
-        .padding(18)
+        .background(Color.black.ignoresSafeArea())
+        .foregroundStyle(.white)
     }
 
     private var noAnalyticsContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("No analytics available.")
-                .font(.system(size: 24, weight: .black, design: .rounded))
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Detailed splits unavailable.")
+                .font(.system(size: 22, weight: .black, design: .rounded))
 
-            Text("Workout split analytics are available after the watch finishes and publishes a Version 1 analytics payload.")
+            Text("This workout does not include a completed Garmin-WOD analytics payload.")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.68))
         }
-        .padding(20)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+private struct WorkoutHeroSummaryView: View {
+    let model: WorkoutAnalyticsPresentationModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(model.workoutName)
+                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
+
+                Text(model.dateText)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.62))
+            }
+
+            HStack(alignment: .lastTextBaseline, spacing: 10) {
+                Text(model.primaryResult)
+                    .font(.system(size: 44, weight: .black, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.66)
+
+                Text(model.resultContext)
+                    .font(.system(size: 17, weight: .black, design: .rounded))
+                    .foregroundStyle(.yellow)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.66)
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
+                compactMetric("Avg HR", model.averageHeartRateText)
+                compactMetric("Peak HR", model.maximumHeartRateText)
+                compactMetric("Movements", "\(model.summary.movementCount)")
+                compactMetric("Status", model.completionStatus)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.white.opacity(0.10), lineWidth: 1)
+        )
     }
 
-    private func analyticsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title.uppercased())
-                .font(.system(size: 13, weight: .black, design: .rounded))
-                .foregroundStyle(.yellow)
+    private func compactMetric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.48))
 
-            content()
+            Text(value)
+                .font(.system(size: 17, weight: .black, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+private struct WorkoutSectionMenu: View {
+    let model: WorkoutAnalyticsPresentationModel
+
+    var body: some View {
+        VStack(spacing: 9) {
+            NavigationLink {
+                MovementBreakdownView(model: model)
+            } label: {
+                WorkoutSectionRow(
+                    title: "Movement Breakdown",
+                    subtitle: model.movementOverviewText,
+                    systemImage: "figure.cross.training"
+                )
+            }
+
+            NavigationLink {
+                RoundBreakdownView(model: model)
+            } label: {
+                WorkoutSectionRow(
+                    title: "Round Breakdown",
+                    subtitle: model.roundOverviewText,
+                    systemImage: "timer"
+                )
+            }
+
+            NavigationLink {
+                HeartRateDetailView(model: model)
+            } label: {
+                WorkoutSectionRow(
+                    title: "Heart Rate",
+                    subtitle: model.heartRateOverviewText,
+                    systemImage: "heart.fill"
+                )
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct WorkoutSectionRow: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .black))
+                .foregroundStyle(.yellow)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 17, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                Text(subtitle)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.62))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(.white.opacity(0.44))
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
     }
+}
 
-    private func analyticsRow(_ title: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.68))
-                .lineLimit(1)
-                .minimumScaleFactor(0.65)
+private struct MovementBreakdownView: View {
+    let model: WorkoutAnalyticsPresentationModel
 
-            Spacer(minLength: 8)
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                if model.summary.movementBreakdowns.isEmpty {
+                    unavailableCard("Detailed movement splits unavailable.")
+                } else {
+                    ForEach(model.summary.movementBreakdowns) { movement in
+                        NavigationLink {
+                            MovementOccurrenceDetailView(movement: movement)
+                        } label: {
+                            MovementSummaryRow(
+                                movement: movement,
+                                totalSeconds: max(model.summary.totalActiveSeconds, 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(16)
+        }
+        .background(Color.black.ignoresSafeArea())
+        .foregroundStyle(.white)
+        .navigationTitle("Movement Breakdown")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
 
+private struct MovementSummaryRow: View {
+    let movement: MovementBreakdown
+    let totalSeconds: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(movement.movementName)
+                        .font(.system(size: 18, weight: .black, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+
+                    Text("\(movement.occurrences.count) occurrences")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.58))
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(WorkoutSummary.format(seconds: movement.totalSeconds))
+                        .font(.system(size: 18, weight: .black, design: .rounded))
+                    Text("total")
+                        .font(.system(size: 10, weight: .black, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.10))
+                    Capsule().fill(.yellow).frame(width: proxy.size.width * proportion)
+                }
+            }
+            .frame(height: 6)
+
+            HStack {
+                metric("Avg", WorkoutSummary.format(seconds: movement.averageSeconds))
+                metric("Fastest", WorkoutSummary.format(seconds: movement.fastestSeconds))
+                metric("Peak HR", movement.maximumHeartRate.map(String.init) ?? "--")
+            }
+        }
+        .padding(14)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var proportion: CGFloat {
+        CGFloat(min(max(Double(movement.totalSeconds) / Double(max(totalSeconds, 1)), 0), 1))
+    }
+
+    private func metric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.48))
             Text(value)
-                .font(.system(size: 16, weight: .black, design: .rounded))
-                .multilineTextAlignment(.trailing)
+                .font(.system(size: 13, weight: .black, design: .rounded))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct MovementOccurrenceDetailView: View {
+    let movement: MovementBreakdown
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(Array(movement.occurrences.enumerated()), id: \.element.id) { offset, event in
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Occurrence \(offset + 1)")
+                                .font(.system(size: 16, weight: .black, design: .rounded))
+                            Spacer()
+                            Text("Round \(event.roundNumber)")
+                                .font(.system(size: 13, weight: .black, design: .rounded))
+                                .foregroundStyle(.yellow)
+                        }
+
+                        HStack {
+                            occurrenceMetric("Time", WorkoutSummary.format(seconds: event.durationSeconds))
+                            occurrenceMetric("Avg HR", event.averageHeartRate.map(String.init) ?? "--")
+                            occurrenceMetric("Peak HR", event.maximumHeartRate.map(String.init) ?? "--")
+                        }
+                    }
+                    .padding(14)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            .padding(16)
+        }
+        .background(Color.black.ignoresSafeArea())
+        .foregroundStyle(.white)
+        .navigationTitle(movement.movementName)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func occurrenceMetric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.48))
+            Text(value)
+                .font(.system(size: 15, weight: .black, design: .rounded))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct RoundBreakdownView: View {
+    let model: WorkoutAnalyticsPresentationModel
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                RoundSummaryView(model: model)
+
+                ForEach(model.roundPresentations) { round in
+                    RoundRow(round: round, fastestCompleteRound: model.fastestCompleteRound)
+                }
+            }
+            .padding(16)
+        }
+        .background(Color.black.ignoresSafeArea())
+        .foregroundStyle(.white)
+        .navigationTitle("Round Breakdown")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct RoundSummaryView: View {
+    let model: WorkoutAnalyticsPresentationModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(model.roundOverviewText)
+                .font(.system(size: 17, weight: .black, design: .rounded))
+            if let fastest = model.fastestCompleteRound {
+                summaryRow("Fastest", "Round \(fastest.roundNumber) • \(WorkoutSummary.format(seconds: fastest.durationSeconds))")
+            }
+            if let slowest = model.slowestCompleteRound {
+                summaryRow("Slowest", "Round \(slowest.roundNumber) • \(WorkoutSummary.format(seconds: slowest.durationSeconds))")
+            }
+            if let average = model.averageCompleteRoundSeconds {
+                summaryRow("Average", WorkoutSummary.format(seconds: average))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func summaryRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(.white.opacity(0.62))
+            Spacer()
+            Text(value)
+                .fontWeight(.black)
+        }
+        .font(.system(size: 14, weight: .bold, design: .rounded))
+    }
+}
+
+private struct RoundRow: View {
+    let round: RoundPresentation
+    let fastestCompleteRound: RoundSplit?
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(round.title)
+                    .font(.system(size: 17, weight: .black, design: .rounded))
+                Text(round.subtitle)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.58))
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(WorkoutSummary.format(seconds: round.durationSeconds))
+                    .font(.system(size: 18, weight: .black, design: .rounded))
+                if round.isFastest {
+                    Text("FASTEST")
+                        .font(.system(size: 10, weight: .black, design: .rounded))
+                        .foregroundStyle(.yellow)
+                }
+            }
+        }
+        .padding(14)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct HeartRateDetailView: View {
+    let model: WorkoutAnalyticsPresentationModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    hrMetric("Average", model.averageHeartRateText)
+                    hrMetric("Peak", model.maximumHeartRateText)
+                }
+
+                if let highest = model.summary.highestHeartRateMovement, let peak = highest.maximumHeartRate {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Highest-HR Movement")
+                            .font(.system(size: 13, weight: .black, design: .rounded))
+                            .foregroundStyle(.yellow)
+                        Text(highest.movementName)
+                            .font(.system(size: 18, weight: .black, design: .rounded))
+                        Text("\(peak) bpm")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.68))
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                } else {
+                    unavailableCard("Heart-rate detail unavailable.")
+                }
+            }
+            .padding(16)
+        }
+        .background(Color.black.ignoresSafeArea())
+        .foregroundStyle(.white)
+        .navigationTitle("Heart Rate")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func hrMetric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.48))
+            Text(value)
+                .font(.system(size: 28, weight: .black, design: .rounded))
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct WorkoutHighlightsView: View {
+    let model: WorkoutAnalyticsPresentationModel
+
+    var body: some View {
+        let highlights = model.highlights
+        if !highlights.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Highlights")
+                    .font(.system(size: 17, weight: .black, design: .rounded))
+                    .foregroundStyle(.yellow)
+
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
+                    ForEach(highlights) { highlight in
+                        HighlightTile(highlight: highlight)
+                    }
+                }
+            }
+            .padding(14)
+            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+}
+
+private struct HighlightTile: View {
+    let highlight: WorkoutHighlightPresentation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(highlight.category)
+                .font(.system(size: 10, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.48))
+            Text(highlight.title)
+                .font(.system(size: 14, weight: .black, design: .rounded))
                 .lineLimit(2)
-                .minimumScaleFactor(0.65)
+                .minimumScaleFactor(0.68)
+            Text(highlight.value)
+                .font(.system(size: 18, weight: .black, design: .rounded))
+                .foregroundStyle(.yellow)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+private func unavailableCard(_ text: String) -> some View {
+    Text(text)
+        .font(.system(size: 15, weight: .bold, design: .rounded))
+        .foregroundStyle(.white.opacity(0.68))
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+}
+
+private struct WorkoutAnalyticsPresentationModel {
+    let session: CompletedWorkoutSession?
+    let analytics: WorkoutAnalytics
+    let summary: WorkoutAnalyticsSummary
+
+    init(session: CompletedWorkoutSession?, analytics: WorkoutAnalytics) {
+        self.session = session
+        self.analytics = analytics
+        self.summary = analytics.summary
+    }
+
+    var workoutName: String {
+        let sessionName = session?.workoutName ?? ""
+        if !sessionName.isEmpty {
+            return sessionName
+        }
+        return analytics.workoutName.isEmpty ? "Workout" : analytics.workoutName
+    }
+
+    var dateText: String {
+        formatDate(session?.finishedAt ?? analytics.finishedAt)
+    }
+
+    var primaryResult: String {
+        WorkoutSummary.format(seconds: summary.totalActiveSeconds)
+    }
+
+    var resultContext: String {
+        if partialRoundCount > 0 {
+            return "\(summary.roundsCompleted) rounds + partial"
+        }
+        if summary.roundsCompleted > 0 {
+            return "\(summary.roundsCompleted) rounds"
+        }
+        return "completed"
+    }
+
+    var completionStatus: String {
+        session?.status.capitalized ?? "Completed"
+    }
+
+    var averageHeartRateText: String {
+        summary.averageHeartRate.map { "\($0)" } ?? "--"
+    }
+
+    var maximumHeartRateText: String {
+        summary.maximumHeartRate.map { "\($0)" } ?? "--"
+    }
+
+    var completeRoundSplits: [RoundSplit] {
+        summary.roundSplits.filter { $0.roundNumber <= summary.roundsCompleted }
+    }
+
+    var partialRoundSplits: [RoundSplit] {
+        summary.roundSplits.filter { $0.roundNumber > summary.roundsCompleted }
+    }
+
+    var partialRoundCount: Int {
+        partialRoundSplits.count
+    }
+
+    var fastestCompleteRound: RoundSplit? {
+        completeRoundSplits.min { $0.durationSeconds < $1.durationSeconds }
+    }
+
+    var slowestCompleteRound: RoundSplit? {
+        completeRoundSplits.max { $0.durationSeconds < $1.durationSeconds }
+    }
+
+    var averageCompleteRoundSeconds: Int? {
+        guard !completeRoundSplits.isEmpty else { return nil }
+        return completeRoundSplits.map(\.durationSeconds).reduce(0, +) / completeRoundSplits.count
+    }
+
+    var roundPresentations: [RoundPresentation] {
+        summary.roundSplits.map { split in
+            let isPartial = split.roundNumber > summary.roundsCompleted
+            return RoundPresentation(
+                roundNumber: split.roundNumber,
+                title: isPartial ? "Partial Round" : "Round \(split.roundNumber)",
+                subtitle: isPartial ? "Not compared with full rounds" : roundDeltaText(split),
+                durationSeconds: split.durationSeconds,
+                isPartial: isPartial,
+                isFastest: !isPartial && fastestCompleteRound?.roundNumber == split.roundNumber
+            )
         }
     }
 
-    private func movementHighlight(_ event: WorkoutMovementEvent?) -> String {
-        guard let event else {
-            return "--"
+    var movementOverviewText: String {
+        if summary.movementBreakdowns.isEmpty {
+            return "Detailed movement splits unavailable"
         }
-
-        return "\(event.movementName) • \(WorkoutSummary.format(seconds: event.durationSeconds))"
+        return "\(summary.movementBreakdowns.count) movement types • \(summary.movementCount) occurrences"
     }
 
-    private func heartRateHighlight(_ event: WorkoutMovementEvent?) -> String {
-        guard let event, let heartRate = event.maximumHeartRate else {
-            return "--"
+    var roundOverviewText: String {
+        if summary.roundSplits.isEmpty {
+            return "Round splits unavailable"
         }
-
-        return "\(event.movementName) • \(heartRate)"
+        if partialRoundCount > 0 {
+            return "\(completeRoundSplits.count) complete rounds • \(partialRoundCount) partial"
+        }
+        return "\(completeRoundSplits.count) complete rounds"
     }
+
+    var heartRateOverviewText: String {
+        if summary.averageHeartRate == nil && summary.maximumHeartRate == nil {
+            return "Heart-rate detail unavailable"
+        }
+        return "\(averageHeartRateText) avg • \(maximumHeartRateText) peak"
+    }
+
+    var highlights: [WorkoutHighlightPresentation] {
+        var items: [WorkoutHighlightPresentation] = []
+        if let event = summary.longestMovement {
+            items.append(WorkoutHighlightPresentation(category: "LONGEST MOVEMENT", title: event.movementName, value: WorkoutSummary.format(seconds: event.durationSeconds)))
+        }
+        if let event = summary.fastestMovement {
+            items.append(WorkoutHighlightPresentation(category: "FASTEST MOVEMENT", title: event.movementName, value: WorkoutSummary.format(seconds: event.durationSeconds)))
+        }
+        if let event = summary.highestHeartRateMovement, let peak = event.maximumHeartRate {
+            items.append(WorkoutHighlightPresentation(category: "HIGHEST HR", title: event.movementName, value: "\(peak) bpm"))
+        }
+        if let round = fastestCompleteRound {
+            items.append(WorkoutHighlightPresentation(category: "FASTEST ROUND", title: "Round \(round.roundNumber)", value: WorkoutSummary.format(seconds: round.durationSeconds)))
+        }
+        return items
+    }
+
+    private func roundDeltaText(_ split: RoundSplit) -> String {
+        guard let fastest = fastestCompleteRound else {
+            return "Complete round"
+        }
+        let delta = split.durationSeconds - fastest.durationSeconds
+        if delta == 0 {
+            return "Fastest complete round"
+        }
+        return "+\(WorkoutSummary.format(seconds: delta)) from fastest"
+    }
+
+    private func formatDate(_ timestamp: Int?) -> String {
+        guard let timestamp else {
+            return "Date unavailable"
+        }
+        let seconds = timestamp > 9_999_999_999 ? TimeInterval(timestamp / 1000) : TimeInterval(timestamp)
+        return Date(timeIntervalSince1970: seconds).formatted(date: .abbreviated, time: .shortened)
+    }
+}
+
+private struct RoundPresentation: Identifiable {
+    var id: Int { roundNumber }
+    let roundNumber: Int
+    let title: String
+    let subtitle: String
+    let durationSeconds: Int
+    let isPartial: Bool
+    let isFastest: Bool
+}
+
+private struct WorkoutHighlightPresentation: Identifiable {
+    var id: String { "\(category)-\(title)-\(value)" }
+    let category: String
+    let title: String
+    let value: String
 }
 
 // MARK: - Workout History
@@ -2181,11 +2737,11 @@ private struct WorkoutHistoryView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                LazyVStack(alignment: .leading, spacing: 12) {
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Workout History")
-                                .font(.system(size: 28, weight: .black, design: .rounded))
+                                .font(.system(size: 24, weight: .black, design: .rounded))
                             Text(viewModel.workoutHistoryStatusText)
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white.opacity(0.64))
@@ -2205,40 +2761,30 @@ private struct WorkoutHistoryView: View {
                     if viewModel.workoutHistory.isEmpty {
                         emptyHistory
                     } else {
-                        VStack(spacing: 10) {
-                            ForEach(viewModel.workoutHistory) { summary in
-                                Button {
-                                    viewModel.openCompletedWorkout(summary)
-                                } label: {
-                                    WorkoutHistoryRow(summary: summary)
-                                }
-                                .buttonStyle(.plain)
+                        ForEach(viewModel.workoutHistory) { summary in
+                            NavigationLink {
+                                CompletedWorkoutDetailView(viewModel: viewModel, summary: summary)
+                            } label: {
+                                WorkoutHistoryRow(summary: summary)
                             }
+                            .buttonStyle(.plain)
                         }
-                    }
-
-                    if let selected = viewModel.selectedCompletedWorkout {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Results")
-                                .font(.system(size: 20, weight: .black, design: .rounded))
-                            WorkoutAnalyticsView(analytics: selected.analytics)
-                                .frame(minHeight: 420)
-                        }
-                        .padding(.top, 8)
                     }
                 }
-                .padding(20)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 24)
             }
             .background(Color.black.ignoresSafeArea())
             .foregroundStyle(.white)
-            .navigationTitle("")
+            .navigationTitle("Workout History")
             .navigationBarTitleDisplayMode(.inline)
+            .refreshable {
+                viewModel.refreshWorkoutHistory(reason: "historyPull")
+            }
         }
         .onAppear {
             viewModel.refreshWorkoutHistory(reason: "historyOpen")
-        }
-        .onDisappear {
-            viewModel.clearSelectedCompletedWorkout()
         }
     }
 
@@ -2253,6 +2799,47 @@ private struct WorkoutHistoryView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct CompletedWorkoutDetailView: View {
+    @ObservedObject var viewModel: DisplayViewModel
+    let summary: CompletedWorkoutSummary
+
+    private var selectedSession: CompletedWorkoutSession? {
+        viewModel.selectedCompletedWorkout?.sessionId == summary.sessionId
+            ? viewModel.selectedCompletedWorkout
+            : nil
+    }
+
+    private var analytics: WorkoutAnalytics? {
+        selectedSession?.analytics
+    }
+
+    var body: some View {
+        WorkoutDetailContent(session: selectedSession, analytics: analytics)
+            .navigationTitle(detailTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .overlay {
+                if selectedSession == nil {
+                    VStack(spacing: 10) {
+                        ProgressView()
+                            .tint(.yellow)
+                        Text("Loading result")
+                            .font(.system(size: 14, weight: .black, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.72))
+                    }
+                    .padding(16)
+                    .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
+                }
+            }
+            .onAppear {
+                viewModel.openCompletedWorkout(summary)
+            }
+    }
+
+    private var detailTitle: String {
+        summary.workoutName.isEmpty ? "Workout" : summary.workoutName
     }
 }
 
